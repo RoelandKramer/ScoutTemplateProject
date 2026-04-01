@@ -15,37 +15,81 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    [data-testid="stAppViewContainer"] { background: #f5f7fa; }
+    /* ── Base ── */
+    [data-testid="stAppViewContainer"] { background: #1e2130; }
+    [data-testid="stHeader"]           { background: #1e2130; }
+    [data-testid="stSidebar"]          { background: #161926; }
 
-    h1, h2, h3 { color: #003087 !important; }
+    /* ── Typography ── */
+    h1, h2, h3, h4 { color: #e8ecf0 !important; }
+    p, li, label, .stMarkdown { color: #c4cad4 !important; }
 
+    /* ── Tabs ── */
+    [data-baseweb="tab-list"]          { background: #262b3d; border-radius: 8px; }
+    [data-baseweb="tab"]               { color: #8a94a6 !important; font-weight: 600; }
+    [aria-selected="true"]             { color: #e8ecf0 !important; border-bottom: 2px solid #4a7fd4 !important; }
+
+    /* ── Cards / containers ── */
+    [data-testid="stVerticalBlock"]    { }
+
+    /* ── Variable label ── */
     .var-label {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 700;
-        color: #003087;
+        color: #a8b4c8;
         margin-bottom: 2px;
+        letter-spacing: 0.3px;
     }
+
+    /* ── Star row ── */
     .star-row {
-        font-size: 28px;
-        letter-spacing: 4px;
+        font-size: 26px;
+        letter-spacing: 3px;
         line-height: 1.2;
         margin-top: 0;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
     }
-    hr { border-color: #003087 !important; }
 
+    /* ── Divider ── */
+    hr { border-color: #2e3450 !important; }
+
+    /* ── Select box ── */
+    [data-baseweb="select"] { background: #262b3d !important; border-color: #3a4060 !important; }
+
+    /* ── Slider ── */
+    [data-testid="stSlider"] > div > div > div > div {
+        background: #4a7fd4 !important;
+    }
+
+    /* ── Primary button ── */
     div.stButton > button[kind="primary"] {
-        background-color: #003087;
-        color: #FFD932;
+        background-color: #4a7fd4;
+        color: #ffffff;
         border: none;
         font-weight: 700;
-        font-size: 16px;
-        padding: 0.6rem 1.2rem;
+        font-size: 15px;
+        padding: 0.55rem 1.2rem;
+        border-radius: 6px;
     }
     div.stButton > button[kind="primary"]:hover {
-        background-color: #002060;
-        color: #FFD932;
+        background-color: #3a6ec0;
+        color: #ffffff;
     }
+
+    /* ── Download button ── */
+    [data-testid="stDownloadButton"] > button {
+        background-color: #2e7d4f !important;
+        color: #ffffff !important;
+        border: none !important;
+        font-weight: 700 !important;
+        border-radius: 6px !important;
+    }
+    [data-testid="stDownloadButton"] > button:hover {
+        background-color: #256040 !important;
+    }
+
+    /* ── Info / success / error boxes ── */
+    [data-testid="stAlert"] { border-radius: 6px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -74,7 +118,7 @@ def star_selector(label: str, key: str, default: int = 0) -> int:
     st.markdown(
         f'<div class="star-row">'
         f'<span style="color:#FFD932;">{filled}</span>'
-        f'<span style="color:#CCCCCC;">{empty}</span>'
+        f'<span style="color:#3a4060;">{empty}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
