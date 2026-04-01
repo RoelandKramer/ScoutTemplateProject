@@ -123,7 +123,7 @@ tab_empty, tab_upload = st.tabs([
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_empty:
     st.header("Fill Empty Template")
-    st.caption("Choose a player type, rate each competency, and download the completed report.")
+    st.caption("Choose a player type, rate each competency, and download the report with filled in stars & rating.")
 
     template_name: str = st.selectbox(
         "Player type / template:",
