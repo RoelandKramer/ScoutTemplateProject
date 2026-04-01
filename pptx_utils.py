@@ -2,8 +2,10 @@
 
 import io
 import re
+from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.oxml.ns import qn
 
 YELLOW = RGBColor(0xFF, 0xD9, 0x32)
 WHITE  = RGBColor(0xFF, 0xFF, 0xFF)
@@ -208,13 +210,73 @@ def get_star_rows(slide) -> list[list]:
 
 # ─── Core operations ─────────────────────────────────────────────────────────
 
-def color_stars(slide, star_values: list[int]) -> None:
-    """Colour the first N stars in each row yellow, the rest white."""
+# OOXML gradient XML for a sharp left-half-yellow / right-half-white split.
+# ang="0" in OOXML means the gradient flows left-to-right (constant-colour
+# lines are vertical), so pos=0 is the left edge and pos=100000 the right.
+_HALF_STAR_GRAD_XML = (
+    '<a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    ' rotWithShape="1">'
+    '<a:gsLst>'
+    '<a:gs pos="0"><a:srgbClr val="FFD932"/></a:gs>'
+    '<a:gs pos="49999"><a:srgbClr val="FFD932"/></a:gs>'
+    '<a:gs pos="50000"><a:srgbClr val="FFFFFF"/></a:gs>'
+    '<a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs>'
+    '</a:gsLst>'
+    '<a:lin ang="0" scaled="0"/>'
+    '</a:gradFill>'
+)
+
+
+def _apply_half_star_fill(shape) -> None:
+    """Replace the shape's fill with a sharp left-yellow / right-white gradient."""
+    # Let python-pptx create the solidFill element in the correct position
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = YELLOW  # placeholder; will be replaced below
+
+    spPr = shape._element.spPr
+    solid = spPr.find(qn('a:solidFill'))
+    if solid is None:
+        return
+    idx = list(spPr).index(solid)
+    spPr.remove(solid)
+    spPr.insert(idx, etree.fromstring(_HALF_STAR_GRAD_XML))
+
+
+def _get_star_fill_value(shape) -> float:
+    """Return 1.0 (full yellow), 0.5 (half-yellow gradient), or 0.0 (empty)."""
+    try:
+        spPr = shape._element.spPr
+        if spPr.find(qn('a:gradFill')) is not None:
+            return 0.5
+        solid = spPr.find(qn('a:solidFill'))
+        if solid is not None:
+            clr = solid.find(qn('a:srgbClr'))
+            if clr is not None and clr.get('val', '').upper() == 'FFD932':
+                return 1.0
+    except Exception:
+        pass
+    return 0.0
+
+
+def color_stars(slide, star_values: list) -> None:
+    """Colour stars from each row according to values (supports 0.5 increments).
+
+    For a value of 7.5: stars 0-6 are full yellow, star 7 is half yellow,
+    stars 8-9 are white.
+    """
     rows = get_star_rows(slide)
     for row_stars, value in zip(rows, star_values):
+        full  = int(value)
+        half  = (value % 1) >= 0.5
         for j, star in enumerate(row_stars):
-            star.fill.solid()
-            star.fill.fore_color.rgb = YELLOW if j < value else WHITE
+            if j < full:
+                star.fill.solid()
+                star.fill.fore_color.rgb = YELLOW
+            elif j == full and half:
+                _apply_half_star_fill(star)
+            else:
+                star.fill.solid()
+                star.fill.fore_color.rgb = WHITE
 
 
 def _is_rating_shape(shape) -> bool:
@@ -225,20 +287,10 @@ def _is_rating_shape(shape) -> bool:
     return text.lower() == "xx" or bool(re.fullmatch(r"\d+\.\d", text))
 
 
-def read_current_star_values(slide) -> list[int]:
-    """Count yellow stars per row — used to pre-populate sliders on re-upload."""
+def read_current_star_values(slide) -> list[float]:
+    """Return the current rating per row as floats (supports 0.5 for half-stars)."""
     rows = get_star_rows(slide)
-    values: list[int] = []
-    for row_stars in rows:
-        count = 0
-        for star in row_stars:
-            try:
-                if str(star.fill.fore_color.rgb).upper() == "FFD932":
-                    count += 1
-            except Exception:
-                pass
-        values.append(count)
-    return values
+    return [sum(_get_star_fill_value(star) for star in row) for row in rows]
 
 
 def set_rating_text(slide, rating_value: float) -> bool:
