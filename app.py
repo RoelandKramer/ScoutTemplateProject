@@ -107,8 +107,11 @@ def rating_form(
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
-st.title("⚽  FC Den Bosch — Scout Rating Tool")
-
+st.title("Template Filler for Scouting Reports")
+st.caption(
+    "This tool helps you fill out PowerPoint scouting report templates with star ratings. "
+    "You can either start from an empty template or upload your current work to add ratings."
+)
 tab_empty, tab_upload = st.tabs([
     "📋  Fill Empty Template",
     "📂  Upload Current Work and Add Stars / Rating",
