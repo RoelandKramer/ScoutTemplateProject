@@ -164,12 +164,57 @@ def fill_template(template_cfg: dict, star_values: list[int]) -> io.BytesIO:
     return output
 
 
+def detect_template_name(slide) -> str | None:
+    """Return the name of the best-matching TEMPLATES entry for this slide, or None."""
+    slide_text = " ".join(
+        shape.text_frame.text.lower()
+        for shape in slide.shapes
+        if shape.has_text_frame
+    )
+    best_name: str | None = None
+    best_count = 0
+    for name, cfg in TEMPLATES.items():
+        matches = sum(1 for v in cfg["variables"] if v.lower() in slide_text)
+        if matches > best_count:
+            best_count = matches
+            best_name = name
+    return best_name if best_count >= 3 else None
+
+
+def fill_from_bytes(
+    file_bytes: bytes,
+    template_cfg: dict,
+    star_values: list[int],
+) -> io.BytesIO:
+    """Fill an uploaded PPTX (supplied as raw bytes) with star ratings and rating.
+
+    Uses the same logic as fill_template but opens from bytes instead of a path.
+    """
+    prs = Presentation(io.BytesIO(file_bytes))
+    rating = calculate_rating(star_values, template_cfg.get("weights"))
+
+    main_slide = prs.slides[template_cfg["rating_slide_idx"]]
+    color_stars(main_slide, star_values)
+    set_rating_text(main_slide, rating)
+
+    if template_cfg.get("detail_slides"):
+        for i, idx in enumerate(template_cfg["detail_slides"]):
+            if i < len(star_values):
+                color_stars(prs.slides[idx], [star_values[i]])
+
+    output = io.BytesIO()
+    prs.save(output)
+    output.seek(0)
+    return output
+
+
 def check_template_compatibility(file_obj) -> dict:
     """Inspect an uploaded PPTX to see if it can be filled by this tool.
 
     Returns a dict with keys:
         compatible (bool), star_count (int), row_count (int),
-        slide_idx (int|None), has_rating_placeholder (bool), issues (list[str])
+        slide_idx (int|None), has_rating_placeholder (bool),
+        matched_template_name (str|None), issues (list[str])
     """
     result = {
         "compatible": False,
@@ -177,6 +222,7 @@ def check_template_compatibility(file_obj) -> dict:
         "row_count": 0,
         "slide_idx": None,
         "has_rating_placeholder": False,
+        "matched_template_name": None,
         "issues": [],
     }
 
@@ -228,5 +274,6 @@ def check_template_compatibility(file_obj) -> dict:
             "No 'xx' rating placeholder found on the slide."
         )
 
+    result["matched_template_name"] = detect_template_name(slide)
     result["compatible"] = len(result["issues"]) == 0
     return result
