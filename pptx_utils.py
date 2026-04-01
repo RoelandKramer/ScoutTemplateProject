@@ -1,6 +1,7 @@
 """Utility functions for filling FC Den Bosch scouting PowerPoint templates."""
 
 import io
+import re
 import collections
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -95,31 +96,63 @@ def color_stars(slide, star_values: list[int]) -> None:
             star.fill.fore_color.rgb = YELLOW if j < value else WHITE
 
 
-def set_rating_text(slide, rating_value: float) -> bool:
-    """Find the 'xx' oval placeholder and replace its text with the rating.
+def _is_rating_shape(shape) -> bool:
+    """Return True if this shape holds the rating value.
 
+    Matches both the blank template ('xx') and an already-filled file
+    where the value is a decimal number such as '6.9'.
+    """
+    if not shape.has_text_frame:
+        return False
+    text = shape.text_frame.text.strip()
+    return text.lower() == "xx" or bool(re.fullmatch(r"\d+\.\d", text))
+
+
+def read_current_star_values(slide) -> list[int]:
+    """Count how many stars are currently coloured yellow in each row.
+
+    Returns a list of integers (one per row) representing the existing ratings.
+    Uncoloured stars (white or any non-yellow fill) are counted as 0.
+    """
+    rows = get_star_rows(slide)
+    values: list[int] = []
+    for row_stars in rows:
+        count = 0
+        for star in row_stars:
+            try:
+                if str(star.fill.fore_color.rgb).upper() == "FFD932":
+                    count += 1
+            except Exception:
+                pass
+        values.append(count)
+    return values
+
+
+def set_rating_text(slide, rating_value: float) -> bool:
+    """Find the rating placeholder and replace its text with the new value.
+
+    Accepts both blank templates ('xx') and already-filled files (e.g. '6.9').
     Returns True if the placeholder was found and updated.
     """
     rating_str = f"{rating_value:.1f}"
     for shape in slide.shapes:
-        if not shape.has_text_frame:
+        if not _is_rating_shape(shape):
             continue
-        if shape.text_frame.text.strip().lower() == "xx":
-            tf = shape.text_frame
-            first = True
-            for para in tf.paragraphs:
-                for run in para.runs:
-                    if first:
-                        run.text = rating_str
-                        first = False
-                    else:
-                        run.text = ""
-            # If no runs existed, add text via the first paragraph
-            if first:
-                para = tf.paragraphs[0]
-                para.clear()
-                para.add_run().text = rating_str
-            return True
+        tf = shape.text_frame
+        first = True
+        for para in tf.paragraphs:
+            for run in para.runs:
+                if first:
+                    run.text = rating_str
+                    first = False
+                else:
+                    run.text = ""
+        # If no runs existed, add text via the first paragraph
+        if first:
+            para = tf.paragraphs[0]
+            para.clear()
+            para.add_run().text = rating_str
+        return True
     return False
 
 
@@ -223,6 +256,7 @@ def check_template_compatibility(file_obj) -> dict:
         "slide_idx": None,
         "has_rating_placeholder": False,
         "matched_template_name": None,
+        "current_star_values": [],   # existing yellow-star counts per row
         "issues": [],
     }
 
@@ -261,18 +295,17 @@ def check_template_compatibility(file_obj) -> dict:
             f"Expected 10 stars per row; rows {bad_rows} have a different count."
         )
 
-    # Check for the 'xx' rating placeholder
+    # Check for the rating placeholder ('xx' on blank, or a decimal on already-filled)
     slide = prs.slides[best_slide_idx]
-    has_xx = any(
-        shape.has_text_frame
-        and shape.text_frame.text.strip().lower() == "xx"
-        for shape in slide.shapes
-    )
-    result["has_rating_placeholder"] = has_xx
-    if not has_xx:
+    has_placeholder = any(_is_rating_shape(shape) for shape in slide.shapes)
+    result["has_rating_placeholder"] = has_placeholder
+    if not has_placeholder:
         result["issues"].append(
-            "No 'xx' rating placeholder found on the slide."
+            "No rating placeholder found on the slide ('xx' or an existing score)."
         )
+
+    # Read the existing star values so the UI can pre-populate the sliders
+    result["current_star_values"] = read_current_star_values(slide)
 
     result["matched_template_name"] = detect_template_name(slide)
     result["compatible"] = len(result["issues"]) == 0

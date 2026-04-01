@@ -53,14 +53,19 @@ st.markdown(
 
 # ─── Shared helper ────────────────────────────────────────────────────────────
 
-def star_selector(label: str, key: str) -> int:
-    """Labelled slider (0–10) with a live star-display beneath it."""
+def star_selector(label: str, key: str, default: int = 0) -> int:
+    """Labelled slider (0–10) with a live star-display beneath it.
+
+    `default` is only used when the key is not yet in session_state.
+    """
     st.markdown(f'<div class="var-label">{label}</div>', unsafe_allow_html=True)
+    # Only set the initial value if this slider hasn't been touched yet
+    if key not in st.session_state:
+        st.session_state[key] = default
     value: int = st.slider(
         label,
         min_value=0,
         max_value=10,
-        value=0,
         key=key,
         label_visibility="collapsed",
     )
@@ -76,13 +81,24 @@ def star_selector(label: str, key: str) -> int:
     return value
 
 
-def rating_form(variables: list[str], key_prefix: str, generate_key: str) -> list[int] | None:
+def rating_form(
+    variables: list[str],
+    key_prefix: str,
+    generate_key: str,
+    defaults: list[int] | None = None,
+) -> list[int] | None:
     """Render the 7 star-selectors + generate button.
 
+    `defaults` pre-populates sliders (used when re-uploading an already-filled file).
     Returns the list of star values when the button is pressed, else None.
     """
+    if defaults is None:
+        defaults = [0] * len(variables)
     st.subheader("Rate each competency — 0 to 10 stars")
-    values = [star_selector(var, key=f"{key_prefix}_{i}") for i, var in enumerate(variables)]
+    values = [
+        star_selector(var, key=f"{key_prefix}_{i}", default=defaults[i])
+        for i, var in enumerate(variables)
+    ]
     st.markdown("---")
     if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key=generate_key):
         return values
@@ -152,6 +168,9 @@ with tab_upload:
             st.session_state["upload_bytes"]        = file_bytes
             st.session_state["upload_filename"]     = uploaded.name
             st.session_state["upload_check_result"] = check_result
+            # Seed slider state with current star values so they pre-populate correctly
+            for i, val in enumerate(check_result.get("current_star_values", [])):
+                st.session_state[f"upload_{i}"] = val
 
     # ── Show results (persists across reruns while sliders are adjusted) ──────
     check_result = st.session_state.get("upload_check_result")
@@ -196,11 +215,13 @@ with tab_upload:
 
         st.markdown("---")
 
-        # ── Star rating form ───────────────────────────────────────────────
+        # ── Star rating form (pre-populated with existing values) ─────────
+        current_values = check_result.get("current_star_values", [])
         values = rating_form(
             template_cfg["variables"],
             key_prefix="upload",
             generate_key="upload_generate",
+            defaults=current_values,
         )
 
         if values is not None:
