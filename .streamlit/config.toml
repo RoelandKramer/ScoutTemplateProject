@@ -1,3 +1,6 @@
+[server]
+maxUploadSize = 800
+
 [theme]
 primaryColor        = "#FFD932"
 backgroundColor     = "#f5f7fa"
