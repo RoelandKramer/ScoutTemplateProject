@@ -62,7 +62,7 @@ st.markdown(
 
     /* ── Star row ── */
     .star-row {
-        width: 100%;
+        width: 60%;
         display: flex;
         justify-content: space-between;
         align-items: center;
