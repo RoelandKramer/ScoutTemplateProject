@@ -94,7 +94,7 @@ def rating_form(
     """
     if defaults is None:
         defaults = [0] * len(variables)
-    st.subheader("Rate each competency — 0 to 10 stars")
+    st.subheader("Rate each competency on a scale of 0 to 10")
     values = [
         star_selector(var, key=f"{key_prefix}_{i}", default=defaults[i])
         for i, var in enumerate(variables)
