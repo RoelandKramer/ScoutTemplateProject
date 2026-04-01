@@ -62,11 +62,19 @@ st.markdown(
 
     /* ── Star row ── */
     .star-row {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         font-size: 26px;
-        letter-spacing: 3px;
         line-height: 1.2;
         margin-top: 0;
         margin-bottom: 10px;
+    }
+    
+    .star-row span {
+        display: inline-block;
+        text-align: center;
     }
 
     /* ── Divider ── */
