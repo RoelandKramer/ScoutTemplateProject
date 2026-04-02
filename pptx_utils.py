@@ -555,6 +555,33 @@ def _video_mime(filename: str) -> str:
     return _VIDEO_MIMES.get(ext, "video/mp4")
 
 
+def extract_first_frame_jpeg(video_bytes: bytes) -> bytes | None:
+    """Return JPEG bytes of the first video frame, or None on failure."""
+    import os, tempfile
+    try:
+        import cv2
+    except ImportError:
+        return None
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+        f.write(video_bytes)
+        tmp = f.name
+    try:
+        cap = cv2.VideoCapture(tmp)
+        ret, frame = cap.read()
+        cap.release()
+        if not ret or frame is None:
+            return None
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return bytes(buf) if ok else None
+    except Exception:
+        return None
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
 def _find_detail_placeholder(slide):
     """Return the large placeholder Picture on a detail slide (not the logo)."""
     for shape in slide.shapes:
@@ -611,9 +638,13 @@ def embed_video_on_slide(
     width, height = placeholder.width, placeholder.height
     spTree.remove(placeholder._element)
 
+    poster_jpeg = extract_first_frame_jpeg(video_bytes)
+    poster_io = io.BytesIO(poster_jpeg) if poster_jpeg else None
+
     slide.shapes.add_movie(
         io.BytesIO(video_bytes),
         left, top, width, height,
+        poster_frame_image=poster_io,
         mime_type=_video_mime(video_filename),
     )
     return True

@@ -222,23 +222,21 @@ def competency_sections(
 
         with st.expander(f"📽  {var}", expanded=False):
             # ── Video ────────────────────────────────────────────────────
-            existing_video = st.session_state[video_key]
-            if existing_video is not None:
-                vbytes, vname = existing_video
-                st.caption(f"Current video: **{vname}**")
-                st.video(vbytes)
-                st.caption("Upload a new clip below to replace it.")
-
+            # Process uploader first so session state is current before display
             uploaded_video = st.file_uploader(
-                "Video clip (mp4, mov, avi, wmv, mkv)",
+                "Upload video clip (mp4, mov, avi, wmv, mkv)",
                 type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
                 key=f"{key_prefix}_{i}_uploader",
-                label_visibility="collapsed" if existing_video is not None else "visible",
             )
             if uploaded_video is not None:
-                new_entry = (uploaded_video.getvalue(), uploaded_video.name)
-                st.session_state[video_key] = new_entry
-                st.video(uploaded_video.getvalue())
+                st.session_state[video_key] = (uploaded_video.getvalue(), uploaded_video.name)
+
+            # Show current video exactly once (from session state)
+            current_video = st.session_state[video_key]
+            if current_video is not None:
+                vbytes, vname = current_video
+                st.caption(f"Video: **{vname}**")
+                st.video(vbytes)
 
             # ── Stars ────────────────────────────────────────────────────
             st.markdown("**Rating:**")
