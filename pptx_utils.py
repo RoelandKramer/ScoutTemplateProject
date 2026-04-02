@@ -1,11 +1,13 @@
 """Utility functions for filling FC Den Bosch scouting PowerPoint templates."""
 
+import copy
 import io
 import re
 from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.oxml.ns import qn
+from pptx.shapes.picture import Movie
 
 YELLOW = RGBColor(0xFF, 0xD9, 0x32)
 WHITE  = RGBColor(0xFF, 0xFF, 0xFF)
@@ -486,22 +488,171 @@ def calculate_rating(values: list[int], weights: list[float] | None = None) -> f
     return round(sum(v * w for v, w in zip(values, weights)) / total_weight, 1)
 
 
-def _apply_ratings(prs, template_cfg: dict, star_values: list[int]) -> None:
-    """Internal: apply star colours and rating text to an open presentation."""
+# ─── Detail slide: comment text ─────────────────────────────────────────────
+
+def get_detail_comment(slide) -> str:
+    """Read the scouting comment from TextBox 31 on a detail slide."""
+    for shape in slide.shapes:
+        if shape.name == "TextBox 31" and shape.has_text_frame:
+            return shape.text_frame.text
+    return ""
+
+
+def set_detail_comment(slide, comment: str) -> bool:
+    """Write comment text into TextBox 31, preserving its paragraph formatting."""
+    for shape in slide.shapes:
+        if shape.name == "TextBox 31" and shape.has_text_frame:
+            tf = shape.text_frame
+            txBody = tf._txBody
+            # Keep the first paragraph (contains <a:pPr> with Century Gothic formatting)
+            paras = txBody.findall(qn("a:p"))
+            for p in paras[1:]:
+                txBody.remove(p)
+            first_p = paras[0]
+            # Strip all runs / line-breaks from it
+            for child in list(first_p):
+                if child.tag.split("}")[-1] in ("r", "br"):
+                    first_p.remove(child)
+            lines = comment.split("\n") if comment else [""]
+            # Add text to first paragraph
+            if lines[0]:
+                first_p.append(_make_run(lines[0]))
+            # Append extra paragraphs for each additional line (clone formatting)
+            for line in lines[1:]:
+                new_p = copy.deepcopy(first_p)
+                for child in list(new_p):
+                    if child.tag.split("}")[-1] in ("r", "br"):
+                        new_p.remove(child)
+                if line:
+                    new_p.append(_make_run(line))
+                txBody.append(new_p)
+            return True
+    return False
+
+
+def _make_run(text: str):
+    """Return an <a:r> lxml element containing the given text."""
+    return etree.fromstring(
+        f'<a:r xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+        f"<a:t>{text}</a:t></a:r>"
+    )
+
+
+# ─── Detail slide: video ─────────────────────────────────────────────────────
+
+_VIDEO_MIMES = {
+    "mp4": "video/mp4",
+    "mov": "video/quicktime",
+    "avi": "video/avi",
+    "wmv": "video/x-ms-wmv",
+    "mkv": "video/x-matroska",
+    "webm": "video/webm",
+}
+
+
+def _video_mime(filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "mp4"
+    return _VIDEO_MIMES.get(ext, "video/mp4")
+
+
+def _find_detail_placeholder(slide):
+    """Return the large placeholder Picture on a detail slide (not the logo)."""
+    for shape in slide.shapes:
+        if shape.shape_type == 13 and "logo" not in shape.name.lower():  # PICTURE
+            return shape
+    return None
+
+
+def get_video_from_slide(slide) -> tuple[bytes, str] | None:
+    """Return (bytes, filename) for an embedded video on the slide, or None."""
+    for shape in slide.shapes:
+        if not isinstance(shape, Movie):
+            continue
+        # The videoFile element lives under nvPicPr/nvPr with an a: prefix
+        nvPr = shape._element.nvPicPr.find(qn("p:nvPr"))
+        if nvPr is None:
+            continue
+        vid = nvPr.find(qn("a:videoFile"))
+        if vid is None:
+            continue
+        r_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+        rId = vid.get(f"{{{r_ns}}}link")
+        if rId and rId in slide.part.rels:
+            try:
+                part = slide.part.rels[rId].target_part
+                return part.blob, part.partname.split("/")[-1]
+            except Exception:
+                pass
+    return None
+
+
+def embed_video_on_slide(
+    prs, slide_idx: int, video_bytes: bytes, video_filename: str
+) -> bool:
+    """Replace the placeholder picture on a detail slide with an embedded video.
+
+    If the slide already has an embedded video it is removed first so we do not
+    accumulate duplicate media entries on repeated fills.
+    """
+    slide = prs.slides[slide_idx]
+    spTree = slide.shapes._spTree
+
+    # Remove any existing Movie shapes
+    for shape in list(slide.shapes):
+        if isinstance(shape, Movie):
+            spTree.remove(shape._element)
+
+    # Find placeholder picture and read its geometry
+    placeholder = _find_detail_placeholder(slide)
+    if placeholder is None:
+        return False
+
+    left, top = placeholder.left, placeholder.top
+    width, height = placeholder.width, placeholder.height
+    spTree.remove(placeholder._element)
+
+    slide.shapes.add_movie(
+        io.BytesIO(video_bytes),
+        left, top, width, height,
+        mime_type=_video_mime(video_filename),
+    )
+    return True
+
+
+def _apply_ratings(
+    prs,
+    template_cfg: dict,
+    star_values: list,
+    comments: list[str] | None = None,
+    video_data: list | None = None,
+) -> None:
+    """Apply stars, rating text, comments and videos to an open presentation."""
     rating = calculate_rating(star_values, template_cfg.get("weights"))
     main_slide = prs.slides[template_cfg["rating_slide_idx"]]
     color_stars(main_slide, star_values)
     set_rating_text(main_slide, rating)
-    if template_cfg.get("detail_slides"):
-        for i, idx in enumerate(template_cfg["detail_slides"]):
-            if i < len(star_values):
-                color_stars(prs.slides[idx], [star_values[i]])
+
+    detail_idxs = template_cfg.get("detail_slides", [])
+    for i, idx in enumerate(detail_idxs):
+        slide = prs.slides[idx]
+        if i < len(star_values):
+            color_stars(slide, [star_values[i]])
+        if comments and i < len(comments) and comments[i]:
+            set_detail_comment(slide, comments[i])
+        if video_data and i < len(video_data) and video_data[i] is not None:
+            vb, vname = video_data[i]
+            embed_video_on_slide(prs, idx, vb, vname)
 
 
-def fill_template(template_cfg: dict, star_values: list[int]) -> io.BytesIO:
+def fill_template(
+    template_cfg: dict,
+    star_values: list,
+    comments: list[str] | None = None,
+    video_data: list | None = None,
+) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
-    _apply_ratings(prs, template_cfg, star_values)
+    _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)
     output.seek(0)
@@ -511,11 +662,13 @@ def fill_template(template_cfg: dict, star_values: list[int]) -> io.BytesIO:
 def fill_from_bytes(
     file_bytes: bytes,
     template_cfg: dict,
-    star_values: list[int],
+    star_values: list,
+    comments: list[str] | None = None,
+    video_data: list | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
-    _apply_ratings(prs, template_cfg, star_values)
+    _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)
     output.seek(0)
@@ -600,4 +753,24 @@ def check_template_compatibility(file_obj) -> dict:
     result["current_star_values"]    = read_current_star_values(slide)
     result["matched_template_name"]  = detect_template_name(slide)
     result["compatible"]             = len(result["issues"]) == 0
+
+    # Extract per-detail-slide data (comments + videos) when a template is matched
+    matched = result["matched_template_name"]
+    if matched and matched in TEMPLATES:
+        detail_idxs = TEMPLATES[matched].get("detail_slides", [])
+        comments, videos = [], []
+        for idx in detail_idxs:
+            if idx < len(prs.slides):
+                ds = prs.slides[idx]
+                comments.append(get_detail_comment(ds))
+                videos.append(get_video_from_slide(ds))
+            else:
+                comments.append("")
+                videos.append(None)
+        result["current_comments"] = comments
+        result["current_videos"]   = videos
+    else:
+        result["current_comments"] = []
+        result["current_videos"]   = []
+
     return result

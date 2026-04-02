@@ -12,7 +12,6 @@ st.set_page_config(
 )
 
 # ─── Styling ─────────────────────────────────────────────────────────────────
-# ─── Styling ─────────────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
@@ -48,9 +47,6 @@ st.markdown(
         border-bottom: 2px solid #2563eb !important;
     }
 
-    /* ── Cards / containers ── */
-    [data-testid="stVerticalBlock"] { }
-
     /* ── Variable label ── */
     .var-label {
         font-size: 14px;
@@ -71,7 +67,6 @@ st.markdown(
         margin-top: 0;
         margin-bottom: 10px;
     }
-    
     .star-row span {
         display: inline-block;
         text-align: center;
@@ -86,11 +81,8 @@ st.markdown(
         border: 1px solid #3b82f6 !important;
         border-radius: 8px !important;
     }
-    [data-baseweb="select"] * {
-        color: #1e3a8a !important;
-    }
+    [data-baseweb="select"] * { color: #1e3a8a !important; }
 
-    /* Open dropdown menu */
     [data-baseweb="popover"] [role="listbox"] {
         background-color: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
@@ -113,7 +105,6 @@ st.markdown(
     [data-testid="stSlider"] > div > div > div > div {
         background: #4a7fd4 !important;
     }
-    
     [data-baseweb="slider"] [role="slider"] {
         width: 18px !important;
         height: 18px !important;
@@ -156,7 +147,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ─── Shared helper ────────────────────────────────────────────────────────────
+
+# ─── Shared helpers ───────────────────────────────────────────────────────────
 
 def _star_row_html(value: float) -> str:
     """Build an HTML star row for a given value (supports 0.5 half-stars)."""
@@ -180,10 +172,7 @@ def _star_row_html(value: float) -> str:
 
 
 def star_selector(label: str, key: str, default: float = 0.0) -> float:
-    """Labelled slider (0–10, step 0.5) with a live half-star display.
-
-    `default` is only used when the key is not yet in session_state.
-    """
+    """Labelled slider (0–10, step 0.5) with a live half-star display."""
     st.markdown(f'<div class="var-label">{label}</div>', unsafe_allow_html=True)
     if key not in st.session_state:
         st.session_state[key] = float(default)
@@ -199,40 +188,87 @@ def star_selector(label: str, key: str, default: float = 0.0) -> float:
     return value
 
 
-def rating_form(
+def competency_sections(
     variables: list[str],
     key_prefix: str,
-    generate_key: str,
-    defaults: list[float] | None = None,
-) -> list[float] | None:
-    """Render the 7 star-selectors + generate button.
+    defaults_stars: list[float] | None = None,
+    defaults_comments: list[str] | None = None,
+    defaults_videos: list | None = None,
+) -> tuple[list[float], list[str], list]:
+    """Render per-competency expanders (video + stars + comment).
 
-    `defaults` pre-populates sliders (used when re-uploading an already-filled file).
-    Returns the list of star values when the button is pressed, else None.
+    Returns (star_values, comments, video_data) where video_data is a list of
+    (bytes, filename) tuples or None entries.
     """
-    if defaults is None:
-        defaults = [0.0] * len(variables)
-    st.subheader("Rate each competency on a scale of 0 to 10")
-    values = [
-        star_selector(var, key=f"{key_prefix}_{i}", default=defaults[i])
-        for i, var in enumerate(variables)
-    ]
-    st.markdown("---")
-    if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key=generate_key):
-        return values
-    return None
+    n = len(variables)
+    if defaults_stars is None:
+        defaults_stars = [0.0] * n
+    if defaults_comments is None:
+        defaults_comments = [""] * n
+    if defaults_videos is None:
+        defaults_videos = [None] * n
+
+    star_values, comments, video_data = [], [], []
+
+    for i, var in enumerate(variables):
+        video_key    = f"{key_prefix}_{i}_video"
+        comment_key  = f"{key_prefix}_{i}_comment"
+
+        # Seed session state only on first encounter
+        if comment_key not in st.session_state:
+            st.session_state[comment_key] = defaults_comments[i]
+        if video_key not in st.session_state:
+            st.session_state[video_key] = defaults_videos[i]  # (bytes, name) or None
+
+        with st.expander(f"📽  {var}", expanded=False):
+            # ── Video ────────────────────────────────────────────────────
+            existing_video = st.session_state[video_key]
+            if existing_video is not None:
+                vbytes, vname = existing_video
+                st.caption(f"Current video: **{vname}**")
+                st.video(vbytes)
+                st.caption("Upload a new clip below to replace it.")
+
+            uploaded_video = st.file_uploader(
+                "Video clip (mp4, mov, avi, wmv, mkv)",
+                type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
+                key=f"{key_prefix}_{i}_uploader",
+                label_visibility="collapsed" if existing_video is not None else "visible",
+            )
+            if uploaded_video is not None:
+                new_entry = (uploaded_video.getvalue(), uploaded_video.name)
+                st.session_state[video_key] = new_entry
+                st.video(uploaded_video.getvalue())
+
+            # ── Stars ────────────────────────────────────────────────────
+            st.markdown("**Rating:**")
+            val = star_selector(var, key=f"{key_prefix}_{i}", default=defaults_stars[i])
+
+            # ── Comment ──────────────────────────────────────────────────
+            st.text_area(
+                "Scouting notes",
+                key=comment_key,
+                height=90,
+                placeholder="Add your notes here…",
+            )
+
+        star_values.append(val)
+        comments.append(st.session_state[comment_key])
+        video_data.append(st.session_state[video_key])
+
+    return star_values, comments, video_data
 
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
 st.title("⚽ Rating Calculator for Scouting Reports")
 st.caption(
-    "This tool helps you fill out PowerPoint scouting report templates with star ratings. "
-    "You can either start from an empty template or upload your current work to add ratings."
+    "Fill out scouting report templates with videos, star ratings and comments. "
+    "Start from an empty template or upload your current work to update it."
 )
 tab_empty, tab_upload = st.tabs([
     "📋  Fill Empty Template",
-    "📂  Upload Current Work and Add Stars / Rating",
+    "📂  Upload Current Work",
 ])
 
 
@@ -241,7 +277,7 @@ tab_empty, tab_upload = st.tabs([
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_empty:
     st.header("Fill Empty Template")
-    st.caption("Choose a player type, rate each competency, and download the report with filled in stars & rating.")
+    st.caption("Choose a player type, fill in each competency, and download the report.")
 
     template_name: str = st.selectbox(
         "Player type / template:",
@@ -250,19 +286,26 @@ with tab_empty:
     )
     template_cfg = TEMPLATES[template_name]
 
-    # Reset all sliders to 0 whenever the template selection changes
+    # Reset all per-competency state when the template selection changes
     if st.session_state.get("empty_prev_template") != template_name:
-        n = len(template_cfg["variables"])
-        for i in range(20):  # clear more than the max possible rows
-            st.session_state[f"empty_{i}"] = 0.0
+        for i in range(20):
+            st.session_state[f"empty_{i}"]         = 0.0
+            st.session_state[f"empty_{i}_video"]   = None
+            st.session_state[f"empty_{i}_comment"] = ""
         st.session_state["empty_prev_template"] = template_name
 
     st.markdown("---")
-    values = rating_form(template_cfg["variables"], key_prefix="empty", generate_key="empty_generate")
+    st.subheader("Rate each competency (0–10), add a video clip and notes")
 
-    if values is not None:
+    star_values, comments, video_data = competency_sections(
+        template_cfg["variables"],
+        key_prefix="empty",
+    )
+
+    st.markdown("---")
+    if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="empty_generate"):
         with st.spinner("Building your scouting report …"):
-            output = fill_template(template_cfg, values)
+            output = fill_template(template_cfg, star_values, comments, video_data)
         st.success("Report is ready!")
         st.download_button(
             label="📥  Download PowerPoint",
@@ -274,13 +317,13 @@ with tab_empty:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Upload an existing file, check it, fill stars + rating, download
+# TAB 2 — Upload an existing file and update it
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_upload:
-    st.header("Upload Current Work and Add Stars / Rating")
+    st.header("Upload Current Work")
     st.caption(
         "Upload your existing PowerPoint. "
-        "The tool checks it, then lets you add star ratings and the overall score."
+        "The tool reads the current stars, videos and notes so you can adjust them."
     )
 
     uploaded = st.file_uploader("Upload your .pptx file", type=["pptx"], key="upload_widget")
@@ -296,11 +339,16 @@ with tab_upload:
             st.session_state["upload_bytes"]        = file_bytes
             st.session_state["upload_filename"]     = uploaded.name
             st.session_state["upload_check_result"] = check_result
-            # Seed slider state with current star values so they pre-populate correctly
+            # Seed star sliders from existing values
             for i, val in enumerate(check_result.get("current_star_values", [])):
                 st.session_state[f"upload_{i}"] = float(val)
+            # Seed comment and video state from PPTX
+            for i, cmt in enumerate(check_result.get("current_comments", [])):
+                st.session_state[f"upload_{i}_comment"] = cmt or ""
+            for i, vid in enumerate(check_result.get("current_videos", [])):
+                st.session_state[f"upload_{i}_video"] = vid  # (bytes, name) or None
 
-    # ── Show results (persists across reruns while sliders are adjusted) ──────
+    # ── Show results ─────────────────────────────────────────────────────────
     check_result = st.session_state.get("upload_check_result")
 
     if check_result is None:
@@ -318,7 +366,7 @@ with tab_upload:
             )
 
     else:
-        # ── Compatible — resolve which template config to use ─────────────
+        # ── Compatible — resolve template config ──────────────────────────
         matched_name = check_result.get("matched_template_name")
 
         if matched_name and matched_name in TEMPLATES:
@@ -342,22 +390,29 @@ with tab_upload:
         )
 
         st.markdown("---")
+        st.subheader("Adjust each competency — stars, video clip and notes")
 
-        # ── Star rating form (pre-populated with existing values) ─────────
-        current_values = check_result.get("current_star_values", [])
-        values = rating_form(
+        current_stars    = check_result.get("current_star_values", [])
+        current_comments = check_result.get("current_comments", [])
+        current_videos   = check_result.get("current_videos", [])
+
+        star_values, comments, video_data = competency_sections(
             template_cfg["variables"],
             key_prefix="upload",
-            generate_key="upload_generate",
-            defaults=current_values,
+            defaults_stars=current_stars,
+            defaults_comments=current_comments,
+            defaults_videos=current_videos,
         )
 
-        if values is not None:
+        st.markdown("---")
+        if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="upload_generate"):
             with st.spinner("Filling your PowerPoint …"):
                 output = fill_from_bytes(
                     st.session_state["upload_bytes"],
                     template_cfg,
-                    values,
+                    star_values,
+                    comments,
+                    video_data,
                 )
             st.success("Done!")
             fname = st.session_state.get("upload_filename", "filled_report.pptx")
