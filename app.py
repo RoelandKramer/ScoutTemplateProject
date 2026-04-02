@@ -250,6 +250,13 @@ with tab_empty:
     )
     template_cfg = TEMPLATES[template_name]
 
+    # Reset all sliders to 0 whenever the template selection changes
+    if st.session_state.get("empty_prev_template") != template_name:
+        n = len(template_cfg["variables"])
+        for i in range(20):  # clear more than the max possible rows
+            st.session_state[f"empty_{i}"] = 0.0
+        st.session_state["empty_prev_template"] = template_name
+
     st.markdown("---")
     values = rating_form(template_cfg["variables"], key_prefix="empty", generate_key="empty_generate")
 
@@ -331,7 +338,7 @@ with tab_upload:
             f"Slide {check_result['slide_idx'] + 1} · "
             f"{check_result['row_count']} rows · "
             f"{check_result['star_count']} stars · "
-            f"Rating placeholder {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
+            f"Rating circle {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
         st.markdown("---")

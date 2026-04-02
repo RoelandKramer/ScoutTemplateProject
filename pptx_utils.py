@@ -279,12 +279,76 @@ def color_stars(slide, star_values: list) -> None:
                 star.fill.fore_color.rgb = WHITE
 
 
+def _is_rating_anchor(shape) -> bool:
+    """True if this shape is the rating oval anchor (named 'xx').
+
+    The anchor is the circle in the template.  Its name survives Keynote
+    round-trips even when Keynote empties the text and adds a separate TextBox.
+    """
+    return shape.name.strip().lower() == "xx"
+
+
+def _is_numeric_rating_text(text: str) -> bool:
+    """True if text looks like a filled-in score value."""
+    t = text.strip()
+    if t.lower() == "xx":
+        return True
+    return bool(re.fullmatch(r"\d{1,2}([.,]\d{1,2})?", t))
+
+
 def _is_rating_shape(shape) -> bool:
-    """True if this shape holds the rating value ('xx' or a filled decimal)."""
-    if not shape.has_text_frame:
-        return False
-    text = shape.text_frame.text.strip()
-    return text.lower() == "xx" or bool(re.fullmatch(r"\d+\.\d", text))
+    """True if this shape holds (or is) the overall rating — used by compatibility check."""
+    if _is_rating_anchor(shape):
+        return True
+    if shape.has_text_frame:
+        return _is_numeric_rating_text(shape.text_frame.text)
+    return False
+
+
+def _find_rating_text_shape(slide):
+    """Return the single shape whose text should be overwritten with the rating.
+
+    Handles two layouts:
+      • Original PPTX:  the 'xx' oval itself contains the text.
+      • Keynote export: the 'xx' oval is empty; Keynote placed a separate TextBox
+                        whose centre falls inside the oval's bounds.
+
+    Returns None if the rating shape cannot be located.
+    """
+    anchor = None
+    for shape in slide.shapes:
+        if _is_rating_anchor(shape):
+            anchor = shape
+            break
+
+    if anchor is None:
+        return None
+
+    # Case 1 — text is in the anchor oval itself (original or already-filled)
+    if anchor.has_text_frame and anchor.text_frame.text.strip():
+        return anchor
+
+    # Case 2 — Keynote emptied the oval; find a TextBox whose centre is inside it
+    a_cx = anchor.left + anchor.width  // 2
+    a_cy = anchor.top  + anchor.height // 2
+    margin = anchor.width // 4  # accept shapes within the inner half
+
+    for shape in slide.shapes:
+        if shape is anchor:
+            continue
+        if not shape.has_text_frame:
+            continue
+        text = shape.text_frame.text.strip()
+        if not _is_numeric_rating_text(text):
+            continue
+        # Check that the shape's centre is inside the anchor oval
+        cx = shape.left + shape.width  // 2
+        cy = shape.top  + shape.height // 2
+        if (abs(cx - a_cx) <= margin) and (abs(cy - a_cy) <= margin):
+            return shape
+
+    # Fallback — return the anchor even if empty so we can write into it
+    return anchor
 
 
 def read_current_star_values(slide) -> list[float]:
@@ -294,26 +358,25 @@ def read_current_star_values(slide) -> list[float]:
 
 
 def set_rating_text(slide, rating_value: float) -> bool:
-    """Write the calculated rating into the 'xx' placeholder oval."""
+    """Write the calculated rating into the rating shape (oval or overlaid TextBox)."""
+    target = _find_rating_text_shape(slide)
+    if target is None:
+        return False
     rating_str = f"{rating_value:.1f}"
-    for shape in slide.shapes:
-        if not _is_rating_shape(shape):
-            continue
-        tf = shape.text_frame
-        first = True
-        for para in tf.paragraphs:
-            for run in para.runs:
-                if first:
-                    run.text = rating_str
-                    first = False
-                else:
-                    run.text = ""
-        if first:
-            para = tf.paragraphs[0]
-            para.clear()
-            para.add_run().text = rating_str
-        return True
-    return False
+    tf = target.text_frame
+    first = True
+    for para in tf.paragraphs:
+        for run in para.runs:
+            if first:
+                run.text = rating_str
+                first = False
+            else:
+                run.text = ""
+    if first:
+        para = tf.paragraphs[0]
+        para.clear()
+        para.add_run().text = rating_str
+    return True
 
 
 def calculate_rating(values: list[int], weights: list[float] | None = None) -> float:
@@ -431,11 +494,12 @@ def check_template_compatibility(file_obj) -> dict:
             f"Expected 10 stars per row; rows {bad_rows} have a different count."
         )
 
-    has_placeholder = any(_is_rating_shape(s) for s in slide.shapes)
+    has_placeholder = _find_rating_text_shape(slide) is not None
     result["has_rating_placeholder"] = has_placeholder
     if not has_placeholder:
         result["issues"].append(
-            "No rating placeholder found ('xx' or an existing score)."
+            "Rating circle not found. "
+            "The file may be too heavily restructured to fill automatically."
         )
 
     result["current_star_values"]    = read_current_star_values(slide)
