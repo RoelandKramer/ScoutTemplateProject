@@ -242,17 +242,62 @@ def _apply_half_star_fill(shape) -> None:
     spPr.insert(idx, etree.fromstring(_HALF_STAR_GRAD_XML))
 
 
+def _stop_srgb(gs_element) -> str | None:
+    """Return the uppercase srgbClr val from an <a:gs> stop, or None."""
+    clr = gs_element.find(qn('a:srgbClr'))
+    return clr.get('val', '').upper() if clr is not None else None
+
+
 def _get_star_fill_value(shape) -> float:
-    """Return 1.0 (full yellow), 0.5 (half-yellow gradient), or 0.0 (empty)."""
+    """Return 1.0 (full yellow), 0.5 (half-yellow gradient), or 0.0 (empty).
+
+    Handles three fill representations:
+      • solidFill srgbClr FFD932            → 1.0
+      • solidFill srgbClr FFFFFF            → 0.0
+      • our exact half-star gradFill        → 0.5
+      • Keynote gradFill for yellow star    → 1.0  (has a FFD932 stop)
+      • Keynote gradFill for white star     → 0.0  (all stops are FFFFFF)
+      • solidFill with non-srgb color ref   → 1.0  (treat as filled; empty = white)
+    """
     try:
         spPr = shape._element.spPr
-        if spPr.find(qn('a:gradFill')) is not None:
-            return 0.5
+
+        grad = spPr.find(qn('a:gradFill'))
+        if grad is not None:
+            gsLst = grad.find(qn('a:gsLst'))
+            stops = gsLst.findall(qn('a:gs')) if gsLst is not None else []
+
+            if len(stops) == 4:
+                colors = [_stop_srgb(s) for s in stops]
+                positions = [int(s.get('pos', '0')) for s in stops]
+                # Our exact half-star: sharp FFD932→FFFFFF split at 50 %
+                if (colors == ['FFD932', 'FFD932', 'FFFFFF', 'FFFFFF'] and
+                        positions == [0, 49999, 50000, 100000]):
+                    return 0.5
+
+            # Any stop is yellow → Keynote-converted yellow star
+            if any(_stop_srgb(s) == 'FFD932' for s in stops):
+                return 1.0
+            # All stops are explicitly white → empty star
+            if stops and all(_stop_srgb(s) == 'FFFFFF' for s in stops):
+                return 0.0
+            # Unknown gradient (theme color, etc.) — assume filled
+            return 1.0
+
         solid = spPr.find(qn('a:solidFill'))
         if solid is not None:
             clr = solid.find(qn('a:srgbClr'))
-            if clr is not None and clr.get('val', '').upper() == 'FFD932':
+            if clr is not None:
+                val = clr.get('val', '').upper()
+                if val == 'FFD932':
+                    return 1.0
+                if val == 'FFFFFF':
+                    return 0.0
+                return 1.0  # any other explicit colour → treat as filled
+            # schemeClr / sysClr / etc. — empty stars are always explicit white
+            if len(solid) > 0:
                 return 1.0
+
     except Exception:
         pass
     return 0.0
