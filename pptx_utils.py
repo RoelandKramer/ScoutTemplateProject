@@ -305,15 +305,40 @@ def _is_rating_shape(shape) -> bool:
     return False
 
 
+def _restore_text_frame(shape) -> None:
+    """Re-add a txBody to a shape that Keynote stripped of its text frame."""
+    txBody_xml = (
+        '<p:txBody xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'
+        ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+        '<a:bodyPr anchor="ctr"/>'
+        '<a:lstStyle/>'
+        '<a:p><a:pPr algn="ctr"/><a:r>'
+        '<a:rPr lang="nl-NL" sz="3600" b="1" dirty="0"/>'
+        '<a:t></a:t>'
+        '</a:r></a:p>'
+        '</p:txBody>'
+    )
+    shape._element.append(etree.fromstring(txBody_xml))
+
+
 def _find_rating_text_shape(slide):
-    """Return the single shape whose text should be overwritten with the rating.
+    """Return the shape whose text should be overwritten with the rating.
 
-    Handles two layouts:
-      • Original PPTX:  the 'xx' oval itself contains the text.
-      • Keynote export: the 'xx' oval is empty; Keynote placed a separate TextBox
-                        whose centre falls inside the oval's bounds.
+    Handles all known layouts produced by Keynote round-trips:
 
-    Returns None if the rating shape cannot be located.
+      Case 1 — Original PPTX:
+                The 'xx' oval has a text frame containing 'xx' or the score.
+
+      Case 2 — Keynote blank export:
+                Keynote wraps the oval in a GroupShape (still named 'xx').
+                Inside the group: one circle child + one TextBox child with
+                the score text (or empty if never filled).
+
+      Case 3 — Keynote overlay export (filled-then-exported):
+                The 'xx' oval is emptied and a separate floating TextBox
+                is placed on top of it whose centre aligns with the oval.
+
+    Returns None if nothing useful is found.
     """
     anchor = None
     for shape in slide.shapes:
@@ -324,14 +349,26 @@ def _find_rating_text_shape(slide):
     if anchor is None:
         return None
 
-    # Case 1 — text is in the anchor oval itself (original or already-filled)
-    if anchor.has_text_frame and anchor.text_frame.text.strip():
+    # Case 1 — oval with text frame (original or already filled by this tool)
+    if anchor.has_text_frame:
         return anchor
 
-    # Case 2 — Keynote emptied the oval; find a TextBox whose centre is inside it
+    # Case 2 — Keynote converted oval to a GroupShape named 'xx'
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+    if anchor.shape_type == MSO_SHAPE_TYPE.GROUP:
+        # Find the TextBox child (the circle child never has useful text)
+        for child in anchor.shapes:
+            if child.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and child.has_text_frame:
+                return child
+        # No TextBox child found — return the circle child so we can write into it
+        for child in anchor.shapes:
+            if child.has_text_frame:
+                return child
+
+    # Case 3 — oval emptied, floating TextBox placed on top
     a_cx = anchor.left + anchor.width  // 2
     a_cy = anchor.top  + anchor.height // 2
-    margin = anchor.width // 4  # accept shapes within the inner half
+    margin = anchor.width // 4
 
     for shape in slide.shapes:
         if shape is anchor:
@@ -341,13 +378,14 @@ def _find_rating_text_shape(slide):
         text = shape.text_frame.text.strip()
         if not _is_numeric_rating_text(text):
             continue
-        # Check that the shape's centre is inside the anchor oval
         cx = shape.left + shape.width  // 2
         cy = shape.top  + shape.height // 2
-        if (abs(cx - a_cx) <= margin) and (abs(cy - a_cy) <= margin):
+        if abs(cx - a_cx) <= margin and abs(cy - a_cy) <= margin:
             return shape
 
-    # Fallback — return the anchor even if empty so we can write into it
+    # Last resort — restore the anchor's text frame if Keynote stripped it
+    if not anchor.has_text_frame:
+        _restore_text_frame(anchor)
     return anchor
 
 
@@ -358,10 +396,22 @@ def read_current_star_values(slide) -> list[float]:
 
 
 def set_rating_text(slide, rating_value: float) -> bool:
-    """Write the calculated rating into the rating shape (oval or overlaid TextBox)."""
+    """Write the calculated rating into the rating shape (oval or overlaid TextBox).
+
+    Handles three cases:
+      1. Original PPTX  — oval has text frame, text is 'xx' or previous score.
+      2. Keynote export — oval is empty, a TextBox sits on top with the score.
+      3. Keynote blank  — oval had its text frame deleted entirely by Keynote;
+                          we restore the txBody before writing.
+    """
     target = _find_rating_text_shape(slide)
     if target is None:
         return False
+
+    # Case 3: Keynote stripped the text frame — restore it first
+    if not target.has_text_frame:
+        _restore_text_frame(target)
+
     rating_str = f"{rating_value:.1f}"
     tf = target.text_frame
     first = True
