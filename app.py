@@ -23,6 +23,7 @@ LOGO_DIR = Path(__file__).parent / "Logo's"
 _LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
 _LOGO_PV  = LOGO_DIR / "FC_Pro_Vercelli_1892.svg.png"
 _LOGO_BFG = LOGO_DIR / "Logo-BFG-White.png"
+_LOGO_BFG_B = LOGO_DIR / "Logo-BFG-Black.png"
 
 
 def _img_b64(path: Path) -> str:
@@ -91,7 +92,8 @@ def _login_page():
     """Render the login page and return True if user is now authenticated."""
     # Show default (Den Bosch) branding on login
     db_b64 = _img_b64(_LOGO_DB)
-    bfg_b64 = _img_b64(_LOGO_BFG)
+    bfg_b64 = _img_b64(_LOGO_BFG_B)
+    
     st.markdown(
         f"""
         <div style="text-align:center; padding: 2rem 0 1rem 0;">
