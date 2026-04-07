@@ -49,6 +49,7 @@ def save_draft(
     source: str = "empty",  # "empty" or "upload"
     upload_bytes: bytes | None = None,
     upload_filename: str | None = None,
+    player_data: dict | None = None,
 ) -> str:
     """Save or update a draft. Returns the report_id."""
     if not report_id:
@@ -85,6 +86,7 @@ def save_draft(
         "video_refs": video_refs,
         "source": source,
         "upload_ref": upload_ref,
+        "player_data": player_data,
         "updated_at": time.time(),
         "created_at": _load_draft_meta(username, report_id).get("created_at", time.time()),
     }

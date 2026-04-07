@@ -675,14 +675,73 @@ def _apply_ratings(
             embed_video_on_slide(prs, idx, vb, vname)
 
 
+# ─── Player info (slide 4 / rating slide) ───────────────────────────────────
+
+# The 9 empty TextBox 11 shapes on the left of the rating slide, sorted by top,
+# correspond to these fields in order:
+_PLAYER_INFO_FIELDS = [
+    "date_of_birth", "city_of_birth", "nationality", "height",
+    "preferred_foot", "club", "league", "agency", "agent",
+]
+
+
+def _write_text_shape(shape, text: str) -> None:
+    """Write text into a shape's text frame, preserving first-paragraph formatting."""
+    if not shape.has_text_frame:
+        return
+    tf = shape.text_frame
+    if tf.paragraphs and tf.paragraphs[0].runs:
+        tf.paragraphs[0].runs[0].text = text
+        for r in tf.paragraphs[0].runs[1:]:
+            r.text = ""
+    else:
+        para = tf.paragraphs[0]
+        para.clear()
+        run = para.add_run()
+        run.text = text
+
+
+def fill_player_info(prs, template_cfg: dict, player_data: dict) -> None:
+    """Fill the player info fields on the rating slide + welcome slide name."""
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+
+    # Fill welcome slide name (TextBox 28 on slide 1)
+    if len(prs.slides) > 0:
+        for shape in prs.slides[0].shapes:
+            if shape.name == "TextBox 28" and shape.has_text_frame:
+                _write_text_shape(shape, player_data.get("name", ""))
+                break
+
+    # Fill the 9 left TextBox 11 fields
+    left_fields = []
+    for shape in rating_slide.shapes:
+        if shape.name == "TextBox 11" and shape.left < 8_000_000:
+            left_fields.append((shape.top, shape))
+    left_fields.sort()
+
+    for i, (_, shape) in enumerate(left_fields):
+        if i < len(_PLAYER_INFO_FIELDS):
+            field_name = _PLAYER_INFO_FIELDS[i]
+            _write_text_shape(shape, player_data.get(field_name, ""))
+
+    # Fill the Player name textbox
+    for shape in rating_slide.shapes:
+        if shape.name == "TextBox 37" and shape.has_text_frame:
+            _write_text_shape(shape, player_data.get("name", ""))
+            break
+
+
 def fill_template(
     template_cfg: dict,
     star_values: list,
     comments: list[str] | None = None,
     video_data: list | None = None,
+    player_data: dict | None = None,
 ) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
+    if player_data:
+        fill_player_info(prs, template_cfg, player_data)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)
@@ -696,9 +755,12 @@ def fill_from_bytes(
     star_values: list,
     comments: list[str] | None = None,
     video_data: list | None = None,
+    player_data: dict | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
+    if player_data:
+        fill_player_info(prs, template_cfg, player_data)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)
