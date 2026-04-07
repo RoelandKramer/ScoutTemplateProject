@@ -97,7 +97,7 @@ def _login_page():
     st.markdown(
         f"""
         <div style="text-align:center; padding: 2rem 0 1rem 0;">
-            <img src="data:image/png;base64,{bfg_b64}" width="90" style="margin-bottom: 10px;"/>
+            <img src="data:image/png;base64,{bfg_b64}" width="270" style="margin-bottom: 10px;"/>
             <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">Scout Rating Tool</h1>
             <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">FC Den Bosch  &  Pro Vercelli</p>
         </div>
