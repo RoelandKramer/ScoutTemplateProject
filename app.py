@@ -44,11 +44,14 @@ def improve_text(text: str) -> str:
             messages=[{
                 "role": "user",
                 "content": (
-                    "Verbeter de spellings- en grammaticafouten in de volgende scouting notitie. "
-                    "Verbeter ook de structuur licht als dat helpt. "
-                    "Behoud de originele betekenis en toon volledig. "
-                    "Geef alleen de verbeterde tekst terug, geen uitleg.\n\n"
-                    f"{text}"
+                    "Herschrijf de volgende scoutingnotitie naar een professionele, objectieve en formele stijl voor een officieel scoutingrapport. "
+                    "Corrigeer taalfouten, vermijd informele woorden (zoals verkleinwoorden) en maak de tekst bondig, maar behoud de kern van de observatie. "
+                    "Geef uitsluitend de verbeterde tekst terug, zonder introductie of uitleg.\n\n"
+                    "Voorbeeld:\n"
+                    "Input: Dit spelertje is goed met de bal in de handen\n"
+                    "Output: De speler beschikt over een betrouwbare balbehandeling.\n\n"
+                    f"Input: {text}\n"
+                    "Output:"
                 ),
             }],
         )
