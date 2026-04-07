@@ -235,14 +235,15 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
                 suggestion = st.session_state[suggestion_key]
                 st.markdown("**Suggested improvement:**")
                 st.text_area("Suggested", value=suggestion, height=90, key=f"{key_prefix}_{i}_sug_display", label_visibility="collapsed")
-                ca, cd = st.columns(2)
-                with ca:
-                    if st.button("Accept", key=f"{key_prefix}_{i}_accept", type="primary"):
+                col_spacer_left, col_accept, col_discard, col_spacer_right = st.columns([1, 1.5, 1.5, 1])
+                
+                with col_accept:
+                    if st.button("Accept", key=f"{key_prefix}_{i}_accept", type="primary", use_container_width=True):
                         st.session_state[comment_key] = suggestion
                         st.session_state[suggestion_key] = ""
                         st.rerun()
-                with cd:
-                    if st.button("Discard", key=f"{key_prefix}_{i}_discard"):
+                with col_discard:
+                    if st.button("Discard", key=f"{key_prefix}_{i}_discard", use_container_width=True):
                         st.session_state[suggestion_key] = ""
                         st.rerun()
 
