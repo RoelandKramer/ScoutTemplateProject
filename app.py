@@ -2,23 +2,36 @@
 
 import io
 import os
+import time
+import base64
+from datetime import datetime
+from pathlib import Path
 import streamlit as st
 from pptx_utils import (
     TEMPLATES, CLUBS, CLUB_LANGUAGES,
     get_template_config, fill_template, fill_from_bytes,
     check_template_compatibility,
 )
+import storage
 
 # ─── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Scout Rating Tool",
-    page_icon="⚽",
-    layout="centered",
-)
+st.set_page_config(page_title="Scout Rating Tool", page_icon="⚽", layout="centered")
+
+_VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024
+
+LOGO_DIR = Path(__file__).parent / "Logo's"
+_LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
+_LOGO_PV  = LOGO_DIR / "FC_Pro_Vercelli_1892.svg.png"
+_LOGO_BFG = LOGO_DIR / "Logo-BFG-White.png"
+
+
+def _img_b64(path: Path) -> str:
+    if path.exists():
+        return base64.b64encode(path.read_bytes()).decode()
+    return ""
+
 
 # ─── AI text improvement ────────────────────────────────────────────────────
-_VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024  # 50 MB
-
 
 def _get_anthropic_key() -> str | None:
     try:
@@ -61,30 +74,77 @@ def improve_text(text: str) -> str:
         return text
 
 
+# ─── Authentication ──────────────────────────────────────────────────────────
+
+def _authenticate(username: str, password: str) -> bool:
+    try:
+        users = st.secrets.get("users", {})
+        user = users.get(username)
+        if user and user.get("password") == password:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _login_page():
+    """Render the login page and return True if user is now authenticated."""
+    # Show default (Den Bosch) branding on login
+    db_b64 = _img_b64(_LOGO_DB)
+    bfg_b64 = _img_b64(_LOGO_BFG)
+    st.markdown(
+        f"""
+        <div style="text-align:center; padding: 2rem 0 1rem 0;">
+            <img src="data:image/png;base64,{db_b64}" width="90" style="margin-bottom: 10px;"/>
+            <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">Scout Rating Tool</h1>
+            <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">FC Den Bosch  &  Pro Vercelli</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Log in", type="primary", use_container_width=True)
+
+    if submitted:
+        if _authenticate(username, password):
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = username
+            st.rerun()
+        else:
+            st.error("Invalid username or password.")
+
+    return False
+
+
 # ─── Dynamic styling ────────────────────────────────────────────────────────
 
 _THEME_BLUE = {
-    "bg":       "#f7f9fc", "sidebar": "#eef4ff",
-    "tab_bg":   "#edf4ff", "tab_border": "#cfe0ff",
+    "bg": "#f7f9fc", "sidebar": "#eef4ff",
+    "tab_bg": "#edf4ff", "tab_border": "#cfe0ff",
     "tab_hover": "#dbeafe", "tab_active": "#dbeafe", "tab_active_text": "#1d4ed8",
-    "primary":  "#4a7fd4", "primary_hover": "#3a6ec0",
-    "heading":  "#1f2937", "text": "#374151",
-    "label":    "#1e3a8a",
+    "primary": "#4a7fd4", "primary_hover": "#3a6ec0",
+    "heading": "#1f2937", "text": "#374151",
+    "label": "#1e3a8a",
     "select_bg": "#dbeafe", "select_border": "#3b82f6", "select_text": "#1e3a8a",
-    "slider":   "#4a7fd4",
+    "slider": "#4a7fd4",
     "download_bg": "#2e7d4f", "download_hover": "#256040",
+    "card_bg": "#ffffff", "card_border": "#d1dff0",
 }
 
 _THEME_RED = {
-    "bg":       "#fdf7f7", "sidebar": "#ffeef0",
-    "tab_bg":   "#fff0f0", "tab_border": "#ffccd0",
+    "bg": "#fdf7f7", "sidebar": "#ffeef0",
+    "tab_bg": "#fff0f0", "tab_border": "#ffccd0",
     "tab_hover": "#ffdde0", "tab_active": "#ffdde0", "tab_active_text": "#b91c1c",
-    "primary":  "#c0392b", "primary_hover": "#a93226",
-    "heading":  "#1f1010", "text": "#412020",
-    "label":    "#7f1d1d",
+    "primary": "#c0392b", "primary_hover": "#a93226",
+    "heading": "#1f1010", "text": "#412020",
+    "label": "#7f1d1d",
     "select_bg": "#ffdde0", "select_border": "#ef4444", "select_text": "#7f1d1d",
-    "slider":   "#c0392b",
+    "slider": "#c0392b",
     "download_bg": "#2e7d4f", "download_hover": "#256040",
+    "card_bg": "#ffffff", "card_border": "#f0d1d1",
 }
 
 
@@ -143,8 +203,36 @@ def _apply_theme(club: str) -> None:
     }}
     [data-testid="stDownloadButton"] > button:hover {{ background-color:{t['download_hover']} !important; }}
     [data-testid="stAlert"] {{ border-radius: 6px; }}
+
+    .report-card {{
+        background: {t['card_bg']}; border: 1px solid {t['card_border']};
+        border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: .8rem;
+    }}
+    .report-card h4 {{ margin: 0 0 4px 0; font-size: 1rem; }}
+    .report-card .meta {{ color: #6b7280; font-size: .85rem; }}
     </style>
     """, unsafe_allow_html=True)
+
+
+# ─── Header with logo ────────────────────────────────────────────────────────
+
+def _render_header(club: str):
+    logo_b64 = _img_b64(_LOGO_PV if club == "Pro Vercelli" else _LOGO_DB)
+    bfg_b64 = _img_b64(_LOGO_BFG)
+    club_color = "#b91c1c" if club == "Pro Vercelli" else "#1e3a8a"
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; gap:16px; padding:0.5rem 0 0.3rem 0;">
+            <img src="data:image/png;base64,{logo_b64}" width="55"/>
+            <div style="flex:1;">
+                <h1 style="margin:0; font-size:1.7rem; color:{club_color};">Scout Rating Tool</h1>
+                <p style="margin:0; color:#6b7280; font-size:.9rem;">{club}</p>
+            </div>
+            <img src="data:image/png;base64,{bfg_b64}" width="100" style="opacity:.7;"/>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ─── Shared UI helpers ───────────────────────────────────────────────────────
@@ -236,7 +324,6 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
                 st.markdown("**Suggested improvement:**")
                 st.text_area("Suggested", value=suggestion, height=90, key=f"{key_prefix}_{i}_sug_display", label_visibility="collapsed")
                 col_spacer_left, col_accept, col_discard, col_spacer_right = st.columns([1, 1.5, 1.5, 1])
-                
                 with col_accept:
                     if st.button("Accept", key=f"{key_prefix}_{i}_accept", type="primary", use_container_width=True):
                         st.session_state[comment_key] = suggestion
@@ -254,34 +341,152 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
     return star_values, comments, video_data
 
 
+def _ts_str(ts: float) -> str:
+    return datetime.fromtimestamp(ts).strftime("%d %b %Y, %H:%M")
+
+
+# ─── Collect current editor state ────────────────────────────────────────────
+
+def _collect_editor_state(key_prefix: str, n_vars: int):
+    """Read stars, comments and video_data back from session_state."""
+    stars, comments, videos = [], [], []
+    for i in range(n_vars):
+        stars.append(st.session_state.get(f"{key_prefix}_{i}", 0.0))
+        comments.append(st.session_state.get(f"{key_prefix}_{i}_comment", ""))
+        videos.append(st.session_state.get(f"{key_prefix}_{i}_video"))
+    return stars, comments, videos
+
+
 # ══════════════════════════════════════════════════════════════════════════════
-# MAIN APP
+# LOGIN GATE
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ─── Club + Language selector (top of page) ──────────────────────────────────
-col_club, col_lang = st.columns(2)
-with col_club:
+if not st.session_state.get("authenticated"):
+    _login_page()
+    st.stop()
+
+username = st.session_state["username"]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SIDEBAR — club, language, user info, logout
+# ══════════════════════════════════════════════════════════════════════════════
+
+with st.sidebar:
+    st.markdown(f"**Logged in as:** {username}")
+    if st.button("Log out", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
+    st.markdown("---")
     club = st.selectbox("Club", CLUBS, key="club_select")
-with col_lang:
     available_langs = CLUB_LANGUAGES[club]
     lang = st.selectbox("Language", available_langs, key="lang_select")
 
+    st.markdown("---")
+    # Navigation
+    page = st.radio(
+        "Navigate",
+        ["Dashboard", "New Report", "Upload & Edit"],
+        key="nav_page",
+        label_visibility="collapsed",
+    )
+
 _apply_theme(club)
-
-st.title("⚽ Scout Rating Tool")
-st.caption(
-    f"**{club}** — {'Nederlands' if lang == 'NL' else 'English'}  ·  "
-    "Fill scouting reports with videos, star ratings and notes."
-)
-
-tab_empty, tab_upload = st.tabs(["📋  Fill Empty Template", "📂  Upload Current Work"])
+_render_header(club)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Fill empty template
+# PAGE: Dashboard
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_empty:
-    st.header("Fill Empty Template")
+
+if page == "Dashboard":
+    st.markdown("---")
+
+    # ── Drafts (in progress) ─────────────────────────────────────────────────
+    st.subheader("📝  In Progress")
+    drafts = storage.list_drafts(username)
+    if not drafts:
+        st.caption("No drafts yet. Start a new report to get going.")
+    else:
+        for d in drafts:
+            rid = d["report_id"]
+            with st.container():
+                st.markdown(
+                    f"""<div class="report-card">
+                    <h4>{d['position']}  —  {d['club']} ({d['language']})</h4>
+                    <div class="meta">Last saved: {_ts_str(d['updated_at'])}  ·  ID: {rid[:8]}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+                c1, c2, c3 = st.columns([2, 1, 1])
+                with c1:
+                    if st.button("Continue editing", key=f"cont_{rid}", type="primary", use_container_width=True):
+                        st.session_state["edit_draft_id"] = rid
+                        st.session_state["nav_page"] = "New Report"
+                        st.rerun()
+                with c2:
+                    if st.button("Delete", key=f"del_draft_{rid}", use_container_width=True):
+                        storage.delete_draft(username, rid)
+                        st.rerun()
+
+    st.markdown("---")
+
+    # ── Finished reports ──────────────────────────────────────────────────────
+    st.subheader("✅  Finished Reports")
+    finished = storage.list_finished(username)
+    if not finished:
+        st.caption("No finished reports yet.")
+    else:
+        for f in finished:
+            rid = f["report_id"]
+            st.markdown(
+                f"""<div class="report-card">
+                <h4>{f['position']}  —  {f['club']} ({f['language']})</h4>
+                <div class="meta">Finished: {_ts_str(f['finished_at'])}  ·  ID: {rid[:8]}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            c1, c2 = st.columns([2, 1])
+            with c1:
+                pptx_bytes = storage.load_finished_pptx(username, rid)
+                if pptx_bytes:
+                    st.download_button(
+                        "📥  Download PPTX", data=pptx_bytes,
+                        file_name=f"Scout_{f['position'].replace(' ','_')}_{f['club'].replace(' ','_')}_{rid[:8]}.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key=f"dl_{rid}", use_container_width=True,
+                    )
+            with c2:
+                if st.button("Delete", key=f"del_fin_{rid}", use_container_width=True):
+                    storage.delete_finished(username, rid)
+                    st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: New Report (also used for continuing a draft)
+# ══════════════════════════════════════════════════════════════════════════════
+
+elif page == "New Report":
+    st.markdown("---")
+
+    # ── Load draft if continuing ──────────────────────────────────────────────
+    draft_id = st.session_state.pop("edit_draft_id", None)
+    if draft_id and st.session_state.get("_loaded_draft") != draft_id:
+        draft = storage.load_draft(username, draft_id)
+        if draft:
+            st.session_state["active_report_id"] = draft_id
+            st.session_state["club_select"] = draft["club"]
+            st.session_state["lang_select"] = draft["language"]
+            st.session_state["empty_template_select"] = list(TEMPLATES.keys()).index(draft["position"])
+            for i, v in enumerate(draft["star_values"]):
+                st.session_state[f"empty_{i}"] = float(v)
+            for i, c in enumerate(draft["comments"]):
+                st.session_state[f"empty_{i}_comment"] = c or ""
+            for i, vd in enumerate(draft.get("video_data", [])):
+                st.session_state[f"empty_{i}_video"] = vd
+            st.session_state["_loaded_draft"] = draft_id
+            st.rerun()
 
     template_name = st.selectbox("Position:", list(TEMPLATES.keys()), key="empty_template_select")
     template_cfg = get_template_config(template_name, club, lang)
@@ -294,6 +499,9 @@ with tab_empty:
             st.session_state[f"empty_{i}_video"]   = None
             st.session_state[f"empty_{i}_comment"] = ""
         st.session_state["empty_prev_key"] = reset_key
+        # Clear active report when switching context
+        st.session_state.pop("active_report_id", None)
+        st.session_state.pop("_loaded_draft", None)
 
     st.markdown("---")
     st.subheader("Rate each competency")
@@ -303,23 +511,49 @@ with tab_empty:
     )
 
     st.markdown("---")
-    if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="empty_gen"):
-        with st.spinner("Building report …"):
-            output = fill_template(template_cfg, star_values, comments, video_data)
-        st.success("Report ready!")
-        st.download_button(
-            "📥  Download PowerPoint", data=output,
-            file_name=f"Scout_Report_{template_name.replace(' ', '_')}_{club.replace(' ', '_')}_{lang}.pptx",
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            use_container_width=True,
-        )
+
+    col_save, col_gen = st.columns(2)
+    with col_save:
+        if st.button("💾  Save Draft", use_container_width=True):
+            s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+            rid = storage.save_draft(
+                username,
+                st.session_state.get("active_report_id"),
+                template_name, club, lang, s, c, v,
+                source="empty",
+            )
+            st.session_state["active_report_id"] = rid
+            st.success(f"Draft saved! (ID: {rid[:8]})")
+
+    with col_gen:
+        if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="empty_gen"):
+            s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+            with st.spinner("Building report …"):
+                output = fill_template(template_cfg, s, c, v)
+            pptx_bytes = output.getvalue()
+
+            # Auto-save as finished
+            rid = st.session_state.get("active_report_id") or storage.save_draft(
+                username, None, template_name, club, lang, s, c, v, source="empty",
+            )
+            storage.save_finished(username, rid, template_name, club, lang, pptx_bytes)
+            st.session_state.pop("active_report_id", None)
+
+            st.success("Report generated and saved!")
+            st.download_button(
+                "📥  Download PowerPoint", data=pptx_bytes,
+                file_name=f"Scout_Report_{template_name.replace(' ', '_')}_{club.replace(' ', '_')}_{lang}.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                use_container_width=True,
+            )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Upload existing file
+# PAGE: Upload & Edit
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_upload:
-    st.header("Upload Current Work")
+
+elif page == "Upload & Edit":
+    st.markdown("---")
     st.caption("Upload your existing PowerPoint to adjust stars, videos and notes.")
 
     uploaded = st.file_uploader("Upload .pptx", type=["pptx"], key="upload_widget")
@@ -383,17 +617,45 @@ with tab_upload:
         )
 
         st.markdown("---")
-        if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="upload_gen"):
-            with st.spinner("Filling …"):
-                output = fill_from_bytes(
-                    st.session_state["upload_bytes"], template_cfg,
-                    star_values, comments, video_data,
+        col_save, col_gen = st.columns(2)
+        with col_save:
+            if st.button("💾  Save Draft", use_container_width=True, key="upload_save"):
+                s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                rid = storage.save_draft(
+                    username,
+                    st.session_state.get("upload_active_report_id"),
+                    matched_name or "Unknown", detected_club, detected_lang, s, c, v,
+                    source="upload",
+                    upload_bytes=st.session_state.get("upload_bytes"),
+                    upload_filename=st.session_state.get("upload_filename"),
                 )
-            st.success("Done!")
-            fname = st.session_state.get("upload_filename", "report.pptx")
-            st.download_button(
-                "📥  Download Filled PowerPoint", data=output,
-                file_name=f"Filled_{fname}",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                use_container_width=True,
-            )
+                st.session_state["upload_active_report_id"] = rid
+                st.success(f"Draft saved! (ID: {rid[:8]})")
+
+        with col_gen:
+            if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="upload_gen"):
+                s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                with st.spinner("Filling …"):
+                    output = fill_from_bytes(
+                        st.session_state["upload_bytes"], template_cfg, s, c, v,
+                    )
+                pptx_bytes = output.getvalue()
+                pos = matched_name or "Unknown"
+
+                rid = st.session_state.get("upload_active_report_id") or storage.save_draft(
+                    username, None, pos, detected_club, detected_lang, s, c, v,
+                    source="upload",
+                    upload_bytes=st.session_state.get("upload_bytes"),
+                    upload_filename=st.session_state.get("upload_filename"),
+                )
+                storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes)
+                st.session_state.pop("upload_active_report_id", None)
+
+                st.success("Done and saved!")
+                fname = st.session_state.get("upload_filename", "report.pptx")
+                st.download_button(
+                    "📥  Download Filled PowerPoint", data=pptx_bytes,
+                    file_name=f"Filled_{fname}",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    use_container_width=True,
+                )
