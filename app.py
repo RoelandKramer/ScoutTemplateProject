@@ -1,157 +1,152 @@
-"""FC Den Bosch — Scout Rating Tool (Streamlit app)."""
+"""FC Den Bosch / Pro Vercelli — Scout Rating Tool (Streamlit app)."""
 
 import io
+import os
 import streamlit as st
-from pptx_utils import TEMPLATES, fill_template, fill_from_bytes, check_template_compatibility
+from pptx_utils import (
+    TEMPLATES, CLUBS, CLUB_LANGUAGES,
+    get_template_config, fill_template, fill_from_bytes,
+    check_template_compatibility,
+)
 
 # ─── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="FC Den Bosch Scout Tool",
+    page_title="Scout Rating Tool",
     page_icon="⚽",
     layout="centered",
 )
 
-# ─── Styling ─────────────────────────────────────────────────────────────────
-st.markdown(
-    """
+# ─── AI text improvement ────────────────────────────────────────────────────
+_VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024  # 50 MB
+
+
+def _get_anthropic_key() -> str | None:
+    try:
+        key = st.secrets.get("ANTHROPIC_API_KEY", "")
+        if key and not key.startswith("#"):
+            return key
+    except Exception:
+        pass
+    return os.environ.get("ANTHROPIC_API_KEY") or None
+
+
+def improve_text(text: str) -> str:
+    api_key = _get_anthropic_key()
+    if not api_key:
+        st.error("No Anthropic API key. Add ANTHROPIC_API_KEY to .streamlit/secrets.toml")
+        return text
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Verbeter de spellings- en grammaticafouten in de volgende scouting notitie. "
+                    "Verbeter ook de structuur licht als dat helpt. "
+                    "Behoud de originele betekenis en toon volledig. "
+                    "Geef alleen de verbeterde tekst terug, geen uitleg.\n\n"
+                    f"{text}"
+                ),
+            }],
+        )
+        return msg.content[0].text.strip()
+    except Exception as exc:
+        st.error(f"AI improvement failed: {exc}")
+        return text
+
+
+# ─── Dynamic styling ────────────────────────────────────────────────────────
+
+_THEME_BLUE = {
+    "bg":       "#f7f9fc", "sidebar": "#eef4ff",
+    "tab_bg":   "#edf4ff", "tab_border": "#cfe0ff",
+    "tab_hover": "#dbeafe", "tab_active": "#dbeafe", "tab_active_text": "#1d4ed8",
+    "primary":  "#4a7fd4", "primary_hover": "#3a6ec0",
+    "heading":  "#1f2937", "text": "#374151",
+    "label":    "#1e3a8a",
+    "select_bg": "#dbeafe", "select_border": "#3b82f6", "select_text": "#1e3a8a",
+    "slider":   "#4a7fd4",
+    "download_bg": "#2e7d4f", "download_hover": "#256040",
+}
+
+_THEME_RED = {
+    "bg":       "#fdf7f7", "sidebar": "#ffeef0",
+    "tab_bg":   "#fff0f0", "tab_border": "#ffccd0",
+    "tab_hover": "#ffdde0", "tab_active": "#ffdde0", "tab_active_text": "#b91c1c",
+    "primary":  "#c0392b", "primary_hover": "#a93226",
+    "heading":  "#1f1010", "text": "#412020",
+    "label":    "#7f1d1d",
+    "select_bg": "#ffdde0", "select_border": "#ef4444", "select_text": "#7f1d1d",
+    "slider":   "#c0392b",
+    "download_bg": "#2e7d4f", "download_hover": "#256040",
+}
+
+
+def _apply_theme(club: str) -> None:
+    t = _THEME_RED if club == "Pro Vercelli" else _THEME_BLUE
+    st.markdown(f"""
     <style>
-    /* ── Base ── */
-    [data-testid="stAppViewContainer"] { background: #f7f9fc; }
-    [data-testid="stHeader"]           { background: #f7f9fc; }
-    [data-testid="stSidebar"]          { background: #eef4ff; }
+    [data-testid="stAppViewContainer"] {{ background: {t['bg']}; }}
+    [data-testid="stHeader"]           {{ background: {t['bg']}; }}
+    [data-testid="stSidebar"]          {{ background: {t['sidebar']}; }}
+    h1, h2, h3, h4 {{ color: {t['heading']} !important; }}
+    p, li, label, .stMarkdown {{ color: {t['text']} !important; }}
 
-    /* ── Typography ── */
-    h1, h2, h3, h4 { color: #1f2937 !important; }
-    p, li, label, .stMarkdown { color: #374151 !important; }
+    [data-baseweb="tab-list"] {{
+        background: {t['tab_bg']} !important;
+        border: 1px solid {t['tab_border']} !important;
+        border-radius: 10px !important; padding: 4px !important;
+    }}
+    [data-baseweb="tab"] {{
+        background: transparent !important; color: #4b5563 !important;
+        font-weight: 600; border-radius: 8px !important;
+    }}
+    [data-baseweb="tab"]:hover {{ background: {t['tab_hover']} !important; color: {t['tab_active_text']} !important; }}
+    [aria-selected="true"] {{
+        background: {t['tab_active']} !important; color: {t['tab_active_text']} !important;
+        border-bottom: 2px solid {t['primary']} !important;
+    }}
 
-    /* ── Tabs ── */
-    [data-baseweb="tab-list"] {
-        background: #edf4ff !important;
-        border: 1px solid #cfe0ff !important;
-        border-radius: 10px !important;
-        padding: 4px !important;
-    }
-    [data-baseweb="tab"] {
-        background: transparent !important;
-        color: #4b5563 !important;
-        font-weight: 600;
-        border-radius: 8px !important;
-    }
-    [data-baseweb="tab"]:hover {
-        background: #dbeafe !important;
-        color: #1d4ed8 !important;
-    }
-    [aria-selected="true"] {
-        background: #dbeafe !important;
-        color: #1d4ed8 !important;
-        border-bottom: 2px solid #2563eb !important;
-    }
+    .var-label {{ font-size:14px; font-weight:700; color:{t['label']}; margin-bottom:2px; letter-spacing:.3px; }}
+    .star-row {{ width:60%; display:flex; justify-content:space-between; align-items:center; font-size:26px; line-height:1.2; margin-top:0; margin-bottom:10px; }}
+    .star-row span {{ display:inline-block; text-align:center; }}
+    hr {{ border-color: #dbe4f0 !important; }}
 
-    /* ── Variable label ── */
-    .var-label {
-        font-size: 14px;
-        font-weight: 700;
-        color: #1e3a8a;
-        margin-bottom: 2px;
-        letter-spacing: 0.3px;
-    }
+    [data-baseweb="select"] > div {{ background-color: {t['select_bg']} !important; border: 1px solid {t['select_border']} !important; border-radius: 8px !important; }}
+    [data-baseweb="select"] * {{ color: {t['select_text']} !important; }}
+    [data-baseweb="popover"] [role="listbox"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 8px !important; }}
+    [data-baseweb="popover"] [role="option"] {{ background-color: #ffffff !important; color: #374151 !important; }}
+    [data-baseweb="popover"] [role="option"]:hover {{ background-color: {t['tab_hover']} !important; color: {t['select_text']} !important; }}
+    [data-baseweb="popover"] [aria-selected="true"] {{ background-color: {t['select_bg']} !important; color: {t['select_text']} !important; }}
 
-    /* ── Star row ── */
-    .star-row {
-        width: 60%;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 26px;
-        line-height: 1.2;
-        margin-top: 0;
-        margin-bottom: 10px;
-    }
-    .star-row span {
-        display: inline-block;
-        text-align: center;
-    }
+    [data-testid="stSlider"] > div > div > div > div {{ background: {t['slider']} !important; }}
+    [data-baseweb="slider"] [role="slider"] {{
+        width:18px !important; height:18px !important;
+        background-color:#ffffff !important; border:3px solid #000000 !important; box-shadow:none !important;
+    }}
 
-    /* ── Divider ── */
-    hr { border-color: #dbe4f0 !important; }
+    div.stButton > button[kind="primary"] {{
+        background-color:{t['primary']}; color:#ffffff; border:none;
+        font-weight:700; font-size:15px; padding:.55rem 1.2rem; border-radius:6px;
+    }}
+    div.stButton > button[kind="primary"]:hover {{ background-color:{t['primary_hover']}; color:#ffffff; }}
 
-    /* ── Select box / dropdown ── */
-    [data-baseweb="select"] > div {
-        background-color: #dbeafe !important;
-        border: 1px solid #3b82f6 !important;
-        border-radius: 8px !important;
-    }
-    [data-baseweb="select"] * { color: #1e3a8a !important; }
-
-    [data-baseweb="popover"] [role="listbox"] {
-        background-color: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 8px !important;
-    }
-    [data-baseweb="popover"] [role="option"] {
-        background-color: #ffffff !important;
-        color: #374151 !important;
-    }
-    [data-baseweb="popover"] [role="option"]:hover {
-        background-color: #dbeafe !important;
-        color: #1e3a8a !important;
-    }
-    [data-baseweb="popover"] [aria-selected="true"] {
-        background-color: #bfdbfe !important;
-        color: #1e3a8a !important;
-    }
-
-    /* ── Slider ── */
-    [data-testid="stSlider"] > div > div > div > div {
-        background: #4a7fd4 !important;
-    }
-    [data-baseweb="slider"] [role="slider"] {
-        width: 18px !important;
-        height: 18px !important;
-        background-color: #ffffff !important;
-        border: 3px solid #000000 !important;
-        box-shadow: none !important;
-    }
-
-    /* ── Primary button ── */
-    div.stButton > button[kind="primary"] {
-        background-color: #4a7fd4;
-        color: #ffffff;
-        border: none;
-        font-weight: 700;
-        font-size: 15px;
-        padding: 0.55rem 1.2rem;
-        border-radius: 6px;
-    }
-    div.stButton > button[kind="primary"]:hover {
-        background-color: #3a6ec0;
-        color: #ffffff;
-    }
-
-    /* ── Download button ── */
-    [data-testid="stDownloadButton"] > button {
-        background-color: #2e7d4f !important;
-        color: #ffffff !important;
-        border: none !important;
-        font-weight: 700 !important;
-        border-radius: 6px !important;
-    }
-    [data-testid="stDownloadButton"] > button:hover {
-        background-color: #256040 !important;
-    }
-
-    /* ── Info / success / error boxes ── */
-    [data-testid="stAlert"] { border-radius: 6px; }
+    [data-testid="stDownloadButton"] > button {{
+        background-color:{t['download_bg']} !important; color:#ffffff !important;
+        border:none !important; font-weight:700 !important; border-radius:6px !important;
+    }}
+    [data-testid="stDownloadButton"] > button:hover {{ background-color:{t['download_hover']} !important; }}
+    [data-testid="stAlert"] {{ border-radius: 6px; }}
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+    """, unsafe_allow_html=True)
 
 
-# ─── Shared helpers ───────────────────────────────────────────────────────────
+# ─── Shared UI helpers ───────────────────────────────────────────────────────
 
 def _star_row_html(value: float) -> str:
-    """Build an HTML star row for a given value (supports 0.5 half-stars)."""
     gold, dark = "#FFD932", "#3a4060"
     full = int(value)
     has_half = (value % 1) >= 0.5
@@ -161,8 +156,7 @@ def _star_row_html(value: float) -> str:
             parts.append(f'<span style="color:{gold}">★</span>')
         elif i == full and has_half:
             parts.append(
-                f'<span style="'
-                f'background:linear-gradient(to right,{gold} 50%,{dark} 50%);'
+                f'<span style="background:linear-gradient(to right,{gold} 50%,{dark} 50%);'
                 f'-webkit-background-clip:text;-webkit-text-fill-color:transparent;'
                 f'background-clip:text;color:transparent;">★</span>'
             )
@@ -172,34 +166,15 @@ def _star_row_html(value: float) -> str:
 
 
 def star_selector(label: str, key: str, default: float = 0.0) -> float:
-    """Labelled slider (0–10, step 0.5) with a live half-star display."""
     st.markdown(f'<div class="var-label">{label}</div>', unsafe_allow_html=True)
     if key not in st.session_state:
         st.session_state[key] = float(default)
-    value: float = st.slider(
-        label,
-        min_value=0.0,
-        max_value=10.0,
-        step=0.5,
-        key=key,
-        label_visibility="collapsed",
-    )
+    value: float = st.slider(label, 0.0, 10.0, step=0.5, key=key, label_visibility="collapsed")
     st.markdown(_star_row_html(value), unsafe_allow_html=True)
     return value
 
 
-def competency_sections(
-    variables: list[str],
-    key_prefix: str,
-    defaults_stars: list[float] | None = None,
-    defaults_comments: list[str] | None = None,
-    defaults_videos: list | None = None,
-) -> tuple[list[float], list[str], list]:
-    """Render per-competency expanders (video + stars + comment).
-
-    Returns (star_values, comments, video_data) where video_data is a list of
-    (bytes, filename) tuples or None entries.
-    """
+def competency_sections(variables, key_prefix, defaults_stars=None, defaults_comments=None, defaults_videos=None):
     n = len(variables)
     if defaults_stars is None:
         defaults_stars = [0.0] * n
@@ -211,18 +186,14 @@ def competency_sections(
     star_values, comments, video_data = [], [], []
 
     for i, var in enumerate(variables):
-        video_key    = f"{key_prefix}_{i}_video"
-        comment_key  = f"{key_prefix}_{i}_comment"
-
-        # Seed session state only on first encounter
+        video_key   = f"{key_prefix}_{i}_video"
+        comment_key = f"{key_prefix}_{i}_comment"
         if comment_key not in st.session_state:
-            st.session_state[comment_key] = defaults_comments[i]
+            st.session_state[comment_key] = defaults_comments[i] if i < len(defaults_comments) else ""
         if video_key not in st.session_state:
-            st.session_state[video_key] = defaults_videos[i]  # (bytes, name) or None
+            st.session_state[video_key] = defaults_videos[i] if i < len(defaults_videos) else None
 
         with st.expander(f"📽  {var}", expanded=False):
-            # ── Video ────────────────────────────────────────────────────
-            # Process uploader first so session state is current before display
             uploaded_video = st.file_uploader(
                 "Upload video clip (mp4, mov, avi, wmv, mkv)",
                 type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
@@ -231,24 +202,46 @@ def competency_sections(
             if uploaded_video is not None:
                 st.session_state[video_key] = (uploaded_video.getvalue(), uploaded_video.name)
 
-            # Show current video exactly once (from session state)
             current_video = st.session_state[video_key]
             if current_video is not None:
                 vbytes, vname = current_video
-                st.caption(f"Video: **{vname}**")
-                st.video(vbytes)
+                size_mb = len(vbytes) / (1024 * 1024)
+                st.caption(f"Video: **{vname}** ({size_mb:.1f} MB)")
+                if len(vbytes) <= _VIDEO_PREVIEW_LIMIT:
+                    st.video(vbytes)
+                else:
+                    st.info(f"Too large for preview ({size_mb:.0f} MB). Will still be embedded in the PowerPoint.")
 
-            # ── Stars ────────────────────────────────────────────────────
             st.markdown("**Rating:**")
-            val = star_selector(var, key=f"{key_prefix}_{i}", default=defaults_stars[i])
+            val = star_selector(var, key=f"{key_prefix}_{i}", default=defaults_stars[i] if i < len(defaults_stars) else 0.0)
 
-            # ── Comment ──────────────────────────────────────────────────
-            st.text_area(
-                "Scouting notes",
-                key=comment_key,
-                height=90,
-                placeholder="Add your notes here…",
-            )
+            st.text_area("Scouting notes", key=comment_key, height=90, placeholder="Add your notes here…")
+
+            improve_key    = f"{key_prefix}_{i}_improve"
+            suggestion_key = f"{key_prefix}_{i}_suggestion"
+            col_btn, _ = st.columns([1, 4])
+            with col_btn:
+                if st.button("✨ Improve", key=improve_key, help="AI spelling & structure check"):
+                    raw = st.session_state[comment_key]
+                    if raw.strip():
+                        with st.spinner("Improving…"):
+                            st.session_state[suggestion_key] = improve_text(raw)
+                    else:
+                        st.warning("Nothing to improve yet.")
+            if st.session_state.get(suggestion_key):
+                suggestion = st.session_state[suggestion_key]
+                st.markdown("**Suggested improvement:**")
+                st.text_area("Suggested", value=suggestion, height=90, key=f"{key_prefix}_{i}_sug_display", label_visibility="collapsed")
+                ca, cd = st.columns(2)
+                with ca:
+                    if st.button("Accept", key=f"{key_prefix}_{i}_accept", type="primary"):
+                        st.session_state[comment_key] = suggestion
+                        st.session_state[suggestion_key] = ""
+                        st.rerun()
+                with cd:
+                    if st.button("Discard", key=f"{key_prefix}_{i}_discard"):
+                        st.session_state[suggestion_key] = ""
+                        st.rerun()
 
         star_values.append(val)
         comments.append(st.session_state[comment_key])
@@ -257,166 +250,145 @@ def competency_sections(
     return star_values, comments, video_data
 
 
-# ─── App ─────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN APP
+# ══════════════════════════════════════════════════════════════════════════════
 
-st.title("⚽ Rating Calculator for Scouting Reports")
+# ─── Club + Language selector (top of page) ──────────────────────────────────
+col_club, col_lang = st.columns(2)
+with col_club:
+    club = st.selectbox("Club", CLUBS, key="club_select")
+with col_lang:
+    available_langs = CLUB_LANGUAGES[club]
+    lang = st.selectbox("Language", available_langs, key="lang_select")
+
+_apply_theme(club)
+
+st.title("⚽ Scout Rating Tool")
 st.caption(
-    "Fill out scouting report templates with videos, star ratings and comments. "
-    "Start from an empty template or upload your current work to update it."
+    f"**{club}** — {'Nederlands' if lang == 'NL' else 'English'}  ·  "
+    "Fill scouting reports with videos, star ratings and notes."
 )
-tab_empty, tab_upload = st.tabs([
-    "📋  Fill Empty Template",
-    "📂  Upload Current Work",
-])
+
+tab_empty, tab_upload = st.tabs(["📋  Fill Empty Template", "📂  Upload Current Work"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Fill an empty template from scratch
+# TAB 1 — Fill empty template
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_empty:
     st.header("Fill Empty Template")
-    st.caption("Choose a player type, fill in each competency, and download the report.")
 
-    template_name: str = st.selectbox(
-        "Player type / template:",
-        list(TEMPLATES.keys()),
-        key="empty_template_select",
-    )
-    template_cfg = TEMPLATES[template_name]
+    template_name = st.selectbox("Position:", list(TEMPLATES.keys()), key="empty_template_select")
+    template_cfg = get_template_config(template_name, club, lang)
 
-    # Reset all per-competency state when the template selection changes
-    if st.session_state.get("empty_prev_template") != template_name:
+    # Reset on club / language / position change
+    reset_key = f"{club}|{lang}|{template_name}"
+    if st.session_state.get("empty_prev_key") != reset_key:
         for i in range(20):
             st.session_state[f"empty_{i}"]         = 0.0
             st.session_state[f"empty_{i}_video"]   = None
             st.session_state[f"empty_{i}_comment"] = ""
-        st.session_state["empty_prev_template"] = template_name
+        st.session_state["empty_prev_key"] = reset_key
 
     st.markdown("---")
-    st.subheader("Rate each competency (0–10), add a video clip and notes")
+    st.subheader("Rate each competency")
 
     star_values, comments, video_data = competency_sections(
-        template_cfg["variables"],
-        key_prefix="empty",
+        template_cfg["variables"], key_prefix="empty",
     )
 
     st.markdown("---")
-    if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="empty_generate"):
-        with st.spinner("Building your scouting report …"):
+    if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="empty_gen"):
+        with st.spinner("Building report …"):
             output = fill_template(template_cfg, star_values, comments, video_data)
-        st.success("Report is ready!")
+        st.success("Report ready!")
         st.download_button(
-            label="📥  Download PowerPoint",
-            data=output,
-            file_name=f"Scout_Report_{template_name.replace(' ', '_').replace('/', '_')}.pptx",
+            "📥  Download PowerPoint", data=output,
+            file_name=f"Scout_Report_{template_name.replace(' ', '_')}_{club.replace(' ', '_')}_{lang}.pptx",
             mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             use_container_width=True,
         )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Upload an existing file and update it
+# TAB 2 — Upload existing file
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_upload:
     st.header("Upload Current Work")
-    st.caption(
-        "Upload your existing PowerPoint. "
-        "The tool reads the current stars, videos and notes so you can adjust them."
-    )
+    st.caption("Upload your existing PowerPoint to adjust stars, videos and notes.")
 
-    uploaded = st.file_uploader("Upload your .pptx file", type=["pptx"], key="upload_widget")
+    uploaded = st.file_uploader("Upload .pptx", type=["pptx"], key="upload_widget")
 
-    # ── Store bytes + run check whenever a new file arrives ──────────────────
     if uploaded is not None:
         file_key = f"{uploaded.name}_{uploaded.size}"
         if st.session_state.get("upload_file_key") != file_key:
             file_bytes = uploaded.getvalue()
-            with st.spinner("Checking your file …"):
+            with st.spinner("Checking …"):
                 check_result = check_template_compatibility(io.BytesIO(file_bytes))
             st.session_state["upload_file_key"]     = file_key
             st.session_state["upload_bytes"]        = file_bytes
             st.session_state["upload_filename"]     = uploaded.name
             st.session_state["upload_check_result"] = check_result
-            # Seed star sliders from existing values
             for i, val in enumerate(check_result.get("current_star_values", [])):
                 st.session_state[f"upload_{i}"] = float(val)
-            # Seed comment and video state from PPTX
             for i, cmt in enumerate(check_result.get("current_comments", [])):
                 st.session_state[f"upload_{i}_comment"] = cmt or ""
             for i, vid in enumerate(check_result.get("current_videos", [])):
-                st.session_state[f"upload_{i}_video"] = vid  # (bytes, name) or None
+                st.session_state[f"upload_{i}_video"] = vid
 
-    # ── Show results ─────────────────────────────────────────────────────────
     check_result = st.session_state.get("upload_check_result")
 
     if check_result is None:
         st.info("Upload a .pptx file above to get started.")
 
     elif not check_result["compatible"]:
-        st.error("❌  This file is **not compatible** with the star-rating system.")
+        st.error("❌  File **not compatible**.")
         for issue in check_result["issues"]:
             st.write(f"- {issue}")
-        if check_result["star_count"] > 0:
-            st.info(
-                f"Partial match: found {check_result['star_count']} stars "
-                f"in {check_result['row_count']} row(s) on slide "
-                f"{check_result['slide_idx'] + 1}."
-            )
 
     else:
-        # ── Compatible — resolve template config ──────────────────────────
         matched_name = check_result.get("matched_template_name")
+        detected_club = check_result.get("matched_club", club)
+        detected_lang = check_result.get("matched_language", lang)
 
         if matched_name and matched_name in TEMPLATES:
-            st.success(f"✅  File is compatible — detected template: **{matched_name}**")
-            template_cfg = TEMPLATES[matched_name]
+            st.success(f"✅  Detected: **{matched_name}** ({detected_club}, {detected_lang})")
+            template_cfg = get_template_config(matched_name, detected_club, detected_lang)
         else:
-            st.success("✅  File is compatible.")
-            st.warning("Could not auto-detect the template type. Please select it below.")
-            matched_name = st.selectbox(
-                "Select the matching template type:",
-                list(TEMPLATES.keys()),
-                key="upload_template_fallback",
-            )
-            template_cfg = TEMPLATES[matched_name]
+            st.success("✅  Compatible.")
+            st.warning("Could not auto-detect template. Select manually:")
+            matched_name = st.selectbox("Position:", list(TEMPLATES.keys()), key="upload_tmpl_fallback")
+            template_cfg = get_template_config(matched_name, club, lang)
 
         st.caption(
-            f"Slide {check_result['slide_idx'] + 1} · "
-            f"{check_result['row_count']} rows · "
+            f"Slide {check_result['slide_idx']+1} · {check_result['row_count']} rows · "
             f"{check_result['star_count']} stars · "
-            f"Rating circle {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
+            f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
         st.markdown("---")
-        st.subheader("Adjust each competency — stars, video clip and notes")
-
-        current_stars    = check_result.get("current_star_values", [])
-        current_comments = check_result.get("current_comments", [])
-        current_videos   = check_result.get("current_videos", [])
+        st.subheader("Adjust competencies")
 
         star_values, comments, video_data = competency_sections(
             template_cfg["variables"],
             key_prefix="upload",
-            defaults_stars=current_stars,
-            defaults_comments=current_comments,
-            defaults_videos=current_videos,
+            defaults_stars=check_result.get("current_star_values", []),
+            defaults_comments=check_result.get("current_comments", []),
+            defaults_videos=check_result.get("current_videos", []),
         )
 
         st.markdown("---")
-        if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="upload_generate"):
-            with st.spinner("Filling your PowerPoint …"):
+        if st.button("Generate PowerPoint ▶", type="primary", use_container_width=True, key="upload_gen"):
+            with st.spinner("Filling …"):
                 output = fill_from_bytes(
-                    st.session_state["upload_bytes"],
-                    template_cfg,
-                    star_values,
-                    comments,
-                    video_data,
+                    st.session_state["upload_bytes"], template_cfg,
+                    star_values, comments, video_data,
                 )
             st.success("Done!")
-            fname = st.session_state.get("upload_filename", "filled_report.pptx")
+            fname = st.session_state.get("upload_filename", "report.pptx")
             st.download_button(
-                label="📥  Download Filled PowerPoint",
-                data=output,
+                "📥  Download Filled PowerPoint", data=output,
                 file_name=f"Filled_{fname}",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True,

@@ -19,150 +19,123 @@ _ROW_TOLERANCE = 200_000  # ≈ 2.2 mm  — vertical grouping tolerance
 
 
 # ─── Template definitions ────────────────────────────────────────────────────
-# variables: ordered list matching top-to-bottom star rows on the rating card.
-# weights:   Vermenigvuldigingsfactor per variable (same order).
-# detail_slides: indices of per-competency slides (filled with 1 row each).
+# Each position has NL + ENG variable names, weights, and per-club/language
+# file variants with the correct slide indices.
+
+_BASE = "Template2.0/Spelersprofielen Keynote - Powerpoint"
+
+CLUBS = ["FC Den Bosch", "Pro Vercelli"]
+CLUB_LANGUAGES = {
+    "FC Den Bosch": ["NL", "ENG"],
+    "Pro Vercelli": ["ENG"],
+}
 
 TEMPLATES = {
     "Goalkeeper": {
-        "file": "Template/1 Goalkeeper Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Balbehandeling",
-            "Voorkomen vs verdedigen",
-            "Bal verwerking",
-            "Wendbaarheid",
-            "Moed",
-            "Onverstoorbaarheid",
-        ],
+        "variables_nl":  ["Balbehandeling", "Voorkomen vs verdedigen", "Bal verwerking", "Wendbaarheid", "Moed", "Onverstoorbaarheid"],
+        "variables_eng": ["Handling", "Prevention vs defending", "Distribution", "Agility", "Bravery", "Consistency"],
         "weights": [1.1, 1.1, 1.0, 1.1, 1.1, 1.0],
-        "detail_slides": list(range(7, 13)),
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#01 Keeper/#1 Goalkeeper Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(7, 13))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#01 Keeper/#1 Goalkeeper Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(7, 13))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#01 Keeper/#1 Goalkeeper Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(5, 11))},
+        },
     },
     "Wingback": {
-        "file": "Template/2  5 Wingbacks Scouting Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Overlap/Underlap",
-            "Voorzetten",
-            "Dribbelen met bal",
-            "Snelheid",
-            "Uithoudingsvermogen",
-            "Wendbaarheid",
-            "Doorzettingsvermogen",
-        ],
+        "variables_nl":  ["Overlap/underlap", "Voorzetten", "Dribbelen met bal", "Snelheid", "Uithoudingsvermogen", "Wendbaarheid", "Doorzettingsvermogen"],
+        "variables_eng": ["Overlap/underlap", "Crosses", "Carries", "Speed", "Stamina", "Agility", "Determination"],
         "weights": [1.1, 1.0, 1.0, 1.1, 1.0, 1.0, 1.0],
-        "detail_slides": list(range(7, 14)),
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#02 #05 Wingback/#2 #5 Wingbacks Scouting Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#02 #05 Wingback/#2 #5 Wingbacks Scouting Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#02 #05 Wingback/#2 #5 Wingbacks Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(5, 12))},
+        },
     },
     "Centerback": {
-        "file": "Template/3  4 Centerbacks Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Positie kiezen (V)",
-            "Defensief koppen",
-            "Passing",
-            "Dribbelen met bal",
-            "Duelkracht",
-            "Snelheid",
-            "Doorzettingsvermogen",
-        ],
+        "variables_nl":  ["Positie kiezen (v)", "Defensieve Koppen", "Offensieve Passing", "Dribbelen met bal", "Duelkracht", "Snelheid", "Doorzettingsvermogen"],
+        "variables_eng": ["Defensive positioning", "Defensive headers", "Offensive Passing", "Carries", "Powerplay", "Speed", "Determination"],
         "weights": [1.1, 1.1, 1.0, 1.0, 1.1, 1.1, 1.0],
-        "detail_slides": list(range(7, 14)),
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#03 #04 Centerbacks/#3 #4 Centerbacks Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#03 #04 Centerbacks/#3 #4 Centerbacks Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#03 #04 Centerbacks/#3 #4 Centerbacks Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(5, 12))},
+        },
     },
     "Deep Lying Playmaker": {
-        "file": "Template/6 Deep lying playmaker Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Passing",
-            "Positie kiezen (V)",
-            "Dribbelen met bal",
-            "Positie kiezen (A)",
-            "Duelkracht",
-            "Uithoudingsvermogen",
-            "Snelheid",
-            "Doorzettingsvermogen",
-            "Onverstoorbaarheid",
-        ],
+        "variables_nl":  ["Offensieve Passing", "Positie kiezen (v)", "Dribbelen met bal", "Positie kiezen (A)", "Duelkracht", "Uithoudingsvermogen", "Snelheid", "Doorzettingsvermogen", "Onverstoorbaarheid"],
+        "variables_eng": ["Offensive Passing", "Defensive positioning", "Carries", "Offensive positioning", "Powerplay", "Stamina", "Speed", "Determination", "Consistency"],
         "weights": [1.1, 1.1, 1.0, 1.0, 1.1, 1.1, 1.0, 1.1, 1.0],
-        "detail_slides": list(range(8, 17)),
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#06 Deep lying playmaker/#6 Deep lying playmaker Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(8, 17))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#06 Deep lying playmaker/#6 Deep lying playmaker Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(8, 17))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#06 Deep lying playmaker/#6 Deep lying playmaker Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(6, 15))},
+        },
     },
     "Box-to-Box Midfielder": {
-        "file": "Template/#8 Box-to-Box midfielder Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Passing",
-            "Positie kiezen (V)",
-            "Voorbij spelen tegenstander",
-            "Positie kiezen (A)",
-            "Duelkracht",
-            "Uithoudingsvermogen",
-            "Snelheid",
-            "Doorzettingsvermogen",
-        ],
-        "weights": [1.1, 1.1, 1.0, 1.0, 1.1, 1.1, 1.0, 1.1],
-        "detail_slides": list(range(8, 16)),
+        "variables_nl":  ["Offensieve Passing", "Positie kiezen (v)", "Dribbelen met bal", "Voorbij spelen tegenstander", "Positie kiezen (A)", "Duelkracht", "Uithoudingsvermogen", "Snelheid", "Doorzettingsvermogen"],
+        "variables_eng": ["Offensive Passing", "Defensive positioning", "Carries", "Dribbling past opponent", "Offensive positioning", "Powerplay", "Stamina", "Speed", "Determination"],
+        "weights": [1.1, 1.1, 1.0, 1.0, 1.0, 1.1, 1.1, 1.0, 1.1],
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#08 Box-to-Box midfielder/#8 Box-to-Box midfielder Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(8, 17))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#08 Box-to-Box midfielder/#8 Box-to-Box midfielder Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(8, 17))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#08 Box-to-Box midfielder/#8 Box-to-Box midfielder Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(6, 15))},
+        },
     },
     "Scoring 10": {
-        "file": "Template/#10 Scoring 10 Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Doelgerichtheid",
-            "Diepte loopacties",
-            "Positie kiezen (A)",
-            "Duelkracht",
-            "Uithoudingsvermogen",
-            "Doorzettingsvermogen",
-        ],
+        "variables_nl":  ["Doelgerichtheid", "Diepte loopacties", "Positie kiezen (A)", "Duelkracht", "Uithoudingsvermogen", "Doorzettingsvermogen"],
+        "variables_eng": ["Composure", "Deep runs", "Offensive positioning", "Powerplay", "Stamina", "Determination"],
         "weights": [1.1, 1.0, 1.0, 1.1, 1.0, 1.1],
-        "detail_slides": list(range(8, 14)),
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#10 Scoring/#10 Scoring 10 Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(7, 13))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#10 Scoring/#10 Scoring 10 Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(7, 13))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#10 Scoring/#10 Scoring 10 Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(5, 11))},
+        },
     },
     "Dribbling Winger": {
-        "file": "Template/07  11 Dribbling winger Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Voorbij tegenstander",
-            "Doelgericht",
-            "Voorzetten",
-            "Afstandsschot",
-            "Wendbaarheid",
-            "Snelheid",
-            "Flair",
-            "Moed",
-        ],
+        "variables_nl":  ["Voorbij spelen tegenstander", "Doelgerichtheid", "Voorzet", "Afstandsschot", "Wendbaarheid", "Snelheid", "Flair", "Moed"],
+        "variables_eng": ["Dribbling past opponent", "Composure", "Passing", "Shooting from distance", "Agility", "Speed", "Flair", "Bravery"],
         "weights": [1.1, 1.1, 1.0, 1.0, 1.1, 1.0, 1.1, 1.0],
-        "detail_slides": list(range(7, 15)),
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#07 #11 Dribbling winger/#07 #11 Dribbling winger Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(7, 15))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#07 #11 Dribbling winger/#07 #11 Dribbling winger Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(7, 15))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#07 #11 Dribbling winger/#07 #11 Dribbling winger Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(5, 13))},
+        },
     },
     "Fast Winger": {
-        "file": "Template/07  11 Fast winger Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Voorbij tegenstander",
-            "Diepte loopacties",
-            "Doelgericht",
-            "Afstandsschot",
-            "Snelheid",
-            "Wendbaarheid",
-            "Moed",
-            "Flair",
-        ],
-        "weights": [1.1, 1.1, 1.0, 1.0, 1.1, 1.1, 1.1, 1.0],
-        "detail_slides": list(range(7, 15)),
+        "variables_nl":  ["Voorbij tegenstander", "Diepte loopacties", "Doelgericht", "Snelheid", "Wendbaarheid", "Moed", "Flair"],
+        "variables_eng": ["Dribbling past opponent", "Deep runs", "Composure", "Speed", "Agility", "Bravery", "Flair"],
+        "weights": [1.1, 1.1, 1.0, 1.1, 1.1, 1.1, 1.0],
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#07 #11 Fast winger/#07 #11 Fast winger Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#07 #11 Fast winger/#07 #11 Fast winger Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#07 #11 Fast winger/#07 #11 Fast winger Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(5, 12))},
+        },
     },
     "Finisher": {
-        "file": "Template/#9 Finisher Scouting FC Den Bosch (NL).pptx",
-        "rating_slide_idx": 3,
-        "variables": [
-            "Doelgerichtheid",
-            "Positie kiezen (A)",
-            "Combinatie spel",
-            "Offensief koppen",
-            "Duelkracht",
-            "Flair",
-            "Doorzettingsvermogen",
-        ],
+        "variables_nl":  ["Doelgerichtheid", "Positie kiezen (A)", "Combinatie spel", "Offensief koppen", "Duelkracht", "Flair", "Doorzettingsvermogen"],
+        "variables_eng": ["Composure", "Offensive positioning", "Link up play", "Offensive headers", "Powerplay", "Flair", "Determination"],
         "weights": [1.1, 1.1, 1.0, 1.0, 1.1, 1.1, 1.0],
-        "detail_slides": list(range(7, 14)),
+        "variants": {
+            ("FC Den Bosch", "NL"):  {"file": f"{_BASE}/#09 Finisher/#9 Finisher Scouting FC Den Bosch (NL).pptx",  "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("FC Den Bosch", "ENG"): {"file": f"{_BASE}/#09 Finisher/#9 Finisher Scouting FC Den Bosch (ENG).pptx", "rating_slide_idx": 3, "detail_slides": list(range(7, 14))},
+            ("Pro Vercelli", "ENG"): {"file": f"{_BASE}/#09 Finisher/#9 Finisher Scouting Pro Vercelli (ENG).pptx", "rating_slide_idx": 1, "detail_slides": list(range(5, 12))},
+        },
     },
 }
+
+
+def get_template_config(position: str, club: str, language: str) -> dict:
+    """Build a flat config dict for the given position + club + language combo."""
+    tmpl = TEMPLATES[position]
+    variant = tmpl["variants"][(club, language)]
+    lang_key = "variables_nl" if language == "NL" else "variables_eng"
+    return {
+        "file": variant["file"],
+        "rating_slide_idx": variant["rating_slide_idx"],
+        "detail_slides": variant["detail_slides"],
+        "variables": tmpl[lang_key],
+        "weights": tmpl["weights"],
+    }
 
 
 # ─── Star detection ──────────────────────────────────────────────────────────
@@ -250,16 +223,40 @@ def _stop_srgb(gs_element) -> str | None:
     return clr.get('val', '').upper() if clr is not None else None
 
 
+def _stop_is_white(gs_element) -> bool:
+    """True if the gradient stop is explicitly srgbClr FFFFFF."""
+    srgb = gs_element.find(qn('a:srgbClr'))
+    return srgb is not None and srgb.get('val', '').upper() == 'FFFFFF'
+
+
+def _stop_is_non_white(gs_element) -> bool:
+    """True if the gradient stop carries a color that is definitely not white.
+
+    Handles both srgbClr (must be non-FFFFFF) and schemeClr/sysClr (always
+    treated as non-white; Keynote maps FFD932 yellow → schemeClr accent4).
+    """
+    srgb = gs_element.find(qn('a:srgbClr'))
+    if srgb is not None:
+        return srgb.get('val', '').upper() not in ('FFFFFF', '')
+    # schemeClr, sysClr, etc. — if ANY color child is present, assume non-white
+    return len(gs_element) > 0
+
+
 def _get_star_fill_value(shape) -> float:
     """Return 1.0 (full yellow), 0.5 (half-yellow gradient), or 0.0 (empty).
 
-    Handles three fill representations:
+    Handles all known fill representations including Keynote round-trips where
+    srgbClr FFD932 is remapped to schemeClr accent4:
+
       • solidFill srgbClr FFD932            → 1.0
       • solidFill srgbClr FFFFFF            → 0.0
-      • our exact half-star gradFill        → 0.5
-      • Keynote gradFill for yellow star    → 1.0  (has a FFD932 stop)
-      • Keynote gradFill for white star     → 0.0  (all stops are FFFFFF)
-      • solidFill with non-srgb color ref   → 1.0  (treat as filled; empty = white)
+      • solidFill schemeClr/sysClr (any)    → 1.0  (non-white scheme color)
+      • our half-star gradFill (4 stops,    → 0.5
+          FFD932+FFD932 / FFFFFF+FFFFFF)
+      • Keynote half-star gradFill (same    → 0.5
+          positions, accent4 instead of FFD932)
+      • gradFill all FFFFFF stops           → 0.0
+      • any other gradFill                  → 1.0  (assume filled)
     """
     try:
         spPr = shape._element.spPr
@@ -270,21 +267,24 @@ def _get_star_fill_value(shape) -> float:
             stops = gsLst.findall(qn('a:gs')) if gsLst is not None else []
 
             if len(stops) == 4:
-                colors = [_stop_srgb(s) for s in stops]
                 positions = [int(s.get('pos', '0')) for s in stops]
-                # Our exact half-star: sharp FFD932→FFFFFF split at 50 %
-                if (colors == ['FFD932', 'FFD932', 'FFFFFF', 'FFFFFF'] and
-                        positions == [0, 49999, 50000, 100000]):
-                    return 0.5
+                # Both our original and Keynote-modified half-star use these
+                # exact positions — only the color type changes (srgb vs scheme)
+                if positions == [0, 49999, 50000, 100000]:
+                    low_non_white  = all(_stop_is_non_white(stops[j]) for j in (0, 1))
+                    high_white     = all(_stop_is_white(stops[j])     for j in (2, 3))
+                    if low_non_white and high_white:
+                        return 0.5
 
-            # Any stop is yellow → Keynote-converted yellow star
+            # All stops explicitly white → empty star
+            if stops and all(_stop_is_white(s) for s in stops):
+                return 0.0
+            # Any yellow srgb stop → Keynote solid-yellow stored as gradient
             if any(_stop_srgb(s) == 'FFD932' for s in stops):
                 return 1.0
-            # All stops are explicitly white → empty star
-            if stops and all(_stop_srgb(s) == 'FFFFFF' for s in stops):
-                return 0.0
-            # Unknown gradient (theme color, etc.) — assume filled
-            return 1.0
+            # Other gradient (theme color, etc.) — assume filled
+            if stops:
+                return 1.0
 
         solid = spPr.find(qn('a:solidFill'))
         if solid is not None:
@@ -295,7 +295,7 @@ def _get_star_fill_value(shape) -> float:
                     return 1.0
                 if val == 'FFFFFF':
                     return 0.0
-                return 1.0  # any other explicit colour → treat as filled
+                return 1.0  # any other explicit rgb → treat as filled
             # schemeClr / sysClr / etc. — empty stars are always explicit white
             if len(solid) > 0:
                 return 1.0
@@ -708,21 +708,26 @@ def fill_from_bytes(
 
 # ─── Template detection & compatibility ─────────────────────────────────────
 
-def detect_template_name(slide) -> str | None:
-    """Return the best-matching TEMPLATES key for this slide, or None."""
+def detect_template_name(slide) -> tuple[str | None, str | None]:
+    """Return (position_name, language) for the best-matching template, or (None, None)."""
     slide_text = " ".join(
         shape.text_frame.text.lower()
         for shape in slide.shapes
         if shape.has_text_frame
     )
     best_name: str | None = None
+    best_lang: str | None = None
     best_count = 0
     for name, cfg in TEMPLATES.items():
-        matches = sum(1 for v in cfg["variables"] if v.lower() in slide_text)
-        if matches > best_count:
-            best_count = matches
-            best_name = name
-    return best_name if best_count >= 3 else None
+        for lang_key, lang_label in [("variables_nl", "NL"), ("variables_eng", "ENG")]:
+            matches = sum(1 for v in cfg[lang_key] if v.lower() in slide_text)
+            if matches > best_count:
+                best_count = matches
+                best_name = name
+                best_lang = lang_label
+    if best_count >= 3:
+        return best_name, best_lang
+    return None, None
 
 
 def check_template_compatibility(file_obj) -> dict:
@@ -781,14 +786,29 @@ def check_template_compatibility(file_obj) -> dict:
             "The file may be too heavily restructured to fill automatically."
         )
 
-    result["current_star_values"]    = read_current_star_values(slide)
-    result["matched_template_name"]  = detect_template_name(slide)
-    result["compatible"]             = len(result["issues"]) == 0
+    result["current_star_values"] = read_current_star_values(slide)
+
+    matched_name, matched_lang = detect_template_name(slide)
+    result["matched_template_name"] = matched_name
+    result["matched_language"]      = matched_lang
+    # Detect club from slide position: Pro Vercelli uses rating_slide_idx 1
+    result["matched_club"] = "Pro Vercelli" if best_slide_idx == 1 else "FC Den Bosch"
+    result["compatible"]   = len(result["issues"]) == 0
 
     # Extract per-detail-slide data (comments + videos) when a template is matched
-    matched = result["matched_template_name"]
-    if matched and matched in TEMPLATES:
-        detail_idxs = TEMPLATES[matched].get("detail_slides", [])
+    if matched_name and matched_name in TEMPLATES:
+        club = result["matched_club"]
+        lang = matched_lang or "ENG"
+        variant_key = (club, lang)
+        if variant_key in TEMPLATES[matched_name]["variants"]:
+            detail_idxs = TEMPLATES[matched_name]["variants"][variant_key]["detail_slides"]
+        else:
+            # Fallback: try any variant for this club
+            detail_idxs = []
+            for k, v in TEMPLATES[matched_name]["variants"].items():
+                if k[0] == club:
+                    detail_idxs = v["detail_slides"]
+                    break
         comments, videos = [], []
         for idx in detail_idxs:
             if idx < len(prs.slides):
