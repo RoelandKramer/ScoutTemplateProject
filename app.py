@@ -16,7 +16,7 @@ import storage
 from i18n import t, APP_LANGUAGES
 
 # ─── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Scout Rating Tool", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="Scout Rating Tool", page_icon="⚽", layout="centered")
 
 _VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024
 
