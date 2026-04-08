@@ -20,15 +20,16 @@ SEASON_RE = re.compile(r"\b(20\d{2})\s*[/\-]\s*(\d{2}|20\d{2})\b")
 
 POSITION_ABBREV: Dict[str, str] = {
     "Goalkeeper": "GK",
-    "RightBack": "RB", "RightFullback": "RB",
-    "LeftBack": "LB",
-    "CentreBack": "CB",
-    "DefensiveMidfield": "DM",
-    "CentreMidfield": "CM",
-    "AttackingMidfield": "AM",
-    "RightWing": "RW", "LeftWing": "LW",
-    "CentreForward": "ST", "Striker": "ST",
+    "Right Back": "RB",
+    "Left Back": "LB",
+    "Centre Back": "CB",
+    "Defensive Midfield": "DM",
+    "Centre Midfield": "CM",
+    "Attacking Midfield": "AM",
+    "Right Wing": "RW", "Left Wing": "LW",
+    "Centre Forward": "ST", "Striker": "ST",
 }
+
 
 # Map SciSports positions to our template position names
 SCISPORTS_TO_TEMPLATE: Dict[str, str] = {
