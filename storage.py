@@ -165,6 +165,7 @@ def save_finished(
     club: str,
     language: str,
     pptx_bytes: bytes,
+    player_name: str = "",
 ) -> str:
     """Save a finished PPTX + metadata. Returns the report_id."""
     finished = _finished_dir(username)
@@ -176,6 +177,7 @@ def save_finished(
         "position": position,
         "club": club,
         "language": language,
+        "player_name": player_name,
         "finished_at": time.time(),
     }
     (finished / f"{report_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")

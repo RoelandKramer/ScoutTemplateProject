@@ -75,6 +75,9 @@ TRANSLATIONS = {
         "nothing_to_improve": "Nothing to improve yet.",
         "suggested_improvement": "Suggested improvement:",
         "too_large_preview": "Too large for preview ({mb:.0f} MB). Will still be embedded in the PowerPoint.",
+        "unknown_player": "Unknown player",
+        "scisports_setup_info": "Add your SciSports credentials in .streamlit/secrets.toml under [scisports].",
+        "configure_scisports": "Configure SciSports API",
     },
     "NL": {
         "scout_rating_tool": "Scout Beoordelingstool",
@@ -150,6 +153,9 @@ TRANSLATIONS = {
         "nothing_to_improve": "Nog niets om te verbeteren.",
         "suggested_improvement": "Voorgestelde verbetering:",
         "too_large_preview": "Te groot voor preview ({mb:.0f} MB). Wordt wel in de PowerPoint opgenomen.",
+        "unknown_player": "Onbekende speler",
+        "scisports_setup_info": "Voeg je SciSports gegevens toe in .streamlit/secrets.toml onder [scisports].",
+        "configure_scisports": "SciSports API instellen",
     },
     "IT": {
         "scout_rating_tool": "Strumento di Valutazione Scout",
@@ -225,6 +231,9 @@ TRANSLATIONS = {
         "nothing_to_improve": "Niente da migliorare ancora.",
         "suggested_improvement": "Miglioramento suggerito:",
         "too_large_preview": "Troppo grande per l'anteprima ({mb:.0f} MB). Sarà comunque incorporato nel PowerPoint.",
+        "unknown_player": "Giocatore sconosciuto",
+        "scisports_setup_info": "Aggiungi le credenziali SciSports in .streamlit/secrets.toml sotto [scisports].",
+        "configure_scisports": "Configura API SciSports",
     },
     "ZH": {
         "scout_rating_tool": "球探评分工具",
@@ -300,6 +309,9 @@ TRANSLATIONS = {
         "nothing_to_improve": "暂无内容可改进。",
         "suggested_improvement": "建议改进：",
         "too_large_preview": "文件过大，无法预览（{mb:.0f} MB）。仍将嵌入 PowerPoint。",
+        "unknown_player": "未知球员",
+        "scisports_setup_info": "在 .streamlit/secrets.toml 的 [scisports] 下添加 SciSports 凭据。",
+        "configure_scisports": "配置 SciSports API",
     },
 }
 

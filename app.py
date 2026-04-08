@@ -379,6 +379,24 @@ def _ts_str(ts: float) -> str:
     return datetime.fromtimestamp(ts).strftime("%d %b %Y, %H:%M")
 
 
+def _report_title(meta: dict) -> str:
+    """Build display title: 'Player Name — Position' or just 'Position'."""
+    player_name = meta.get("player_name") or ""
+    if not player_name:
+        pd = meta.get("player_data")
+        if pd and isinstance(pd, dict):
+            player_name = pd.get("name", "")
+    pos = meta.get("position", "?")
+    return f"{player_name} — {pos}" if player_name else pos
+
+
+def _current_player_name() -> str:
+    pd = st.session_state.get("player_data")
+    if pd and isinstance(pd, dict):
+        return pd.get("name", "")
+    return ""
+
+
 # ─── Collect current editor state ────────────────────────────────────────────
 
 def _collect_editor_state(key_prefix: str, n_vars: int):
@@ -404,7 +422,23 @@ def _scisports_section() -> dict | None:
 
     secrets = require_secrets()
     if not secrets:
-        st.caption(t("scisports_not_configured", L))
+        with st.expander(f"⚙️ {t('search_player', L)} — {t('scisports_not_configured', L)}", expanded=False):
+            st.info("Add your SciSports credentials to `.streamlit/secrets.toml`:")
+            st.code(
+                '# Option 1: flat keys\n'
+                'username = "your_username"\n'
+                'password = "your_password"\n'
+                'client_id = "your_client_id"\n'
+                'client_secret = "your_client_secret"\n'
+                'scope = "api recruitment performance"\n\n'
+                '# Option 2: under [scisports] section\n'
+                '[scisports]\n'
+                'username = "..."\n'
+                'password = "..."\n'
+                'client_id = "..."\n'
+                'client_secret = "..."',
+                language="toml",
+            )
         return st.session_state.get("player_data")
 
     st.markdown("---")
@@ -506,28 +540,21 @@ L = _lang()
 # ══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    # App language selector (flags) at top
-    app_lang_labels = list(APP_LANGUAGES.keys())
+    # ── App language: flag buttons ───────────────────────────────────────────
+    _FLAG_MAP = {"EN": "🇬🇧", "NL": "🇳🇱", "IT": "🇮🇹", "ZH": "🇨🇳"}
     current_app_lang = _lang()
-    current_idx = list(APP_LANGUAGES.values()).index(current_app_lang) if current_app_lang in APP_LANGUAGES.values() else 0
-    selected_lang_label = st.radio(
-        t("app_language", L),
-        app_lang_labels,
-        index=current_idx,
-        horizontal=True,
-        key="app_lang_radio",
-    )
-    new_app_lang = APP_LANGUAGES[selected_lang_label]
-    if new_app_lang != st.session_state.get("app_lang"):
-        st.session_state["app_lang"] = new_app_lang
-        st.rerun()
-    L = _lang()  # refresh after possible change
+
+    flag_cols = st.columns(len(_FLAG_MAP))
+    for idx, (code, flag) in enumerate(_FLAG_MAP.items()):
+        with flag_cols[idx]:
+            btn_type = "primary" if code == current_app_lang else "secondary"
+            if st.button(flag, key=f"flag_{code}", type=btn_type, use_container_width=True):
+                if code != current_app_lang:
+                    st.session_state["app_lang"] = code
+                    st.rerun()
+    L = _lang()
 
     st.markdown(f"**{t('logged_in_as', L)}:** {username}")
-    if st.button(t("log_out", L), use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
 
     st.markdown("---")
     club = st.selectbox(t("club", L), CLUBS, key="club_select")
@@ -536,12 +563,12 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Navigation — use _nav_override to avoid modifying widget key after instantiation
-    nav_options = [t("dashboard", L), t("new_report", L), t("upload_edit", L)]
-    nav_keys    = ["Dashboard", "New Report", "Upload & Edit"]
+    # ── Navigation (default = New Report) ────────────────────────────────────
+    nav_options = [t("new_report", L), t("dashboard", L), t("upload_edit", L)]
+    nav_keys    = ["New Report", "Dashboard", "Upload & Edit"]
 
     nav_override = st.session_state.pop("_nav_override", None)
-    default_idx = 0
+    default_idx = 0  # New Report is first / default
     if nav_override and nav_override in nav_keys:
         default_idx = nav_keys.index(nav_override)
 
@@ -554,6 +581,15 @@ with st.sidebar:
     )
     page = nav_keys[nav_options.index(selected_nav)]
 
+    # ── Logout at bottom ─────────────────────────────────────────────────────
+    st.markdown("")
+    st.markdown("")
+    st.markdown("")
+    if st.button(f"🚪 {t('log_out', L)}", use_container_width=True, key="logout_btn"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
 _apply_theme(club)
 _render_header(club)
 
@@ -565,23 +601,25 @@ _render_header(club)
 if page == "Dashboard":
     st.markdown("---")
 
-    # ── Drafts (in progress) ─────────────────────────────────────────────────
+    # ── Drafts (in progress) — filtered by selected club ────────────────────
     st.subheader(f"📝  {t('in_progress', L)}")
-    drafts = storage.list_drafts(username)
+    all_drafts = storage.list_drafts(username)
+    drafts = [d for d in all_drafts if d.get("club") == club]
     if not drafts:
         st.caption(t("no_drafts", L))
     else:
         for d in drafts:
             rid = d["report_id"]
+            title = _report_title(d)
             with st.container():
                 st.markdown(
                     f"""<div class="report-card">
-                    <h4>{d['position']}  —  {d['club']} ({d['language']})</h4>
-                    <div class="meta">{t('last_saved', L)}: {_ts_str(d['updated_at'])}  ·  ID: {rid[:8]}</div>
+                    <h4>{title}</h4>
+                    <div class="meta">{d['club']} ({d['language']}) · {t('last_saved', L)}: {_ts_str(d['updated_at'])}</div>
                     </div>""",
                     unsafe_allow_html=True,
                 )
-                c1, c2, c3 = st.columns([2, 1, 1])
+                c1, c2 = st.columns([2, 1])
                 with c1:
                     if st.button(t("continue_editing", L), key=f"cont_{rid}", type="primary", use_container_width=True):
                         st.session_state["edit_draft_id"] = rid
@@ -594,18 +632,20 @@ if page == "Dashboard":
 
     st.markdown("---")
 
-    # ── Finished reports ──────────────────────────────────────────────────────
+    # ── Finished reports — filtered by selected club ─────────────────────────
     st.subheader(f"✅  {t('finished_reports', L)}")
-    finished = storage.list_finished(username)
+    all_finished = storage.list_finished(username)
+    finished = [f for f in all_finished if f.get("club") == club]
     if not finished:
         st.caption(t("no_finished", L))
     else:
         for f in finished:
             rid = f["report_id"]
+            title = _report_title(f)
             st.markdown(
                 f"""<div class="report-card">
-                <h4>{f['position']}  —  {f['club']} ({f['language']})</h4>
-                <div class="meta">{t('finished_at', L)}: {_ts_str(f['finished_at'])}  ·  ID: {rid[:8]}</div>
+                <h4>{title}</h4>
+                <div class="meta">{f['club']} ({f['language']}) · {t('finished_at', L)}: {_ts_str(f['finished_at'])}</div>
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -615,7 +655,7 @@ if page == "Dashboard":
                 if pptx_bytes:
                     st.download_button(
                         f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                        file_name=f"Scout_{f['position'].replace(' ','_')}_{f['club'].replace(' ','_')}_{rid[:8]}.pptx",
+                        file_name=f"Scout_{title.replace(' ','_').replace('—','_')}_{rid[:8]}.pptx",
                         mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         key=f"dl_{rid}", use_container_width=True,
                     )
@@ -640,7 +680,11 @@ elif page == "New Report":
             st.session_state["active_report_id"] = draft_id
             st.session_state["club_select"] = draft["club"]
             st.session_state["lang_select"] = draft["language"]
-            st.session_state["empty_template_select"] = list(TEMPLATES.keys()).index(draft["position"])
+            pos_list = list(TEMPLATES.keys())
+            if draft["position"] in pos_list:
+                st.session_state["empty_template_select"] = pos_list.index(draft["position"])
+            # Set reset key BEFORE restoring values so the reset logic won't wipe them
+            st.session_state["empty_prev_key"] = f"{draft['club']}|{draft['language']}|{draft['position']}"
             for i, v in enumerate(draft["star_values"]):
                 st.session_state[f"empty_{i}"] = float(v)
             for i, c in enumerate(draft["comments"]):
@@ -719,7 +763,8 @@ elif page == "New Report":
                 source="empty",
                 player_data=st.session_state.get("player_data"),
             )
-            storage.save_finished(username, rid, template_name, club, lang, pptx_bytes)
+            storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
+                                  player_name=_current_player_name())
             st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))

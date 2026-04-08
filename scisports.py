@@ -132,17 +132,45 @@ def _extract_int(d: dict, *paths: str) -> int:
 # ─── Auth ────────────────────────────────────────────────────────────────────
 
 def require_secrets() -> Dict[str, str]:
-    required = ["SCISPORTS_USERNAME", "SCISPORTS_PASSWORD", "SCISPORTS_CLIENT_ID", "SCISPORTS_CLIENT_SECRET"]
-    missing = [k for k in required if not st.secrets.get(k)]
-    if missing:
-        return {}
-    return {
-        "username": st.secrets["SCISPORTS_USERNAME"],
-        "password": st.secrets["SCISPORTS_PASSWORD"],
-        "client_id": st.secrets["SCISPORTS_CLIENT_ID"],
-        "client_secret": st.secrets["SCISPORTS_CLIENT_SECRET"],
-        "scope": st.secrets.get("SCISPORTS_SCOPE", "api recruitment"),
-    }
+    """Read SciSports credentials from Streamlit secrets.
+
+    Supports two layouts:
+      1. [scisports] section with keys: username, password, client_id, client_secret, scope
+      2. Flat top-level keys prefixed SCISPORTS_  (legacy)
+    """
+    # Try [scisports] section first
+    sec = st.secrets.get("scisports", None)
+    if sec:
+        required = ["username", "password", "client_id", "client_secret"]
+        if all(sec.get(k) for k in required):
+            return {
+                "username": sec["username"],
+                "password": sec["password"],
+                "client_id": sec["client_id"],
+                "client_secret": sec["client_secret"],
+                "scope": sec.get("scope", "api recruitment"),
+            }
+    # Fallback 1: flat top-level keys (username, password, client_id, client_secret)
+    flat_keys = ["username", "password", "client_id", "client_secret"]
+    if all(st.secrets.get(k) for k in flat_keys):
+        return {
+            "username": st.secrets["username"],
+            "password": st.secrets["password"],
+            "client_id": st.secrets["client_id"],
+            "client_secret": st.secrets["client_secret"],
+            "scope": st.secrets.get("scope", "api recruitment"),
+        }
+    # Fallback 2: SCISPORTS_ prefixed keys (legacy)
+    prefixed = ["SCISPORTS_USERNAME", "SCISPORTS_PASSWORD", "SCISPORTS_CLIENT_ID", "SCISPORTS_CLIENT_SECRET"]
+    if all(st.secrets.get(k) for k in prefixed):
+        return {
+            "username": st.secrets["SCISPORTS_USERNAME"],
+            "password": st.secrets["SCISPORTS_PASSWORD"],
+            "client_id": st.secrets["SCISPORTS_CLIENT_ID"],
+            "client_secret": st.secrets["SCISPORTS_CLIENT_SECRET"],
+            "scope": st.secrets.get("SCISPORTS_SCOPE", "api recruitment"),
+        }
+    return {}
 
 
 def get_token() -> str:
