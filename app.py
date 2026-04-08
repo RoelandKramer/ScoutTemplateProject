@@ -24,6 +24,7 @@ LOGO_DIR = Path(__file__).parent / "Logo's"
 _LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
 _LOGO_PV  = LOGO_DIR / "FC_Pro_Vercelli_1892.svg.png"
 _LOGO_BFG = LOGO_DIR / "Logo-BFG-White.png"
+_LOGO_BFG_B = LOGO_DIR / "Logo-BFG-Black.png"
 
 
 def _img_b64(path: Path) -> str:
@@ -105,12 +106,14 @@ def _login_page():
     """Render the login page."""
     L = _lang()
     db_b64 = _img_b64(_LOGO_DB)
+    bfg_b64 = _img_b64(_LOGO_BFG_B)
+    
     st.markdown(
         f"""
         <div style="text-align:center; padding: 2rem 0 1rem 0;">
-            <img src="data:image/png;base64,{db_b64}" width="90" style="margin-bottom: 10px;"/>
-            <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">{t('login_title', L)}</h1>
-            <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">{t('login_subtitle', L)}</p>
+            <img src="data:image/png;base64,{bfg_b64}" width="1280" style="margin-bottom: 10px;"/>
+            <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">Scout Rating Tool</h1>
+            <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">FC Den Bosch  &  Pro Vercelli</p>
         </div>
         """,
         unsafe_allow_html=True,
