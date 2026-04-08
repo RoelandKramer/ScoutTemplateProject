@@ -1,7 +1,8 @@
-"""FC Den Bosch / Pro Vercelli — Scout Rating Tool (Streamlit app)."""
+"""FC Den Bosch / Pro Vercelli — Scouting Report Platform (Streamlit app)."""
 
 import io
 import os
+import uuid
 import time
 import base64
 from datetime import datetime
@@ -16,7 +17,7 @@ import storage
 from i18n import t, APP_LANGUAGES
 
 # ─── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Scout Rating Tool", page_icon="⚽", layout="centered")
+st.set_page_config(page_title="Scouting Report Platform", page_icon="", layout="centered")
 
 _VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024
 
@@ -26,6 +27,9 @@ _LOGO_PV  = LOGO_DIR / "FC_Pro_Vercelli_1892.svg.png"
 _LOGO_BFG = LOGO_DIR / "Logo-BFG-White.png"
 _LOGO_BFG_B = LOGO_DIR / "Logo-BFG-Black.png"
 
+# Session persistence directory
+_SESSION_DIR = Path(__file__).parent / "data" / ".sessions"
+
 
 def _img_b64(path: Path) -> str:
     if path.exists():
@@ -33,10 +37,36 @@ def _img_b64(path: Path) -> str:
     return ""
 
 
+# ─── Session persistence across browser refresh ────────────────────────────
+
+def _save_session(username: str):
+    _SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    token = uuid.uuid4().hex
+    (_SESSION_DIR / f"{token}.txt").write_text(username, encoding="utf-8")
+    st.query_params["s"] = token
+
+
+def _restore_session() -> str | None:
+    token = st.query_params.get("s")
+    if token:
+        p = _SESSION_DIR / f"{token}.txt"
+        if p.exists():
+            return p.read_text(encoding="utf-8").strip()
+    return None
+
+
+def _clear_session():
+    token = st.query_params.get("s")
+    if token:
+        p = _SESSION_DIR / f"{token}.txt"
+        if p.exists():
+            p.unlink(missing_ok=True)
+    st.query_params.clear()
+
+
 # ─── App language helper ────────────────────────────────────────────────────
 
 def _lang() -> str:
-    """Return current app UI language code."""
     return st.session_state.get("app_lang", "EN")
 
 
@@ -55,7 +85,7 @@ def _get_anthropic_key() -> str | None:
 def improve_text(text: str) -> str:
     api_key = _get_anthropic_key()
     if not api_key:
-        st.error("No Anthropic API key. Add ANTHROPIC_API_KEY to .streamlit/secrets.toml")
+        st.error("No Anthropic API key.")
         return text
     try:
         import anthropic
@@ -66,12 +96,8 @@ def improve_text(text: str) -> str:
             messages=[{
                 "role": "user",
                 "content": (
-                    "Herschrijf de volgende scoutingnotitie naar een professionele, objectieve en formele stijl voor een officieel scoutingrapport. "
-                    "Corrigeer taalfouten, vermijd informele woorden (zoals verkleinwoorden) en maak de tekst bondig, maar behoud de kern van de observatie. "
-                    "Geef uitsluitend de verbeterde tekst terug, zonder introductie of uitleg.\n\n"
-                    "Voorbeeld:\n"
-                    "Input: Dit spelertje is goed met de bal in de handen\n"
-                    "Output: De speler beschikt over een betrouwbare balbehandeling.\n\n"
+                  "Spelling/Structuur check! "
+                  "Geef uitsluitend de verbeterde tekst terug, zonder introductie of uitleg.\n\n"
                     f"Input: {text}\n"
                     "Output:"
                 ),
@@ -86,14 +112,11 @@ def improve_text(text: str) -> str:
 # ─── Authentication ──────────────────────────────────────────────────────────
 
 def _authenticate(login_input: str, password: str) -> str | None:
-    """Authenticate by username or email. Returns the username if valid, else None."""
     try:
         users = st.secrets.get("users", {})
-        # Direct username match
         user = users.get(login_input)
         if user and user.get("password") == password:
             return login_input
-        # Email match: iterate all users
         for uname, udata in users.items():
             if udata.get("email", "").lower() == login_input.lower() and udata.get("password") == password:
                 return uname
@@ -103,65 +126,64 @@ def _authenticate(login_input: str, password: str) -> str | None:
 
 
 def _login_page():
-    """Render the login page."""
     L = _lang()
     db_b64 = _img_b64(_LOGO_DB)
     bfg_b64 = _img_b64(_LOGO_BFG_B)
-    
     st.markdown(
         f"""
         <div style="text-align:center; padding: 2rem 0 1rem 0;">
-            <img src="data:image/png;base64,{bfg_b64}" width="1280" style="margin-bottom: 10px;"/>
-            <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">Scout Rating Tool</h1>
-            <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">FC Den Bosch  &  Pro Vercelli</p>
+            <img src="data:image/png;base64,{bfg_b64}" width="320" style="margin-bottom: 10px;"/>
+            <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">{t('login_title', L)}</h1>
+            <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">{t('login_subtitle', L)}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
     with st.form("login_form"):
         login_input = st.text_input(t("username", L))
         password = st.text_input(t("password", L), type="password")
         submitted = st.form_submit_button(t("log_in", L), type="primary", use_container_width=True)
-
     if submitted:
         matched_user = _authenticate(login_input, password)
         if matched_user:
             st.session_state["authenticated"] = True
             st.session_state["username"] = matched_user
+            _save_session(matched_user)
             st.rerun()
         else:
             st.error(t("invalid_credentials", L))
 
-    return False
 
-
-# ─── Dynamic styling ────────────────────────────────────────────────────────
+# ─── Dynamic styling (matching PDF layouts) ─────────────────────────────────
 
 _THEME_BLUE = {
-    "bg": "#f7f9fc", "sidebar": "#eef4ff",
-    "tab_bg": "#edf4ff", "tab_border": "#cfe0ff",
-    "tab_hover": "#dbeafe", "tab_active": "#dbeafe", "tab_active_text": "#1d4ed8",
-    "primary": "#4a7fd4", "primary_hover": "#3a6ec0",
-    "heading": "#1f2937", "text": "#374151",
-    "label": "#1e3a8a",
-    "select_bg": "#dbeafe", "select_border": "#3b82f6", "select_text": "#1e3a8a",
-    "slider": "#4a7fd4",
-    "download_bg": "#2e7d4f", "download_hover": "#256040",
-    "card_bg": "#ffffff", "card_border": "#d1dff0",
+    "bg": "#eef2f9", "sidebar": "#e4ecf7", "content_bg": "#f5f7fb",
+    "primary": "#1a3370", "primary_light": "#3b5ba8", "primary_hover": "#15295a",
+    "heading": "#1a3370", "text": "#2c3e5a",
+    "label": "#1a3370",
+    "border": "#b8c9e2", "border_light": "#d1dff0",
+    "select_bg": "#1a3370", "select_border": "#1a3370", "select_text": "#ffffff",
+    "btn_border": "#1a3370", "btn_text": "#1a3370", "btn_bg": "#ffffff",
+    "btn_primary_bg": "#1a3370", "btn_primary_text": "#ffffff",
+    "slider": "#1a3370",
+    "card_bg": "#ffffff", "card_border": "#b8c9e2",
+    "flag_active_bg": "#1a3370", "flag_active_text": "#ffffff",
+    "flag_bg": "#ffffff", "flag_text": "#1a3370", "flag_border": "#b8c9e2",
 }
 
 _THEME_RED = {
-    "bg": "#fdf7f7", "sidebar": "#ffeef0",
-    "tab_bg": "#fff0f0", "tab_border": "#ffccd0",
-    "tab_hover": "#ffdde0", "tab_active": "#ffdde0", "tab_active_text": "#b91c1c",
-    "primary": "#c0392b", "primary_hover": "#a93226",
-    "heading": "#1f1010", "text": "#412020",
-    "label": "#7f1d1d",
-    "select_bg": "#ffdde0", "select_border": "#ef4444", "select_text": "#7f1d1d",
-    "slider": "#c0392b",
-    "download_bg": "#2e7d4f", "download_hover": "#256040",
-    "card_bg": "#ffffff", "card_border": "#f0d1d1",
+    "bg": "#f9eeed", "sidebar": "#f5e3e2", "content_bg": "#fdf6f5",
+    "primary": "#7a1a1a", "primary_light": "#a63030", "primary_hover": "#5a1010",
+    "heading": "#7a1a1a", "text": "#4a2020",
+    "label": "#7a1a1a",
+    "border": "#d4a0a0", "border_light": "#e8c8c8",
+    "select_bg": "#7a1a1a", "select_border": "#7a1a1a", "select_text": "#ffffff",
+    "btn_border": "#7a1a1a", "btn_text": "#7a1a1a", "btn_bg": "#ffffff",
+    "btn_primary_bg": "#7a1a1a", "btn_primary_text": "#ffffff",
+    "slider": "#7a1a1a",
+    "card_bg": "#ffffff", "card_border": "#d4a0a0",
+    "flag_active_bg": "#7a1a1a", "flag_active_text": "#ffffff",
+    "flag_bg": "#ffffff", "flag_text": "#7a1a1a", "flag_border": "#d4a0a0",
 }
 
 
@@ -169,58 +191,90 @@ def _apply_theme(club: str) -> None:
     th = _THEME_RED if club == "Pro Vercelli" else _THEME_BLUE
     st.markdown(f"""
     <style>
-    [data-testid="stAppViewContainer"] {{ background: {th['bg']}; }}
-    [data-testid="stHeader"]           {{ background: {th['bg']}; }}
+    /* Page backgrounds */
+    [data-testid="stAppViewContainer"] {{ background: {th['content_bg']}; }}
+    [data-testid="stHeader"]           {{ background: {th['content_bg']}; }}
     [data-testid="stSidebar"]          {{ background: {th['sidebar']}; }}
+
+    /* Typography */
     h1, h2, h3, h4 {{ color: {th['heading']} !important; }}
     p, li, label, .stMarkdown {{ color: {th['text']} !important; }}
 
-    [data-baseweb="tab-list"] {{
-        background: {th['tab_bg']} !important;
-        border: 1px solid {th['tab_border']} !important;
-        border-radius: 10px !important; padding: 4px !important;
-    }}
-    [data-baseweb="tab"] {{
-        background: transparent !important; color: #4b5563 !important;
-        font-weight: 600; border-radius: 8px !important;
-    }}
-    [data-baseweb="tab"]:hover {{ background: {th['tab_hover']} !important; color: {th['tab_active_text']} !important; }}
-    [aria-selected="true"] {{
-        background: {th['tab_active']} !important; color: {th['tab_active_text']} !important;
-        border-bottom: 2px solid {th['primary']} !important;
-    }}
+    /* Sidebar labels */
+    [data-testid="stSidebar"] label {{ color: {th['label']} !important; font-weight: 600; font-size: 0.85rem; }}
 
-    .var-label {{ font-size:14px; font-weight:700; color:{th['label']}; margin-bottom:2px; letter-spacing:.3px; }}
-    .star-row {{ width:60%; display:flex; justify-content:space-between; align-items:center; font-size:26px; line-height:1.2; margin-top:0; margin-bottom:10px; }}
-    .star-row span {{ display:inline-block; text-align:center; }}
-    hr {{ border-color: #dbe4f0 !important; }}
-
-    [data-baseweb="select"] > div {{ background-color: {th['select_bg']} !important; border: 1px solid {th['select_border']} !important; border-radius: 8px !important; }}
+    /* Selectboxes — themed background */
+    [data-baseweb="select"] > div {{
+        background-color: {th['select_bg']} !important;
+        border: 1px solid {th['select_border']} !important;
+        border-radius: 8px !important;
+    }}
     [data-baseweb="select"] * {{ color: {th['select_text']} !important; }}
+    [data-baseweb="select"] svg {{ fill: #ef4444 !important; }}
     [data-baseweb="popover"] [role="listbox"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 8px !important; }}
     [data-baseweb="popover"] [role="option"] {{ background-color: #ffffff !important; color: #374151 !important; }}
-    [data-baseweb="popover"] [role="option"]:hover {{ background-color: {th['tab_hover']} !important; color: {th['select_text']} !important; }}
-    [data-baseweb="popover"] [aria-selected="true"] {{ background-color: {th['select_bg']} !important; color: {th['select_text']} !important; }}
+    [data-baseweb="popover"] [role="option"]:hover {{ background-color: {th['bg']} !important; color: {th['heading']} !important; }}
 
+    /* Radio buttons (navigation) */
+    [data-testid="stSidebar"] [role="radiogroup"] label {{ color: {th['text']} !important; }}
+
+    /* Slider */
     [data-testid="stSlider"] > div > div > div > div {{ background: {th['slider']} !important; }}
     [data-baseweb="slider"] [role="slider"] {{
         width:18px !important; height:18px !important;
         background-color:#ffffff !important; border:3px solid #000000 !important; box-shadow:none !important;
     }}
 
+    /* All buttons — outlined style by default */
+    div.stButton > button {{
+        background-color: {th['btn_bg']} !important; color: {th['btn_text']} !important;
+        border: 2px solid {th['btn_border']} !important;
+        font-weight: 600; font-size: 14px; padding: .5rem 1rem; border-radius: 10px;
+    }}
+    div.stButton > button:hover {{
+        background-color: {th['bg']} !important; color: {th['primary']} !important;
+    }}
+    /* Primary buttons — filled */
     div.stButton > button[kind="primary"] {{
-        background-color:{th['primary']}; color:#ffffff; border:none;
-        font-weight:700; font-size:15px; padding:.55rem 1.2rem; border-radius:6px;
+        background-color: {th['btn_primary_bg']} !important; color: {th['btn_primary_text']} !important;
+        border: 2px solid {th['btn_primary_bg']} !important;
     }}
-    div.stButton > button[kind="primary"]:hover {{ background-color:{th['primary_hover']}; color:#ffffff; }}
+    div.stButton > button[kind="primary"]:hover {{
+        background-color: {th['primary_hover']} !important; color: #ffffff !important;
+        border-color: {th['primary_hover']} !important;
+    }}
 
+    /* Download buttons — outlined */
     [data-testid="stDownloadButton"] > button {{
-        background-color:{th['download_bg']} !important; color:#ffffff !important;
-        border:none !important; font-weight:700 !important; border-radius:6px !important;
+        background-color: {th['btn_bg']} !important; color: {th['btn_text']} !important;
+        border: 2px solid {th['btn_border']} !important; font-weight: 600 !important; border-radius: 10px !important;
     }}
-    [data-testid="stDownloadButton"] > button:hover {{ background-color:{th['download_hover']} !important; }}
-    [data-testid="stAlert"] {{ border-radius: 6px; }}
+    [data-testid="stDownloadButton"] > button:hover {{
+        background-color: {th['bg']} !important;
+    }}
 
+    /* Expanders — themed border */
+    [data-testid="stExpander"] {{
+        border: 1px solid {th['border']} !important;
+        border-radius: 10px !important;
+        background: {th['card_bg']} !important;
+    }}
+
+    /* Text inputs and text areas */
+    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea {{
+        border: 1px solid {th['border']} !important;
+        border-radius: 10px !important;
+    }}
+
+    /* Dividers */
+    hr {{ border-color: {th['border_light']} !important; }}
+
+    /* Star row */
+    .var-label {{ font-size:14px; font-weight:700; color:{th['label']}; margin-bottom:2px; letter-spacing:.3px; }}
+    .star-row {{ width:60%; display:flex; justify-content:space-between; align-items:center; font-size:26px; line-height:1.2; margin-top:0; margin-bottom:10px; }}
+    .star-row span {{ display:inline-block; text-align:center; }}
+
+    /* Report cards */
     .report-card {{
         background: {th['card_bg']}; border: 1px solid {th['card_border']};
         border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: .8rem;
@@ -228,12 +282,13 @@ def _apply_theme(club: str) -> None:
     .report-card h4 {{ margin: 0 0 4px 0; font-size: 1rem; }}
     .report-card .meta {{ color: #6b7280; font-size: .85rem; }}
 
+    /* Player info card */
     .player-info-card {{
         background: {th['card_bg']}; border: 1px solid {th['card_border']};
         border-radius: 10px; padding: 1.2rem; margin: 0.5rem 0;
     }}
     .player-info-card .info-row {{
-        display: flex; padding: 4px 0; border-bottom: 1px solid #f0f0f0;
+        display: flex; padding: 5px 0; border-bottom: 1px solid {th['border_light']};
     }}
     .player-info-card .info-row:last-child {{ border-bottom: none; }}
     .player-info-card .info-label {{
@@ -242,26 +297,36 @@ def _apply_theme(club: str) -> None:
     .player-info-card .info-value {{
         color: {th['text']}; font-size: 0.9rem;
     }}
+
+    /* File uploader */
+    [data-testid="stFileUploader"] {{
+        border: 1px solid {th['border']} !important;
+        border-radius: 10px !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
 
-# ─── Header with logo ────────────────────────────────────────────────────────
+# ─── Header (matches PDF layout) ────────────────────────────────────────────
 
-def _render_header(club: str):
+def _render_header(club: str, tmpl_lang: str):
     L = _lang()
     logo_b64 = _img_b64(_LOGO_PV if club == "Pro Vercelli" else _LOGO_DB)
-    bfg_b64 = _img_b64(_LOGO_BFG)
-    club_color = "#b91c1c" if club == "Pro Vercelli" else "#1e3a8a"
+    club_color = "#7a1a1a" if club == "Pro Vercelli" else "#1a3370"
+    # Map template language code to display name
+    lang_display = {"NL": "Nederlands", "ENG": "English"}.get(tmpl_lang, tmpl_lang)
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:16px; padding:0.5rem 0 0.3rem 0;">
-            <img src="data:image/png;base64,{logo_b64}" width="55"/>
-            <div style="flex:1;">
-                <h1 style="margin:0; font-size:1.7rem; color:{club_color};">{t('scout_rating_tool', L)}</h1>
-                <p style="margin:0; color:#6b7280; font-size:.9rem;">{club}</p>
+        <div style="display:flex; align-items:center; gap:18px; padding:0.8rem 0 0.5rem 0;">
+            <img src="data:image/png;base64,{logo_b64}" width="65"/>
+            <div>
+                <h1 style="margin:0; font-size:1.6rem; color:{club_color}; letter-spacing:1px; text-transform:uppercase;">
+                    {t('scout_rating_tool', L)}
+                </h1>
+                <p style="margin:0; color:{club_color}; font-size:.85rem; opacity:.7;">
+                    {club} — {lang_display}
+                </p>
             </div>
-            <img src="data:image/png;base64,{bfg_b64}" width="100" style="opacity:.7;"/>
         </div>
         """,
         unsafe_allow_html=True,
@@ -357,7 +422,7 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
                 suggestion = st.session_state[suggestion_key]
                 st.markdown(f"**{t('suggested_improvement', L)}**")
                 st.text_area("Suggested", value=suggestion, height=90, key=f"{key_prefix}_{i}_sug_display", label_visibility="collapsed")
-                col_spacer_left, col_accept, col_discard, col_spacer_right = st.columns([1, 1.5, 1.5, 1])
+                _, col_accept, col_discard, _ = st.columns([1, 1.5, 1.5, 1])
                 with col_accept:
                     if st.button(t("accept", L), key=f"{key_prefix}_{i}_accept", type="primary", use_container_width=True):
                         st.session_state[comment_key] = suggestion
@@ -380,7 +445,6 @@ def _ts_str(ts: float) -> str:
 
 
 def _report_title(meta: dict) -> str:
-    """Build display title: 'Player Name — Position' or just 'Position'."""
     player_name = meta.get("player_name") or ""
     if not player_name:
         pd = meta.get("player_data")
@@ -397,10 +461,7 @@ def _current_player_name() -> str:
     return ""
 
 
-# ─── Collect current editor state ────────────────────────────────────────────
-
 def _collect_editor_state(key_prefix: str, n_vars: int):
-    """Read stars, comments and video_data back from session_state."""
     stars, comments, videos = [], [], []
     for i in range(n_vars):
         stars.append(st.session_state.get(f"{key_prefix}_{i}", 0.0))
@@ -409,43 +470,111 @@ def _collect_editor_state(key_prefix: str, n_vars: int):
     return stars, comments, videos
 
 
+# ─── Editable player info card ──────────────────────────────────────────────
+
+_PLAYER_FIELDS = [
+    ("date_of_birth", "date_of_birth"),
+    ("city_of_birth", "city_of_birth"),
+    ("nationality", "nationality"),
+    ("height", "height"),
+    ("preferred_foot", "preferred_foot"),
+    ("club_label", "club"),
+    ("league", "league"),
+    ("agency", "agency"),
+    ("agent", "agent"),
+]
+
+
+def _render_player_card(pdata: dict, editable: bool = True, key_prefix: str = "pinfo"):
+    """Render player info card. If editable=True, shows an edit toggle."""
+    L = _lang()
+    name = pdata.get("name", "")
+    st.markdown(f"### {t('player_info', L)}: {name}")
+
+    edit_key = f"{key_prefix}_editing"
+    is_editing = st.session_state.get(edit_key, False)
+
+    if editable:
+        if is_editing:
+            # Editable form
+            for label_key, data_key in _PLAYER_FIELDS:
+                pdata[data_key] = st.text_input(
+                    t(label_key, L),
+                    value=pdata.get(data_key, ""),
+                    key=f"{key_prefix}_{data_key}",
+                )
+            # Update name too
+            pdata["name"] = st.text_input(
+                "Name",
+                value=pdata.get("name", ""),
+                key=f"{key_prefix}_name",
+            )
+            if st.button(f"💾 {t('save_info', L)}", key=f"{key_prefix}_save", type="primary"):
+                st.session_state["player_data"] = pdata
+                st.session_state[edit_key] = False
+                st.rerun()
+        else:
+            # Read-only display
+            rows_html = ""
+            for label_key, data_key in _PLAYER_FIELDS:
+                value = pdata.get(data_key, "")
+                rows_html += f"""
+                <div class="info-row">
+                    <div class="info-label">{t(label_key, L)}</div>
+                    <div class="info-value">{value or '—'}</div>
+                </div>"""
+            st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
+
+            season_stats = f"{pdata.get('season_matches', '0')} matches · {pdata.get('season_goals', '0')} goals · {pdata.get('season_assists', '0')} assists"
+            career_stats = f"{pdata.get('career_matches', '0')} matches · {pdata.get('career_goals', '0')} goals · {pdata.get('career_assists', '0')} assists"
+            st.caption(f"Season: {season_stats}")
+            st.caption(f"Career: {career_stats}")
+
+            if st.button(f"✏️ {t('edit_info', L)}", key=f"{key_prefix}_edit"):
+                st.session_state[edit_key] = True
+                st.rerun()
+    else:
+        rows_html = ""
+        for label_key, data_key in _PLAYER_FIELDS:
+            value = pdata.get(data_key, "")
+            rows_html += f"""
+            <div class="info-row">
+                <div class="info-label">{t(label_key, L)}</div>
+                <div class="info-value">{value or '—'}</div>
+            </div>"""
+        st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
+
+
 # ─── SciSports UI section ───────────────────────────────────────────────────
 
-def _scisports_section() -> dict | None:
+def _scisports_section(key_prefix: str = "sci") -> dict | None:
     """Render SciSports player search/select UI. Returns player_data dict or None."""
     L = _lang()
 
     try:
-        from scisports import require_secrets, get_token, search_players, fetch_player_data, SCISPORTS_TO_TEMPLATE
+        from scisports import require_secrets, get_token, search_players, fetch_player_data
     except ImportError:
         return st.session_state.get("player_data")
 
     secrets = require_secrets()
     if not secrets:
-        with st.expander(f"⚙️ {t('search_player', L)} — {t('scisports_not_configured', L)}", expanded=False):
-            st.info("Add your SciSports credentials to `.streamlit/secrets.toml`:")
+        with st.expander(f"⚙️ {t('configure_scisports', L)}", expanded=False):
+            st.info(t("scisports_setup_info", L))
             st.code(
-                '# Option 1: flat keys\n'
+                '[scisports]\n'
                 'username = "your_username"\n'
                 'password = "your_password"\n'
                 'client_id = "your_client_id"\n'
                 'client_secret = "your_client_secret"\n'
-                'scope = "api recruitment performance"\n\n'
-                '# Option 2: under [scisports] section\n'
-                '[scisports]\n'
-                'username = "..."\n'
-                'password = "..."\n'
-                'client_id = "..."\n'
-                'client_secret = "..."',
+                'scope = "api recruitment performance"',
                 language="toml",
             )
         return st.session_state.get("player_data")
 
-    st.markdown("---")
-    st.subheader(f"🔍 {t('search_player', L)}")
+    st.subheader(f"{t('search_player', L)}")
 
-    with st.form("scisports_search_form"):
-        query = st.text_input(t("search", L), placeholder=t("search_placeholder", L), key="sci_query")
+    with st.form(f"{key_prefix}_search_form"):
+        query = st.text_input(t("search", L), placeholder=t("search_placeholder", L), key=f"{key_prefix}_query")
         search_submitted = st.form_submit_button(t("search", L), use_container_width=True)
 
     if search_submitted and query.strip():
@@ -453,25 +582,24 @@ def _scisports_section() -> dict | None:
             try:
                 token = get_token()
                 total, options = search_players(token, query)
-                st.session_state["sci_token"] = token
-                st.session_state["sci_options"] = options
-                st.session_state["sci_total"] = total
+                st.session_state[f"{key_prefix}_token"] = token
+                st.session_state[f"{key_prefix}_options"] = options
             except Exception as exc:
                 st.error(f"SciSports error: {exc}")
 
-    options = st.session_state.get("sci_options", [])
+    options = st.session_state.get(f"{key_prefix}_options", [])
     if options:
         labels = [opt.label() for opt in options]
         selected_idx = st.selectbox(
             t("select_player", L),
             range(len(labels)),
             format_func=lambda i: labels[i],
-            key="sci_selected_idx",
+            key=f"{key_prefix}_selected_idx",
         )
 
-        if st.button(t("obtain_scisports", L), type="primary", use_container_width=True):
+        if st.button(t("obtain_scisports", L), type="primary", use_container_width=True, key=f"{key_prefix}_obtain"):
             chosen = options[selected_idx]
-            token = st.session_state.get("sci_token")
+            token = st.session_state.get(f"{key_prefix}_token")
             if not token:
                 token = get_token()
             with st.spinner(t("fetching_data", L)):
@@ -481,85 +609,54 @@ def _scisports_section() -> dict | None:
                 except Exception as exc:
                     st.error(f"Error: {exc}")
 
-    # Show player info card if we have data
     pdata = st.session_state.get("player_data")
     if pdata:
-        _render_player_card(pdata)
+        _render_player_card(pdata, editable=True, key_prefix=f"{key_prefix}_card")
 
     return st.session_state.get("player_data")
 
 
-def _render_player_card(pdata: dict):
-    """Render a styled player info card matching the PowerPoint layout."""
-    L = _lang()
-    name = pdata.get("name", "")
-    st.markdown(f"### {t('player_info', L)}: {name}")
-
-    fields = [
-        ("date_of_birth", pdata.get("date_of_birth", "")),
-        ("city_of_birth", pdata.get("city_of_birth", "")),
-        ("nationality",   pdata.get("nationality", "")),
-        ("height",        pdata.get("height", "")),
-        ("preferred_foot", pdata.get("preferred_foot", "")),
-        ("club_label",    pdata.get("club", "")),
-        ("league",        pdata.get("league", "")),
-        ("agency",        pdata.get("agency", "")),
-        ("agent",         pdata.get("agent", "")),
-    ]
-
-    rows_html = ""
-    for label_key, value in fields:
-        rows_html += f"""
-        <div class="info-row">
-            <div class="info-label">{t(label_key, L)}</div>
-            <div class="info-value">{value or '—'}</div>
-        </div>"""
-
-    st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
-
-    # Show extra stats
-    season_stats = f"{pdata.get('season_matches', '0')} matches · {pdata.get('season_goals', '0')} goals · {pdata.get('season_assists', '0')} assists"
-    career_stats = f"{pdata.get('career_matches', '0')} matches · {pdata.get('career_goals', '0')} goals · {pdata.get('career_assists', '0')} assists"
-    st.caption(f"Season: {season_stats}")
-    st.caption(f"Career: {career_stats}")
-
-
 # ══════════════════════════════════════════════════════════════════════════════
-# LOGIN GATE
+# LOGIN GATE — restore session on refresh
 # ══════════════════════════════════════════════════════════════════════════════
 
 if not st.session_state.get("authenticated"):
-    _login_page()
-    st.stop()
+    restored_user = _restore_session()
+    if restored_user:
+        st.session_state["authenticated"] = True
+        st.session_state["username"] = restored_user
+    else:
+        _login_page()
+        st.stop()
 
 username = st.session_state["username"]
 L = _lang()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR — app language, club, template language, user info, logout, nav
+# SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    # ── App language: flag buttons ───────────────────────────────────────────
-    _FLAG_MAP = {"EN": "🇬🇧", "NL": "🇳🇱", "IT": "🇮🇹", "ZH": "🇨🇳"}
-    current_app_lang = _lang()
+    st.markdown(f"**{t('logged_in_as', L)}:** {username}")
 
+    # ── Language flags ───────────────────────────────────────────────────────
+    st.caption(t("choose_language", L))
+    _FLAG_MAP = {"NL": "NL", "EN": "ENG", "IT": "ITA", "ZH": "CH"}
+    current_app_lang = _lang()
     flag_cols = st.columns(len(_FLAG_MAP))
-    for idx, (code, flag) in enumerate(_FLAG_MAP.items()):
+    for idx, (code, label) in enumerate(_FLAG_MAP.items()):
         with flag_cols[idx]:
             btn_type = "primary" if code == current_app_lang else "secondary"
-            if st.button(flag, key=f"flag_{code}", type=btn_type, use_container_width=True):
+            if st.button(label, key=f"flag_{code}", type=btn_type, use_container_width=True):
                 if code != current_app_lang:
                     st.session_state["app_lang"] = code
                     st.rerun()
     L = _lang()
 
-    st.markdown(f"**{t('logged_in_as', L)}:** {username}")
-
-    st.markdown("---")
-    club = st.selectbox(t("club", L), CLUBS, key="club_select")
+    # ── Club & template language ─────────────────────────────────────────────
+    club = st.selectbox(t("choose_club", L), CLUBS, key="club_select")
     available_langs = CLUB_LANGUAGES[club]
-    lang = st.selectbox(t("template_language", L), available_langs, key="lang_select")
+    lang = st.selectbox(t("choose_template_language", L), available_langs, key="lang_select")
 
     st.markdown("---")
 
@@ -568,7 +665,7 @@ with st.sidebar:
     nav_keys    = ["New Report", "Dashboard", "Upload & Edit"]
 
     nav_override = st.session_state.pop("_nav_override", None)
-    default_idx = 0  # New Report is first / default
+    default_idx = 0
     if nav_override and nav_override in nav_keys:
         default_idx = nav_keys.index(nav_override)
 
@@ -585,13 +682,14 @@ with st.sidebar:
     st.markdown("")
     st.markdown("")
     st.markdown("")
-    if st.button(f"🚪 {t('log_out', L)}", use_container_width=True, key="logout_btn"):
+    if st.button(f"{t('log_out', L)}", use_container_width=True, key="logout_btn"):
+        _clear_session()
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
 
 _apply_theme(club)
-_render_header(club)
+_render_header(club, lang)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -601,7 +699,6 @@ _render_header(club)
 if page == "Dashboard":
     st.markdown("---")
 
-    # ── Drafts (in progress) — filtered by selected club ────────────────────
     st.subheader(f"📝  {t('in_progress', L)}")
     all_drafts = storage.list_drafts(username)
     drafts = [d for d in all_drafts if d.get("club") == club]
@@ -611,28 +708,28 @@ if page == "Dashboard":
         for d in drafts:
             rid = d["report_id"]
             title = _report_title(d)
-            with st.container():
-                st.markdown(
-                    f"""<div class="report-card">
-                    <h4>{title}</h4>
-                    <div class="meta">{d['club']} ({d['language']}) · {t('last_saved', L)}: {_ts_str(d['updated_at'])}</div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-                c1, c2 = st.columns([2, 1])
-                with c1:
-                    if st.button(t("continue_editing", L), key=f"cont_{rid}", type="primary", use_container_width=True):
-                        st.session_state["edit_draft_id"] = rid
-                        st.session_state["_nav_override"] = "New Report"
-                        st.rerun()
-                with c2:
-                    if st.button(t("delete", L), key=f"del_draft_{rid}", use_container_width=True):
-                        storage.delete_draft(username, rid)
-                        st.rerun()
+            st.markdown(
+                f"""<div class="report-card">
+                <h4>{title}</h4>
+                <div class="meta">{d['club']} ({d['language']}) · {t('last_saved', L)}: {_ts_str(d['updated_at'])}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            c1, c2 = st.columns([2, 1])
+            with c1:
+                if st.button(t("continue_editing", L), key=f"cont_{rid}", type="primary", use_container_width=True):
+                    st.session_state["edit_draft_id"] = rid
+                    st.session_state["_nav_override"] = "New Report"
+                    # Clear nav_page so radio picks up the override index
+                    st.session_state.pop("nav_page", None)
+                    st.rerun()
+            with c2:
+                if st.button(t("delete", L), key=f"del_draft_{rid}", use_container_width=True):
+                    storage.delete_draft(username, rid)
+                    st.rerun()
 
     st.markdown("---")
 
-    # ── Finished reports — filtered by selected club ─────────────────────────
     st.subheader(f"✅  {t('finished_reports', L)}")
     all_finished = storage.list_finished(username)
     finished = [f for f in all_finished if f.get("club") == club]
@@ -666,7 +763,7 @@ if page == "Dashboard":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE: New Report (also used for continuing a draft)
+# PAGE: New Report
 # ══════════════════════════════════════════════════════════════════════════════
 
 elif page == "New Report":
@@ -683,7 +780,6 @@ elif page == "New Report":
             pos_list = list(TEMPLATES.keys())
             if draft["position"] in pos_list:
                 st.session_state["empty_template_select"] = pos_list.index(draft["position"])
-            # Set reset key BEFORE restoring values so the reset logic won't wipe them
             st.session_state["empty_prev_key"] = f"{draft['club']}|{draft['language']}|{draft['position']}"
             for i, v in enumerate(draft["star_values"]):
                 st.session_state[f"empty_{i}"] = float(v)
@@ -691,25 +787,24 @@ elif page == "New Report":
                 st.session_state[f"empty_{i}_comment"] = c or ""
             for i, vd in enumerate(draft.get("video_data", [])):
                 st.session_state[f"empty_{i}_video"] = vd
-            # Restore player data if present
             if draft.get("player_data"):
                 st.session_state["player_data"] = draft["player_data"]
             st.session_state["_loaded_draft"] = draft_id
             st.rerun()
 
     # ── SciSports player search ──────────────────────────────────────────────
-    player_data = _scisports_section()
+    player_data = _scisports_section(key_prefix="sci")
 
-    # ── Position selector (pre-select from SciSports if available) ───────────
+    st.markdown("---")
+
+    # ── Role selector (pre-select from SciSports) ───────────────────────────
     template_names = list(TEMPLATES.keys())
-    sci_position = None
     if player_data and player_data.get("template_position"):
         sci_position = player_data["template_position"]
         if sci_position in template_names and "empty_template_select" not in st.session_state:
             st.session_state["empty_template_select"] = template_names.index(sci_position)
 
-    st.markdown("---")
-    template_name = st.selectbox(t("position", L) + ":", template_names, key="empty_template_select")
+    template_name = st.selectbox(t("role_label", L), template_names, key="empty_template_select")
     template_cfg = get_template_config(template_name, club, lang)
 
     # Reset on club / language / position change
@@ -720,7 +815,6 @@ elif page == "New Report":
             st.session_state[f"empty_{i}_video"]   = None
             st.session_state[f"empty_{i}_comment"] = ""
         st.session_state["empty_prev_key"] = reset_key
-        # Clear active report when switching context
         st.session_state.pop("active_report_id", None)
         st.session_state.pop("_loaded_draft", None)
 
@@ -735,7 +829,7 @@ elif page == "New Report":
 
     col_save, col_gen = st.columns(2)
     with col_save:
-        if st.button(f"💾  {t('save_draft', L)}", use_container_width=True):
+        if st.button(f"{t('save_draft', L)}", use_container_width=True):
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
             rid = storage.save_draft(
                 username,
@@ -748,7 +842,7 @@ elif page == "New Report":
             st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
     with col_gen:
-        if st.button(f"{t('generate_pptx', L)} ▶", type="primary", use_container_width=True, key="empty_gen"):
+        if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="empty_gen"):
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
             with st.spinner(t("building_report", L)):
                 output = fill_template(
@@ -757,7 +851,6 @@ elif page == "New Report":
                 )
             pptx_bytes = output.getvalue()
 
-            # Auto-save as finished
             rid = st.session_state.get("active_report_id") or storage.save_draft(
                 username, None, template_name, club, lang, s, c, v,
                 source="empty",
@@ -818,6 +911,11 @@ elif page == "Upload & Edit":
         detected_club = check_result.get("matched_club", club)
         detected_lang = check_result.get("matched_language", lang)
 
+        # Switch theme if detected club differs from sidebar selection
+        if detected_club and detected_club != club:
+            _apply_theme(detected_club)
+            _render_header(detected_club, detected_lang)
+
         if matched_name and matched_name in TEMPLATES:
             st.success(f"✅  {t('detected', L)}: **{matched_name}** ({detected_club}, {detected_lang})")
             template_cfg = get_template_config(matched_name, detected_club, detected_lang)
@@ -833,6 +931,10 @@ elif page == "Upload & Edit":
             f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
+        # ── Player info section for Upload & Edit ────────────────────────────
+        st.markdown("---")
+        upload_player_data = _scisports_section(key_prefix="upload_sci")
+
         st.markdown("---")
         st.subheader(t("adjust_competencies", L))
 
@@ -847,7 +949,7 @@ elif page == "Upload & Edit":
         st.markdown("---")
         col_save, col_gen = st.columns(2)
         with col_save:
-            if st.button(f"💾  {t('save_draft', L)}", use_container_width=True, key="upload_save"):
+            if st.button(f"{t('save_draft', L)}", use_container_width=True, key="upload_save"):
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
                 rid = storage.save_draft(
                     username,
@@ -856,16 +958,18 @@ elif page == "Upload & Edit":
                     source="upload",
                     upload_bytes=st.session_state.get("upload_bytes"),
                     upload_filename=st.session_state.get("upload_filename"),
+                    player_data=st.session_state.get("player_data"),
                 )
                 st.session_state["upload_active_report_id"] = rid
                 st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
         with col_gen:
-            if st.button(f"{t('generate_pptx', L)} ▶", type="primary", use_container_width=True, key="upload_gen"):
+            if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="upload_gen"):
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
                 with st.spinner(t("filling", L)):
                     output = fill_from_bytes(
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
+                        player_data=st.session_state.get("player_data"),
                     )
                 pptx_bytes = output.getvalue()
                 pos = matched_name or "Unknown"
@@ -875,8 +979,10 @@ elif page == "Upload & Edit":
                     source="upload",
                     upload_bytes=st.session_state.get("upload_bytes"),
                     upload_filename=st.session_state.get("upload_filename"),
+                    player_data=st.session_state.get("player_data"),
                 )
-                storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes)
+                storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
+                                      player_name=_current_player_name())
                 st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))

@@ -38,7 +38,7 @@ SCISPORTS_TO_TEMPLATE: Dict[str, str] = {
     "DefensiveMidfield": "Deep Lying Playmaker",
     "CentreMidfield": "Box-to-Box Midfielder",
     "AttackingMidfield": "Scoring 10",
-    "RightWing": "Fast Winger", "LeftWing": "Dribbling Winger",
+    "RightWing": "Dribbling Winger", "LeftWing": "Dribbling Winger",
     "CentreForward": "Finisher", "Striker": "Finisher",
 }
 
