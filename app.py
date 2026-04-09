@@ -297,6 +297,10 @@ def _apply_theme(club: str) -> None:
         display: flex; padding: 5px 0; border-bottom: 1px solid {th['border_light']};
     }}
     .player-info-card .info-row:last-child {{ border-bottom: none; }}
+    .inline-edit-hint {{
+        font-size: 0.8rem; color: {th['primary_light']}; cursor: pointer; opacity: 0.7;
+    }}
+    .inline-edit-hint:hover {{ opacity: 1; }}
     .player-info-card .info-label {{
         font-weight: 700; color: {th['label']}; min-width: 140px; font-size: 0.9rem;
     }}
@@ -308,6 +312,16 @@ def _apply_theme(club: str) -> None:
     [data-testid="stFileUploader"] {{
         border: 1px solid {th['border']} !important;
         border-radius: 10px !important;
+    }}
+
+    /* Flag buttons — transparent so flag image shows through */
+    [data-testid="stSidebar"] .flag-box + div button,
+    [data-testid="stSidebar"] div:has(> .flag-box) + div button {{
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        min-height: 40px !important;
+        color: transparent !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -505,46 +519,23 @@ def _render_player_card(pdata: dict, editable: bool = True, key_prefix: str = "p
     edit_key = f"{key_prefix}_editing"
     is_editing = st.session_state.get(edit_key, False)
 
-    if editable:
-        if is_editing:
-            # Editable form
-            for label_key, data_key in _PLAYER_FIELDS:
-                pdata[data_key] = st.text_input(
-                    t(label_key, L),
-                    value=pdata.get(data_key, ""),
-                    key=f"{key_prefix}_{data_key}",
-                )
-            # Update name too
-            pdata["name"] = st.text_input(
-                "Name",
-                value=pdata.get("name", ""),
-                key=f"{key_prefix}_name",
+    if editable and is_editing:
+        # Editable form inside card-like container
+        st.markdown('<div class="player-info-card">', unsafe_allow_html=True)
+        pdata["name"] = st.text_input(
+            "Name", value=pdata.get("name", ""), key=f"{key_prefix}_name",
+        )
+        for label_key, data_key in _PLAYER_FIELDS:
+            pdata[data_key] = st.text_input(
+                t(label_key, L), value=pdata.get(data_key, ""), key=f"{key_prefix}_{data_key}",
             )
-            if st.button(f"💾 {t('save_info', L)}", key=f"{key_prefix}_save", type="primary"):
-                st.session_state["player_data"] = pdata
-                st.session_state[edit_key] = False
-                st.rerun()
-        else:
-            # Read-only display
-            rows_html = ""
-            for label_key, data_key in _PLAYER_FIELDS:
-                value = pdata.get(data_key, "")
-                rows_html += f"""
-                <div class="info-row">
-                    <div class="info-label">{t(label_key, L)}</div>
-                    <div class="info-value">{value or '—'}</div>
-                </div>"""
-            st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
-
-            season_stats = f"{pdata.get('season_matches', '0')} matches · {pdata.get('season_goals', '0')} goals · {pdata.get('season_assists', '0')} assists"
-            career_stats = f"{pdata.get('career_matches', '0')} matches · {pdata.get('career_goals', '0')} goals · {pdata.get('career_assists', '0')} assists"
-            st.caption(f"Season: {season_stats}")
-            st.caption(f"Career: {career_stats}")
-
-            if st.button(f"✏️ {t('edit_info', L)}", key=f"{key_prefix}_edit"):
-                st.session_state[edit_key] = True
-                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.button(f"💾 {t('save_info', L)}", key=f"{key_prefix}_save", type="primary"):
+            st.session_state["player_data"] = pdata
+            st.session_state[edit_key] = False
+            st.rerun()
     else:
+        # Read-only display with edit button inside the card
         rows_html = ""
         for label_key, data_key in _PLAYER_FIELDS:
             value = pdata.get(data_key, "")
@@ -553,7 +544,119 @@ def _render_player_card(pdata: dict, editable: bool = True, key_prefix: str = "p
                 <div class="info-label">{t(label_key, L)}</div>
                 <div class="info-value">{value or '—'}</div>
             </div>"""
+        # Edit link rendered inside the card at bottom-right
+        if editable:
+            rows_html += f"""
+            <div style="text-align:right;padding-top:6px;">
+                <span class="inline-edit-hint">✏️ {t('edit_info', L)}</span>
+            </div>"""
         st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
+
+        if editable:
+            # Invisible button overlapping the edit hint via negative margin
+            st.markdown('<div style="margin-top:-36px;text-align:right;">', unsafe_allow_html=True)
+            if st.button(f"✏️ {t('edit_info', L)}", key=f"{key_prefix}_edit"):
+                st.session_state[edit_key] = True
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ─── Transfermarkt stats card ──────────────────────────────────────────────
+
+_STATS_FIELDS = [
+    ("season_label", [
+        ("matches", "season_matches"),
+        ("minutes", "season_minutes"),
+        ("goals", "season_goals"),
+        ("assists", "season_assists"),
+    ]),
+    ("career_label", [
+        ("matches", "career_matches"),
+        ("minutes", "career_minutes"),
+        ("goals", "career_goals"),
+        ("assists", "career_assists"),
+    ]),
+]
+
+
+def _render_stats_card(stats: dict, player_name: str = "", editable: bool = True, key_prefix: str = "tm_stats"):
+    """Render Transfermarkt player stats card with optional inline editing."""
+    L = _lang()
+    st.markdown(f"### {t('player_stats_tm', L)}: {player_name}")
+
+    edit_key = f"{key_prefix}_editing"
+    is_editing = st.session_state.get(edit_key, False)
+
+    if editable and is_editing:
+        st.markdown('<div class="player-info-card">', unsafe_allow_html=True)
+        for group_label_key, fields in _STATS_FIELDS:
+            st.markdown(f"**{t(group_label_key, L)}**")
+            cols = st.columns(len(fields))
+            for col_idx, (label_key, data_key) in enumerate(fields):
+                with cols[col_idx]:
+                    stats[data_key] = st.number_input(
+                        t(label_key, L),
+                        value=int(stats.get(data_key, 0)),
+                        min_value=0,
+                        key=f"{key_prefix}_{data_key}",
+                    )
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.button(f"💾 {t('save_info', L)}", key=f"{key_prefix}_save", type="primary"):
+            st.session_state["tm_stats"] = stats
+            st.session_state[edit_key] = False
+            st.rerun()
+    else:
+        # Read-only display
+        rows_html = ""
+        for group_label_key, fields in _STATS_FIELDS:
+            rows_html += f'<div class="info-row" style="border-bottom:none;padding-bottom:0;"><div class="info-label" style="font-size:0.95rem;">{t(group_label_key, L)}</div></div>'
+            for label_key, data_key in fields:
+                val = stats.get(data_key, 0)
+                rows_html += f"""
+                <div class="info-row" style="padding-left:16px;">
+                    <div class="info-label">{t(label_key, L)}</div>
+                    <div class="info-value">{val}</div>
+                </div>"""
+        if editable:
+            rows_html += f"""
+            <div style="text-align:right;padding-top:6px;">
+                <span class="inline-edit-hint">✏️ {t('edit_info', L)}</span>
+            </div>"""
+        st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
+
+        if editable:
+            st.markdown('<div style="margin-top:-36px;text-align:right;">', unsafe_allow_html=True)
+            if st.button(f"✏️ {t('edit_info', L)}", key=f"{key_prefix}_edit"):
+                st.session_state[edit_key] = True
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+
+def _transfermarkt_section(player_name: str, player_club: str = "", key_prefix: str = "tm") -> dict | None:
+    """Render Transfermarkt stats fetch button + stats card. Returns stats dict or None."""
+    L = _lang()
+
+    if not player_name:
+        return st.session_state.get("tm_stats")
+
+    if st.button(t("fetch_tm_stats", L), type="primary", use_container_width=True, key=f"{key_prefix}_fetch"):
+        try:
+            from transfermarkt import fetch_player_stats
+            with st.spinner(t("fetching_tm", L)):
+                stats = fetch_player_stats(player_name, player_club)
+            if any(stats.get(k, 0) for k in ["season_matches", "career_matches"]):
+                st.session_state["tm_stats"] = stats
+            else:
+                st.session_state["tm_stats"] = stats
+                st.warning(t("tm_not_found", L))
+        except Exception as exc:
+            st.error(f"Transfermarkt error: {exc}")
+
+    stats = st.session_state.get("tm_stats")
+    if stats:
+        _render_stats_card(stats, player_name, editable=True, key_prefix=f"{key_prefix}_card")
+
+    return st.session_state.get("tm_stats")
 
 
 # ─── SciSports UI section ───────────────────────────────────────────────────
@@ -660,39 +763,51 @@ if _pending_draft_id and st.session_state.get("_loaded_draft") != _pending_draft
 with st.sidebar:
     st.markdown(f"**{t('logged_in_as', L)}:** {username}")
 
-    # ── Language flags (images with button fallback) ────────────────────────
+    # ── Language flags ────────────────────────────────────────────────────
     _FLAG_DIR = LOGO_DIR / "flags"
     _FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
     current_app_lang = _lang()
+    _sel_club = st.session_state.get("club_select", "FC Den Bosch")
+    _flag_accent = '#7a1a1a' if _sel_club == 'Pro Vercelli' else '#1a3370'
+
+    # CSS to make flag buttons show the flag image inside
+    st.markdown("""
+    <style>
+    .flag-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
+    .flag-box {
+        width: 48px; height: 36px; border-radius: 6px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        overflow: hidden; transition: opacity 0.15s;
+    }
+    .flag-box img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
+    .flag-box:hover { opacity: 0.85; }
+    </style>
+    """, unsafe_allow_html=True)
 
     flag_cols = st.columns(len(_FLAGS))
     for idx, (code, fname) in enumerate(_FLAGS.items()):
         with flag_cols[idx]:
             flag_path = _FLAG_DIR / fname
             is_active = code == current_app_lang
+            border_css = f"3px solid {_flag_accent}" if is_active else "2px solid #d1d5db"
+            opacity = "1.0" if is_active else "0.45"
+            bg = _flag_accent if is_active else "#ffffff"
+
             if flag_path.exists():
-                # Show flag image; active flag is full opacity, others dimmed
-                opacity = "1.0" if is_active else "0.4"
-                _sel_club = st.session_state.get("club_select", "FC Den Bosch")
-                accent = '#7a1a1a' if _sel_club == 'Pro Vercelli' else '#1a3370'
-                border = f"3px solid {accent}" if is_active else "3px solid transparent"
+                b64 = _img_b64(flag_path)
+                # Flag image overlaid on top of button via negative margin
                 st.markdown(
-                    f'<img src="data:image/png;base64,{_img_b64(flag_path)}" '
-                    f'style="width:100%;max-width:40px;border-radius:4px;opacity:{opacity};border:{border};"/>',
+                    f'<div style="text-align:center;margin-bottom:-44px;position:relative;z-index:1;pointer-events:none;">'
+                    f'<div class="flag-box" style="margin:0 auto;border:{border_css};opacity:{opacity};background:{bg};">'
+                    f'<img src="data:image/png;base64,{b64}"/>'
+                    f'</div></div>',
                     unsafe_allow_html=True,
                 )
-                # Small invisible-looking button below
-                if st.button(" ", key=f"flag_{code}", use_container_width=True):
-                    if code != current_app_lang:
-                        st.session_state["app_lang"] = code
-                        st.rerun()
-            else:
-                # Fallback: text button if no flag image
-                btn_type = "primary" if is_active else "secondary"
-                if st.button(code, key=f"flag_{code}", type=btn_type, use_container_width=True):
-                    if code != current_app_lang:
-                        st.session_state["app_lang"] = code
-                        st.rerun()
+            # Actual clickable button (transparent, behind the flag image)
+            if st.button(" ", key=f"flag_{code}", use_container_width=True):
+                if code != current_app_lang:
+                    st.session_state["app_lang"] = code
+                    st.rerun()
     L = _lang()
 
     # ── Club & template language ─────────────────────────────────────────────
@@ -836,6 +951,14 @@ elif page == "New Report":
     # ── SciSports player search ──────────────────────────────────────────────
     player_data = _scisports_section(key_prefix="sci")
 
+    # ── Transfermarkt stats ─────────────────────────────────────────────────
+    _pname = (player_data or {}).get("name", "")
+    _pclub = (player_data or {}).get("club", "")
+    if _pname:
+        tm_stats = _transfermarkt_section(_pname, _pclub, key_prefix="new_tm")
+    else:
+        tm_stats = st.session_state.get("tm_stats")
+
     st.markdown("---")
 
     # ── Role selector (pre-select from SciSports) ───────────────────────────
@@ -889,6 +1012,7 @@ elif page == "New Report":
                 output = fill_template(
                     template_cfg, s, c, v,
                     player_data=st.session_state.get("player_data"),
+                    tm_stats=st.session_state.get("tm_stats"),
                 )
             pptx_bytes = output.getvalue()
 
@@ -976,6 +1100,12 @@ elif page == "Upload & Edit":
         st.markdown("---")
         upload_player_data = _scisports_section(key_prefix="upload_sci")
 
+        # ── Transfermarkt stats for Upload & Edit ───────────────────────────
+        _up_pname = (upload_player_data or {}).get("name", "")
+        _up_pclub = (upload_player_data or {}).get("club", "")
+        if _up_pname:
+            _transfermarkt_section(_up_pname, _up_pclub, key_prefix="upload_tm")
+
         st.markdown("---")
         st.subheader(t("adjust_competencies", L))
 
@@ -1011,6 +1141,7 @@ elif page == "Upload & Edit":
                     output = fill_from_bytes(
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=st.session_state.get("player_data"),
+                        tm_stats=st.session_state.get("tm_stats"),
                     )
                 pptx_bytes = output.getvalue()
                 pos = matched_name or "Unknown"

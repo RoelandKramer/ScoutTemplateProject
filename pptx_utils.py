@@ -731,17 +731,76 @@ def fill_player_info(prs, template_cfg: dict, player_data: dict) -> None:
             break
 
 
+# ─── Player stats (right side of rating slide) ────────────────────────────
+
+# The right-side TextBox 11 shapes (left > 8M EMU) are stat value fields.
+# They are arranged in 4 rows x 2 columns:
+#   Row 1 (top ~1.1M):  season_matches  |  career_matches
+#   Row 2 (top ~1.8M):  season_minutes  |  career_minutes
+#   Row 3 (top ~2.6M):  season_goals    |  career_goals
+#   Row 4 (top ~3.4M):  season_assists  |  career_assists
+# Within each row, the left column is ~11.2M and right is ~13.6M.
+_STAT_FIELD_ORDER = [
+    # (row, col) -> field_name — sorted by top then by left
+    "season_matches", "career_matches",
+    "season_minutes", "career_minutes",
+    "season_goals", "career_goals",
+    "season_assists", "career_assists",
+]
+
+
+def fill_player_stats(prs, template_cfg: dict, tm_stats: dict) -> None:
+    """Fill the season/career stat fields on the rating slide."""
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+
+    # Collect right-side TextBox 11 shapes
+    right_fields = []
+    for shape in rating_slide.shapes:
+        if shape.name == "TextBox 11" and shape.left >= 8_000_000:
+            right_fields.append((shape.top, shape.left, shape))
+
+    if not right_fields:
+        return
+
+    # Sort by top first, then left within each row
+    right_fields.sort(key=lambda x: (x[0], x[1]))
+
+    # Group into rows (shapes within 200K EMU of each other vertically)
+    rows = []
+    current_row = [right_fields[0]]
+    for item in right_fields[1:]:
+        if abs(item[0] - current_row[0][0]) < 200_000:
+            current_row.append(item)
+        else:
+            rows.append(sorted(current_row, key=lambda x: x[1]))
+            current_row = [item]
+    rows.append(sorted(current_row, key=lambda x: x[1]))
+
+    # Flatten rows into field order and fill
+    idx = 0
+    for row in rows:
+        for _, _, shape in row:
+            if idx < len(_STAT_FIELD_ORDER):
+                field = _STAT_FIELD_ORDER[idx]
+                value = tm_stats.get(field, 0)
+                _write_text_shape(shape, str(value) if value else "0")
+                idx += 1
+
+
 def fill_template(
     template_cfg: dict,
     star_values: list,
     comments: list[str] | None = None,
     video_data: list | None = None,
     player_data: dict | None = None,
+    tm_stats: dict | None = None,
 ) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
     if player_data:
         fill_player_info(prs, template_cfg, player_data)
+    if tm_stats:
+        fill_player_stats(prs, template_cfg, tm_stats)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)
@@ -756,11 +815,14 @@ def fill_from_bytes(
     comments: list[str] | None = None,
     video_data: list | None = None,
     player_data: dict | None = None,
+    tm_stats: dict | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
     if player_data:
         fill_player_info(prs, template_cfg, player_data)
+    if tm_stats:
+        fill_player_stats(prs, template_cfg, tm_stats)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)
