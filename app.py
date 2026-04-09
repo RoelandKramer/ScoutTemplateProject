@@ -19,6 +19,25 @@ from i18n import t, APP_LANGUAGES
 # ─── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Scouting Report Platform", page_icon="", layout="centered")
 
+# Global CSS for flag buttons (must be present before any theme, e.g. on login page)
+st.markdown("""
+<style>
+.flag-btn-hide button {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: transparent !important;
+    padding: 2px !important;
+    min-height: 0 !important;
+    height: 20px !important;
+}
+.flag-btn-hide button:hover {
+    background: transparent !important;
+    border: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 _VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024
 
 LOGO_DIR = Path(__file__).parent / "Logo's"
@@ -68,6 +87,45 @@ def _clear_session():
 
 def _lang() -> str:
     return st.session_state.get("app_lang", "EN")
+
+
+# ─── Language flag selector (top-left, all pages) ─────────────────────────
+
+_FLAG_DIR = Path(__file__).parent / "Logo's" / "flags"
+_FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
+
+
+def _render_flags():
+    """Render language flag buttons at the top-left corner. Works on any page."""
+    current = _lang()
+    _club = st.session_state.get("club_select", "FC Den Bosch")
+    accent = "#7a1a1a" if _club == "Pro Vercelli" else "#1a3370"
+    cols = st.columns([1, 1, 1, 1, 4])  # 4 flag slots + spacer
+    for idx, (code, fname) in enumerate(_FLAGS.items()):
+        with cols[idx]:
+            flag_path = _FLAG_DIR / fname
+            is_active = code == current
+            if flag_path.exists():
+                opacity = "1.0" if is_active else "0.35"
+                border = f"3px solid {accent}" if is_active else "2px solid transparent"
+                b64 = _img_b64(flag_path)
+                st.markdown(
+                    f'<img src="data:image/png;base64,{b64}" '
+                    f'style="width:36px;height:24px;object-fit:cover;border-radius:4px;'
+                    f'opacity:{opacity};border:{border};display:block;margin:0 auto 0 0;"/>',
+                    unsafe_allow_html=True,
+                )
+            st.markdown('<div class="flag-btn-hide">', unsafe_allow_html=True)
+            if st.button(" " if flag_path.exists() else code, key=f"flag_{code}", use_container_width=True):
+                if code != current:
+                    _cur_club = st.session_state.get("club_select", "FC Den Bosch")
+                    _cur_lang = st.session_state.get("lang_select")
+                    st.session_state["app_lang"] = code
+                    st.session_state["club_select"] = _cur_club
+                    if _cur_lang:
+                        st.session_state["lang_select"] = _cur_lang
+                    st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ─── AI text improvement ────────────────────────────────────────────────────
@@ -126,6 +184,7 @@ def _authenticate(login_input: str, password: str) -> str | None:
 
 
 def _login_page():
+    _render_flags()
     L = _lang()
     db_b64 = _img_b64(_LOGO_DB)
     bfg_b64 = _img_b64(_LOGO_BFG_B)
@@ -203,20 +262,30 @@ def _apply_theme(club: str) -> None:
     /* Sidebar labels */
     [data-testid="stSidebar"] label {{ color: {th['label']} !important; font-weight: 600; font-size: 0.85rem; }}
 
-    /* Selectboxes — themed background */
+    /* Selectboxes — outlined style matching buttons */
     [data-baseweb="select"] > div {{
-        background-color: {th['select_bg']} !important;
-        border: 1px solid {th['select_border']} !important;
-        border-radius: 8px !important;
+        background-color: {th['btn_bg']} !important;
+        border: 2px solid {th['btn_border']} !important;
+        border-radius: 10px !important;
     }}
-    [data-baseweb="select"] * {{ color: {th['select_text']} !important; }}
-    [data-baseweb="select"] svg {{ fill: #ef4444 !important; }}
+    [data-baseweb="select"] * {{ color: {th['btn_text']} !important; font-weight: 600 !important; }}
+    [data-baseweb="select"] svg {{ fill: {th['btn_text']} !important; }}
     [data-baseweb="popover"] [role="listbox"] {{ background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 8px !important; }}
     [data-baseweb="popover"] [role="option"] {{ background-color: #ffffff !important; color: #374151 !important; }}
     [data-baseweb="popover"] [role="option"]:hover {{ background-color: {th['bg']} !important; color: {th['heading']} !important; }}
 
-    /* Radio buttons (navigation) */
+    /* Radio buttons (navigation) — dots in theme primary color */
     [data-testid="stSidebar"] [role="radiogroup"] label {{ color: {th['text']} !important; }}
+    [data-testid="stSidebar"] [role="radio"] > div:first-child {{
+        border-color: {th['primary']} !important;
+    }}
+    [data-testid="stSidebar"] [role="radio"][aria-checked="true"] > div:first-child {{
+        background-color: {th['primary']} !important;
+        border-color: {th['primary']} !important;
+    }}
+    [data-testid="stSidebar"] [role="radio"][aria-checked="true"] > div:first-child > div {{
+        background-color: {th['primary']} !important;
+    }}
 
     /* Slider */
     [data-testid="stSlider"] > div > div > div > div {{ background: {th['slider']} !important; }}
@@ -259,11 +328,21 @@ def _apply_theme(club: str) -> None:
         background-color: {th['bg']} !important;
     }}
 
-    /* Expanders — themed border */
+    /* Expanders (competency sections) — same outlined style as buttons */
     [data-testid="stExpander"] {{
-        border: 1px solid {th['border']} !important;
+        border: 2px solid {th['btn_border']} !important;
         border-radius: 10px !important;
-        background: {th['card_bg']} !important;
+        background: {th['btn_bg']} !important;
+    }}
+    [data-testid="stExpander"] summary {{
+        color: {th['btn_text']} !important;
+        font-weight: 600 !important;
+    }}
+    [data-testid="stExpander"] summary span {{
+        color: {th['btn_text']} !important;
+    }}
+    [data-testid="stExpander"] svg {{
+        fill: {th['btn_text']} !important;
     }}
 
     /* Text inputs and text areas */
@@ -771,43 +850,6 @@ if _pending_draft_id and st.session_state.get("_loaded_draft") != _pending_draft
 with st.sidebar:
     st.markdown(f"**{t('logged_in_as', L)}:** {username}")
 
-    # ── Language flags ────────────────────────────────────────────────────
-    _FLAG_DIR = LOGO_DIR / "flags"
-    _FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
-    current_app_lang = _lang()
-    _sel_club = st.session_state.get("club_select", "FC Den Bosch")
-    _flag_accent = '#7a1a1a' if _sel_club == 'Pro Vercelli' else '#1a3370'
-
-    flag_cols = st.columns(len(_FLAGS))
-    for idx, (code, fname) in enumerate(_FLAGS.items()):
-        with flag_cols[idx]:
-            flag_path = _FLAG_DIR / fname
-            is_active = code == current_app_lang
-            if flag_path.exists():
-                opacity = "1.0" if is_active else "0.4"
-                border = f"3px solid {_flag_accent}" if is_active else "2px solid transparent"
-                b64 = _img_b64(flag_path)
-                st.markdown(
-                    f'<img src="data:image/png;base64,{b64}" '
-                    f'style="width:40px;height:28px;object-fit:cover;border-radius:4px;'
-                    f'opacity:{opacity};border:{border};display:block;margin:0 auto;"/>',
-                    unsafe_allow_html=True,
-                )
-            label = code if not flag_path.exists() else " "
-            st.markdown('<div class="flag-btn-hide">', unsafe_allow_html=True)
-            if st.button(label, key=f"flag_{code}", use_container_width=True):
-                if code != current_app_lang:
-                    # Preserve current club & language selections across lang switch
-                    _cur_club = st.session_state.get("club_select", "FC Den Bosch")
-                    _cur_lang = st.session_state.get("lang_select")
-                    st.session_state["app_lang"] = code
-                    st.session_state["club_select"] = _cur_club
-                    if _cur_lang:
-                        st.session_state["lang_select"] = _cur_lang
-                    st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-    L = _lang()
-    
     # ── Club & template language ─────────────────────────────────────────────
     club = st.selectbox(t("choose_club", L), CLUBS, key="club_select")
     available_langs = CLUB_LANGUAGES[club]
@@ -819,15 +861,21 @@ with st.sidebar:
     nav_options = [t("new_report", L), t("dashboard", L), t("upload_edit", L)]
     nav_keys    = ["New Report", "Dashboard", "Upload & Edit"]
 
+    # Handle programmatic navigation override
     nav_override = st.session_state.pop("_nav_override", None)
-    default_idx = 0
     if nav_override and nav_override in nav_keys:
-        default_idx = nav_keys.index(nav_override)
+        # Set nav_page to the translated label BEFORE the radio widget renders
+        target_idx = nav_keys.index(nav_override)
+        st.session_state["nav_page"] = nav_options[target_idx]
+
+    # If nav_page holds a stale translated value (from a different language), fix it
+    current_nav = st.session_state.get("nav_page")
+    if current_nav and current_nav not in nav_options:
+        st.session_state["nav_page"] = nav_options[0]
 
     selected_nav = st.radio(
         "Navigate",
         nav_options,
-        index=default_idx,
         key="nav_page",
         label_visibility="collapsed",
     )
@@ -844,6 +892,7 @@ with st.sidebar:
         st.rerun()
 
 _apply_theme(club)
+_render_flags()
 _render_header(club, lang)
 
 
