@@ -775,7 +775,7 @@ with st.sidebar:
     <style>
     .flag-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
     .flag-box {
-        width: 48px; height: 2px; border-radius: 6px; cursor: pointer;
+        width: 48px; height: 48px; border-radius: 6px; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
         overflow: hidden; transition: opacity 0.15s;
     }
