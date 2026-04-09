@@ -297,10 +297,22 @@ def _apply_theme(club: str) -> None:
         display: flex; padding: 5px 0; border-bottom: 1px solid {th['border_light']};
     }}
     .player-info-card .info-row:last-child {{ border-bottom: none; }}
-    .inline-edit-hint {{
-        font-size: 0.8rem; color: {th['primary_light']}; cursor: pointer; opacity: 0.7;
+    /* Small edit button (pencil) aligned bottom-right of cards */
+    .edit-btn-small button {{
+        background: {th['card_bg']} !important;
+        border: 1px solid {th['border_light']} !important;
+        color: {th['primary_light']} !important;
+        font-size: 0.85rem !important;
+        padding: 2px 8px !important;
+        min-height: 0 !important;
+        border-radius: 6px !important;
+        opacity: 0.7;
     }}
-    .inline-edit-hint:hover {{ opacity: 1; }}
+    .edit-btn-small button:hover {{
+        opacity: 1;
+        background: {th['bg']} !important;
+    }}
+    .edit-btn-small {{ margin-top: -12px; }}
     .player-info-card .info-label {{
         font-weight: 700; color: {th['label']}; min-width: 140px; font-size: 0.9rem;
     }}
@@ -314,14 +326,23 @@ def _apply_theme(club: str) -> None:
         border-radius: 10px !important;
     }}
 
-    /* Flag buttons — transparent so flag image shows through */
-    [data-testid="stSidebar"] .flag-box + div button,
-    [data-testid="stSidebar"] div:has(> .flag-box) + div button {{
+    /* Flag buttons — invisible so only the flag image is visible */
+    [data-testid="stSidebar"] [data-testid="stButton"]:has(button[key^="flag_"]) button,
+    [data-testid="stSidebar"] button[kind="secondary"] {{
+        /* Fallback: hide all secondary buttons in flag columns */
+    }}
+    .flag-btn-hide button {{
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        min-height: 40px !important;
         color: transparent !important;
+        padding: 2px !important;
+        min-height: 0 !important;
+        height: 20px !important;
+    }}
+    .flag-btn-hide button:hover {{
+        background: transparent !important;
+        border: none !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -520,8 +541,6 @@ def _render_player_card(pdata: dict, editable: bool = True, key_prefix: str = "p
     is_editing = st.session_state.get(edit_key, False)
 
     if editable and is_editing:
-        # Editable form inside card-like container
-        st.markdown('<div class="player-info-card">', unsafe_allow_html=True)
         pdata["name"] = st.text_input(
             "Name", value=pdata.get("name", ""), key=f"{key_prefix}_name",
         )
@@ -529,7 +548,6 @@ def _render_player_card(pdata: dict, editable: bool = True, key_prefix: str = "p
             pdata[data_key] = st.text_input(
                 t(label_key, L), value=pdata.get(data_key, ""), key=f"{key_prefix}_{data_key}",
             )
-        st.markdown('</div>', unsafe_allow_html=True)
         if st.button(f"💾 {t('save_info', L)}", key=f"{key_prefix}_save", type="primary"):
             st.session_state["player_data"] = pdata
             st.session_state[edit_key] = False
@@ -544,21 +562,16 @@ def _render_player_card(pdata: dict, editable: bool = True, key_prefix: str = "p
                 <div class="info-label">{t(label_key, L)}</div>
                 <div class="info-value">{value or '—'}</div>
             </div>"""
-        # Edit link rendered inside the card at bottom-right
-        if editable:
-            rows_html += f"""
-            <div style="text-align:right;padding-top:6px;">
-                <span class="inline-edit-hint">✏️ {t('edit_info', L)}</span>
-            </div>"""
         st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
 
         if editable:
-            # Invisible button overlapping the edit hint via negative margin
-            st.markdown('<div style="margin-top:-36px;text-align:right;">', unsafe_allow_html=True)
-            if st.button(f"✏️ {t('edit_info', L)}", key=f"{key_prefix}_edit"):
-                st.session_state[edit_key] = True
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            _, edit_col = st.columns([5, 1])
+            with edit_col:
+                st.markdown('<div class="edit-btn-small">', unsafe_allow_html=True)
+                if st.button("✏️", key=f"{key_prefix}_edit", help=t("edit_info", L)):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ─── Transfermarkt stats card ──────────────────────────────────────────────
@@ -588,7 +601,6 @@ def _render_stats_card(stats: dict, player_name: str = "", editable: bool = True
     is_editing = st.session_state.get(edit_key, False)
 
     if editable and is_editing:
-        st.markdown('<div class="player-info-card">', unsafe_allow_html=True)
         for group_label_key, fields in _STATS_FIELDS:
             st.markdown(f"**{t(group_label_key, L)}**")
             cols = st.columns(len(fields))
@@ -600,7 +612,6 @@ def _render_stats_card(stats: dict, player_name: str = "", editable: bool = True
                         min_value=0,
                         key=f"{key_prefix}_{data_key}",
                     )
-        st.markdown('</div>', unsafe_allow_html=True)
         if st.button(f"💾 {t('save_info', L)}", key=f"{key_prefix}_save", type="primary"):
             st.session_state["tm_stats"] = stats
             st.session_state[edit_key] = False
@@ -617,19 +628,16 @@ def _render_stats_card(stats: dict, player_name: str = "", editable: bool = True
                     <div class="info-label">{t(label_key, L)}</div>
                     <div class="info-value">{val}</div>
                 </div>"""
-        if editable:
-            rows_html += f"""
-            <div style="text-align:right;padding-top:6px;">
-                <span class="inline-edit-hint">✏️ {t('edit_info', L)}</span>
-            </div>"""
         st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
 
         if editable:
-            st.markdown('<div style="margin-top:-36px;text-align:right;">', unsafe_allow_html=True)
-            if st.button(f"✏️ {t('edit_info', L)}", key=f"{key_prefix}_edit"):
-                st.session_state[edit_key] = True
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            _, edit_col = st.columns([5, 1])
+            with edit_col:
+                st.markdown('<div class="edit-btn-small">', unsafe_allow_html=True)
+                if st.button("✏️", key=f"{key_prefix}_edit", help=t("edit_info", L)):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
 
 def _transfermarkt_section(player_name: str, player_club: str = "", key_prefix: str = "tm") -> dict | None:
@@ -753,8 +761,8 @@ _pending_draft_id = st.session_state.get("edit_draft_id")
 if _pending_draft_id and st.session_state.get("_loaded_draft") != _pending_draft_id:
     _pending_draft = storage.load_draft(username, _pending_draft_id)
     if _pending_draft:
-        st.session_state["club_select"] = _pending_draft["club"]
-        st.session_state["lang_select"] = _pending_draft["language"]
+        st.session_state["club_select"] = _pending_draft.get("club", "FC Den Bosch")
+        st.session_state["lang_select"] = _pending_draft.get("language", "NL")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -770,44 +778,34 @@ with st.sidebar:
     _sel_club = st.session_state.get("club_select", "FC Den Bosch")
     _flag_accent = '#7a1a1a' if _sel_club == 'Pro Vercelli' else '#1a3370'
 
-    # CSS to make flag buttons show the flag image inside
-    st.markdown("""
-    <style>
-    .flag-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
-    .flag-box {
-        width: 48px; height: 32px; border-radius: 6px; cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
-        overflow: hidden; transition: opacity 0.15s;
-    }
-    .flag-box img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
-    .flag-box:hover { opacity: 0.85; }
-    </style>
-    """, unsafe_allow_html=True)
-
     flag_cols = st.columns(len(_FLAGS))
     for idx, (code, fname) in enumerate(_FLAGS.items()):
         with flag_cols[idx]:
             flag_path = _FLAG_DIR / fname
             is_active = code == current_app_lang
-            border_css = f"3px solid {_flag_accent}" if is_active else "2px solid #d1d5db"
-            opacity = "1.0" if is_active else "0.45"
-            bg = _flag_accent if is_active else "#ffffff"
-
             if flag_path.exists():
+                opacity = "1.0" if is_active else "0.4"
+                border = f"3px solid {_flag_accent}" if is_active else "2px solid transparent"
                 b64 = _img_b64(flag_path)
-                # Flag image overlaid on top of button via negative margin
                 st.markdown(
-                    f'<div style="text-align:center;margin-bottom:-44px;position:relative;z-index:1;pointer-events:none;">'
-                    f'<div class="flag-box" style="margin:0 auto;border:{border_css};opacity:{opacity};background:{bg};">'
-                    f'<img src="data:image/png;base64,{b64}"/>'
-                    f'</div></div>',
+                    f'<img src="data:image/png;base64,{b64}" '
+                    f'style="width:40px;height:28px;object-fit:cover;border-radius:4px;'
+                    f'opacity:{opacity};border:{border};display:block;margin:0 auto;"/>',
                     unsafe_allow_html=True,
                 )
-            # Actual clickable button (transparent, behind the flag image)
-            if st.button(" ", key=f"flag_{code}", use_container_width=True):
+            label = code if not flag_path.exists() else " "
+            st.markdown('<div class="flag-btn-hide">', unsafe_allow_html=True)
+            if st.button(label, key=f"flag_{code}", use_container_width=True):
                 if code != current_app_lang:
+                    # Preserve current club & language selections across lang switch
+                    _cur_club = st.session_state.get("club_select", "FC Den Bosch")
+                    _cur_lang = st.session_state.get("lang_select")
                     st.session_state["app_lang"] = code
+                    st.session_state["club_select"] = _cur_club
+                    if _cur_lang:
+                        st.session_state["lang_select"] = _cur_lang
                     st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
     L = _lang()
     
     # ── Club & template language ─────────────────────────────────────────────
@@ -857,8 +855,7 @@ if page == "Dashboard":
     st.markdown("---")
 
     st.subheader(f"📝  {t('in_progress', L)}")
-    all_drafts = storage.list_drafts(username)
-    drafts = [d for d in all_drafts if d.get("club") == club]
+    drafts = storage.list_drafts(username)
     if not drafts:
         st.caption(t("no_drafts", L))
     else:
@@ -876,8 +873,7 @@ if page == "Dashboard":
             with c1:
                 if st.button(t("continue_editing", L), key=f"cont_{rid}", type="primary", use_container_width=True):
                     st.session_state["edit_draft_id"] = rid
-                    st.session_state["_nav_override"] = "New Report"
-                    # Clear nav_page so radio picks up the override index
+                    st.session_state["_nav_override"] = "Upload & Edit"
                     st.session_state.pop("nav_page", None)
                     st.rerun()
             with c2:
@@ -888,8 +884,7 @@ if page == "Dashboard":
     st.markdown("---")
 
     st.subheader(f"✅  {t('finished_reports', L)}")
-    all_finished = storage.list_finished(username)
-    finished = [f for f in all_finished if f.get("club") == club]
+    finished = storage.list_finished(username)
     if not finished:
         st.caption(t("no_finished", L))
     else:
@@ -925,28 +920,6 @@ if page == "Dashboard":
 
 elif page == "New Report":
     st.markdown("---")
-
-    # ── Load draft if continuing ──────────────────────────────────────────────
-    draft_id = st.session_state.pop("edit_draft_id", None)
-    if draft_id and st.session_state.get("_loaded_draft") != draft_id:
-        draft = storage.load_draft(username, draft_id)
-        if draft:
-            st.session_state["active_report_id"] = draft_id
-            # club_select and lang_select are set in the pre-load block above
-            pos_list = list(TEMPLATES.keys())
-            if draft["position"] in pos_list:
-                st.session_state["empty_template_select"] = pos_list.index(draft["position"])
-            st.session_state["empty_prev_key"] = f"{draft['club']}|{draft['language']}|{draft['position']}"
-            for i, v in enumerate(draft["star_values"]):
-                st.session_state[f"empty_{i}"] = float(v)
-            for i, c in enumerate(draft["comments"]):
-                st.session_state[f"empty_{i}_comment"] = c or ""
-            for i, vd in enumerate(draft.get("video_data", [])):
-                st.session_state[f"empty_{i}_video"] = vd
-            if draft.get("player_data"):
-                st.session_state["player_data"] = draft["player_data"]
-            st.session_state["_loaded_draft"] = draft_id
-            st.rerun()
 
     # ── SciSports player search ──────────────────────────────────────────────
     player_data = _scisports_section(key_prefix="sci")
@@ -995,12 +968,23 @@ elif page == "New Report":
     with col_save:
         if st.button(f"{t('save_draft', L)}", use_container_width=True):
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+            # Generate a PPTX snapshot so the draft can be resumed via Upload & Edit
+            with st.spinner(t("building_report", L)):
+                snapshot = fill_template(
+                    template_cfg, s, c, v,
+                    player_data=st.session_state.get("player_data"),
+                    tm_stats=st.session_state.get("tm_stats"),
+                )
+            snapshot_bytes = snapshot.getvalue()
             rid = storage.save_draft(
                 username,
                 st.session_state.get("active_report_id"),
                 template_name, club, lang, s, c, v,
                 source="empty",
+                upload_bytes=snapshot_bytes,
+                upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
                 player_data=st.session_state.get("player_data"),
+                tm_stats=st.session_state.get("tm_stats"),
             )
             st.session_state["active_report_id"] = rid
             st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
@@ -1016,11 +1000,7 @@ elif page == "New Report":
                 )
             pptx_bytes = output.getvalue()
 
-            rid = st.session_state.get("active_report_id") or storage.save_draft(
-                username, None, template_name, club, lang, s, c, v,
-                source="empty",
-                player_data=st.session_state.get("player_data"),
-            )
+            rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
             storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                   player_name=_current_player_name())
             st.session_state.pop("active_report_id", None)
@@ -1040,6 +1020,34 @@ elif page == "New Report":
 
 elif page == "Upload & Edit":
     st.markdown("---")
+
+    # ── Auto-load a draft PPTX when coming from "Continue Editing" ───────────
+    _edit_draft_id = st.session_state.pop("edit_draft_id", None)
+    if _edit_draft_id and st.session_state.get("_loaded_draft") != _edit_draft_id:
+        draft = storage.load_draft(username, _edit_draft_id)
+        if draft and draft.get("upload_bytes"):
+            file_bytes = draft["upload_bytes"]
+            with st.spinner(t("checking", L)):
+                check_result = check_template_compatibility(io.BytesIO(file_bytes))
+            fname = draft.get("upload_filename") or f"Draft_{draft.get('position','report')}.pptx"
+            st.session_state["upload_file_key"]     = f"draft_{_edit_draft_id}"
+            st.session_state["upload_bytes"]        = file_bytes
+            st.session_state["upload_filename"]     = fname
+            st.session_state["upload_check_result"] = check_result
+            st.session_state["upload_active_report_id"] = _edit_draft_id
+            for i, val in enumerate(check_result.get("current_star_values", [])):
+                st.session_state[f"upload_{i}"] = float(val)
+            for i, cmt in enumerate(check_result.get("current_comments", [])):
+                st.session_state[f"upload_{i}_comment"] = cmt or ""
+            for i, vid in enumerate(check_result.get("current_videos", [])):
+                st.session_state[f"upload_{i}_video"] = vid
+            # Restore player data & tm_stats from draft
+            if draft.get("player_data"):
+                st.session_state["player_data"] = draft["player_data"]
+            if draft.get("tm_stats"):
+                st.session_state["tm_stats"] = draft["tm_stats"]
+            st.session_state["_loaded_draft"] = _edit_draft_id
+
     st.caption(t("upload_caption", L))
 
     uploaded = st.file_uploader(t("upload_pptx", L), type=["pptx"], key="upload_widget")
@@ -1122,14 +1130,23 @@ elif page == "Upload & Edit":
         with col_save:
             if st.button(f"{t('save_draft', L)}", use_container_width=True, key="upload_save"):
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                # Generate updated PPTX snapshot for the draft
+                with st.spinner(t("filling", L)):
+                    _snap = fill_from_bytes(
+                        st.session_state["upload_bytes"], template_cfg, s, c, v,
+                        player_data=st.session_state.get("player_data"),
+                        tm_stats=st.session_state.get("tm_stats"),
+                    )
+                _snap_bytes = _snap.getvalue()
                 rid = storage.save_draft(
                     username,
                     st.session_state.get("upload_active_report_id"),
                     matched_name or "Unknown", detected_club, detected_lang, s, c, v,
                     source="upload",
-                    upload_bytes=st.session_state.get("upload_bytes"),
+                    upload_bytes=_snap_bytes,
                     upload_filename=st.session_state.get("upload_filename"),
                     player_data=st.session_state.get("player_data"),
+                    tm_stats=st.session_state.get("tm_stats"),
                 )
                 st.session_state["upload_active_report_id"] = rid
                 st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
