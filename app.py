@@ -775,12 +775,12 @@ with st.sidebar:
     <style>
     .flag-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
     .flag-box {
-        width: 48px; height: 48px; border-radius: 6px; cursor: pointer;
+        width: 48px; height: 32px; border-radius: 6px; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
         overflow: hidden; transition: opacity 0.15s;
     }
     .flag-box img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
-    .flag-box:hover { opacity: 0.85; }
+    .flag-box:hover { opacity: 1.0; }
     </style>
     """, unsafe_allow_html=True)
 
