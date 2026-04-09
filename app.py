@@ -384,6 +384,12 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
     for i, var in enumerate(variables):
         video_key   = f"{key_prefix}_{i}_video"
         comment_key = f"{key_prefix}_{i}_comment"
+        # Handle pending accept BEFORE the text_area widget is instantiated
+        accept_flag = f"{key_prefix}_{i}_accept_pending"
+        if st.session_state.pop(accept_flag, None):
+            suggestion_key = f"{key_prefix}_{i}_suggestion"
+            st.session_state[comment_key] = st.session_state.get(suggestion_key, "")
+            st.session_state[suggestion_key] = ""
         if comment_key not in st.session_state:
             st.session_state[comment_key] = defaults_comments[i] if i < len(defaults_comments) else ""
         if video_key not in st.session_state:
@@ -431,8 +437,7 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
                 _, col_accept, col_discard, _ = st.columns([1, 1.5, 1.5, 1])
                 with col_accept:
                     if st.button(t("accept", L), key=f"{key_prefix}_{i}_accept", type="primary", use_container_width=True):
-                        st.session_state[comment_key] = suggestion
-                        st.session_state[suggestion_key] = ""
+                        st.session_state[f"{key_prefix}_{i}_accept_pending"] = True
                         st.rerun()
                 with col_discard:
                     if st.button(t("discard", L), key=f"{key_prefix}_{i}_discard", use_container_width=True):
@@ -638,6 +643,16 @@ if not st.session_state.get("authenticated"):
 username = st.session_state["username"]
 L = _lang()
 
+# ── Pre-load draft values BEFORE sidebar widgets render ─────────────────────
+# This prevents StreamlitAPIException when "Continue Editing" sets club/lang
+# after the selectbox widgets have already been instantiated.
+_pending_draft_id = st.session_state.get("edit_draft_id")
+if _pending_draft_id and st.session_state.get("_loaded_draft") != _pending_draft_id:
+    _pending_draft = storage.load_draft(username, _pending_draft_id)
+    if _pending_draft:
+        st.session_state["club_select"] = _pending_draft["club"]
+        st.session_state["lang_select"] = _pending_draft["language"]
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════════
@@ -802,8 +817,7 @@ elif page == "New Report":
         draft = storage.load_draft(username, draft_id)
         if draft:
             st.session_state["active_report_id"] = draft_id
-            st.session_state["club_select"] = draft["club"]
-            st.session_state["lang_select"] = draft["language"]
+            # club_select and lang_select are set in the pre-load block above
             pos_list = list(TEMPLATES.keys())
             if draft["position"] in pos_list:
                 st.session_state["empty_template_select"] = pos_list.index(draft["position"])
