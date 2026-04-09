@@ -214,3 +214,68 @@ def delete_finished(username: str, report_id: str) -> None:
     finished = _finished_dir(username)
     for f in finished.glob(f"{report_id}*"):
         f.unlink(missing_ok=True)
+
+
+# ─── Received (shared) report operations ────────────────────────────────────
+
+def _received_dir(username: str) -> Path:
+    d = _user_dir(username) / "received"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def share_report(
+    from_username: str,
+    to_username: str,
+    report_id: str,
+    position: str,
+    club: str,
+    language: str,
+    pptx_bytes: bytes,
+    player_name: str = "",
+) -> str:
+    """Copy a finished report into the recipient's received folder."""
+    received = _received_dir(to_username)
+    share_id = uuid.uuid4().hex[:12]
+
+    (received / f"{share_id}.pptx").write_bytes(pptx_bytes)
+
+    meta = {
+        "report_id": share_id,
+        "original_id": report_id,
+        "position": position,
+        "club": club,
+        "language": language,
+        "player_name": player_name,
+        "shared_by": from_username,
+        "shared_at": time.time(),
+    }
+    (received / f"{share_id}.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return share_id
+
+
+def list_received(username: str) -> list[dict]:
+    """Return all received reports, sorted by most recently shared."""
+    received = _received_dir(username)
+    results = []
+    for f in received.glob("*.json"):
+        try:
+            meta = json.loads(f.read_text(encoding="utf-8"))
+            results.append(meta)
+        except Exception:
+            pass
+    results.sort(key=lambda m: m.get("shared_at", 0), reverse=True)
+    return results
+
+
+def load_received_pptx(username: str, report_id: str) -> bytes | None:
+    p = _received_dir(username) / f"{report_id}.pptx"
+    return p.read_bytes() if p.exists() else None
+
+
+def delete_received(username: str, report_id: str) -> None:
+    received = _received_dir(username)
+    for f in received.glob(f"{report_id}*"):
+        f.unlink(missing_ok=True)

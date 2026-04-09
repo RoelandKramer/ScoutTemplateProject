@@ -17,21 +17,30 @@ import storage
 from i18n import t, APP_LANGUAGES
 
 # ─── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Scouting Report Platform", page_icon="", layout="centered")
+st.set_page_config(page_title="Scouting Report Platform", page_icon="", layout="wide")
 
 # Global CSS for flag buttons (must be present before any theme, e.g. on login page)
 st.markdown("""
 <style>
+/* Make the Streamlit button wrapper completely invisible and overlay the flag */
+.flag-btn-hide {
+    margin-top: -30px !important;   /* overlap the flag image above */
+    position: relative;
+    z-index: 2;
+}
 .flag-btn-hide button {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     color: transparent !important;
-    padding: 2px !important;
-    min-height: 0 !important;
-    height: 20px !important;
+    padding: 0 !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    width: 42px !important;
+    opacity: 0 !important;          /* fully invisible */
+    cursor: pointer !important;
 }
-.flag-btn-hide button:hover {
+.flag-btn-hide [data-testid="stBaseButton-secondary"] {
     background: transparent !important;
     border: none !important;
 }
@@ -111,12 +120,13 @@ def _render_flags():
                 b64 = _img_b64(flag_path)
                 st.markdown(
                     f'<img src="data:image/png;base64,{b64}" '
-                    f'style="width:36px;height:24px;object-fit:cover;border-radius:4px;'
-                    f'opacity:{opacity};border:{border};display:block;margin:0 auto 0 0;"/>',
+                    f'style="width:42px;height:28px;object-fit:cover;border-radius:5px;'
+                    f'opacity:{opacity};border:{border};display:block;cursor:pointer;"/>',
                     unsafe_allow_html=True,
                 )
+            # Invisible clickable button overlapping the flag image
             st.markdown('<div class="flag-btn-hide">', unsafe_allow_html=True)
-            if st.button(" " if flag_path.exists() else code, key=f"flag_{code}", use_container_width=True):
+            if st.button(".", key=f"flag_{code}"):
                 if code != current:
                     _cur_club = st.session_state.get("club_select", "FC Den Bosch")
                     _cur_lang = st.session_state.get("lang_select")
@@ -168,6 +178,14 @@ def improve_text(text: str) -> str:
 
 
 # ─── Authentication ──────────────────────────────────────────────────────────
+
+def _get_all_users() -> dict[str, dict]:
+    """Return all users from secrets as {username: {email, ...}}."""
+    try:
+        return dict(st.secrets.get("users", {}))
+    except Exception:
+        return {}
+
 
 def _authenticate(login_input: str, password: str) -> str | None:
     try:
@@ -405,24 +423,6 @@ def _apply_theme(club: str) -> None:
         border-radius: 10px !important;
     }}
 
-    /* Flag buttons — invisible so only the flag image is visible */
-    [data-testid="stSidebar"] [data-testid="stButton"]:has(button[key^="flag_"]) button,
-    [data-testid="stSidebar"] button[kind="secondary"] {{
-        /* Fallback: hide all secondary buttons in flag columns */
-    }}
-    .flag-btn-hide button {{
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        color: transparent !important;
-        padding: 2px !important;
-        min-height: 0 !important;
-        height: 20px !important;
-    }}
-    .flag-btn-hide button:hover {{
-        background: transparent !important;
-        border: none !important;
-    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -962,6 +962,40 @@ if page == "Dashboard":
                     storage.delete_finished(username, rid)
                     st.rerun()
 
+    st.markdown("---")
+
+    st.subheader(f"📨  {t('received_reports', L)}")
+    received = storage.list_received(username)
+    if not received:
+        st.caption(t("no_received", L))
+    else:
+        for r in received:
+            rid = r["report_id"]
+            title = _report_title(r)
+            shared_by = r.get("shared_by", "?")
+            shared_at = _ts_str(r.get("shared_at", 0))
+            st.markdown(
+                f"""<div class="report-card">
+                <h4>{title}</h4>
+                <div class="meta">{r.get('club','')} ({r.get('language','')}) · {t('shared_by', L)}: {shared_by} · {shared_at}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            c1, c2 = st.columns([2, 1])
+            with c1:
+                pptx_bytes = storage.load_received_pptx(username, rid)
+                if pptx_bytes:
+                    st.download_button(
+                        f"📥  {t('download_pptx', L)}", data=pptx_bytes,
+                        file_name=f"Received_{title.replace(' ','_').replace('—','_')}_{rid[:8]}.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key=f"dl_recv_{rid}", use_container_width=True,
+                    )
+            with c2:
+                if st.button(t("delete", L), key=f"del_recv_{rid}", use_container_width=True):
+                    storage.delete_received(username, rid)
+                    st.rerun()
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: New Report
@@ -1013,7 +1047,7 @@ elif page == "New Report":
 
     st.markdown("---")
 
-    col_save, col_gen = st.columns(2)
+    col_save, col_gen, col_share = st.columns(3)
     with col_save:
         if st.button(f"{t('save_draft', L)}", use_container_width=True):
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
@@ -1061,6 +1095,56 @@ elif page == "New Report":
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True,
             )
+
+    with col_share:
+        if st.button(f"{t('share', L)}", use_container_width=True, key="empty_share"):
+            st.session_state["_share_pending"] = "empty"
+
+    # ── Share dialog ────────────────────────────────────────────────────────
+    if st.session_state.get("_share_pending") == "empty":
+        all_users = _get_all_users()
+        other_scouts = [u for u in all_users if u != username]
+        if not other_scouts:
+            st.warning("No other scouts available.")
+            st.session_state.pop("_share_pending", None)
+        else:
+            sel_scout = st.selectbox(t("select_scout", L), other_scouts, key="empty_share_scout")
+            c_send, c_cancel = st.columns(2)
+            with c_send:
+                if st.button(t("send_report", L), type="primary", use_container_width=True, key="empty_share_send"):
+                    s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+                    with st.spinner(t("building_report", L)):
+                        output = fill_template(
+                            template_cfg, s, c, v,
+                            player_data=st.session_state.get("player_data"),
+                            tm_stats=st.session_state.get("tm_stats"),
+                        )
+                    pptx_bytes = output.getvalue()
+                    rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
+                    storage.share_report(
+                        from_username=username,
+                        to_username=sel_scout,
+                        report_id=rid,
+                        position=template_name,
+                        club=club,
+                        language=lang,
+                        pptx_bytes=pptx_bytes,
+                        player_name=_current_player_name(),
+                    )
+                    st.session_state.pop("_share_pending", None)
+                    # mailto link
+                    scout_email = all_users[sel_scout].get("email", "")
+                    player = _current_player_name() or template_name
+                    if scout_email:
+                        import urllib.parse
+                        subject = urllib.parse.quote(f"Scout Report: {player}")
+                        body = urllib.parse.quote(f"Hi {sel_scout},\n\nI've shared a scouting report for {player} with you on the platform.\n\nBest,\n{username}")
+                        st.markdown(f'<a href="mailto:{scout_email}?subject={subject}&body={body}" target="_blank">📧 {t("send_report", L)} via email</a>', unsafe_allow_html=True)
+                    st.success(t("report_shared", L).format(name=sel_scout))
+            with c_cancel:
+                if st.button("Cancel", use_container_width=True, key="empty_share_cancel"):
+                    st.session_state.pop("_share_pending", None)
+                    st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1153,15 +1237,17 @@ elif page == "Upload & Edit":
             f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
-        # ── Player info section for Upload & Edit ────────────────────────────
+        # ── Player info section for Upload & Edit (read-only, no search) ─────
         st.markdown("---")
-        upload_player_data = _scisports_section(key_prefix="upload_sci")
-
-        # ── Transfermarkt stats for Upload & Edit ───────────────────────────
-        _up_pname = (upload_player_data or {}).get("name", "")
-        _up_pclub = (upload_player_data or {}).get("club", "")
-        if _up_pname:
-            _transfermarkt_section(_up_pname, _up_pclub, key_prefix="upload_tm")
+        upload_player_data = st.session_state.get("player_data")
+        if upload_player_data:
+            _render_player_card(upload_player_data, editable=True, key_prefix="upload_sci_card")
+            _up_pname = upload_player_data.get("name", "")
+            _up_pclub = upload_player_data.get("club", "")
+            if _up_pname:
+                tm_stats = st.session_state.get("tm_stats")
+                if tm_stats:
+                    _render_stats_card(tm_stats, _up_pname, editable=True, key_prefix="upload_tm_card")
 
         st.markdown("---")
         st.subheader(t("adjust_competencies", L))
@@ -1175,7 +1261,7 @@ elif page == "Upload & Edit":
         )
 
         st.markdown("---")
-        col_save, col_gen = st.columns(2)
+        col_save, col_gen, col_share = st.columns(3)
         with col_save:
             if st.button(f"{t('save_draft', L)}", use_container_width=True, key="upload_save"):
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
@@ -1231,3 +1317,54 @@ elif page == "Upload & Edit":
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     use_container_width=True,
                 )
+
+        with col_share:
+            if st.button(f"{t('share', L)}", use_container_width=True, key="upload_share"):
+                st.session_state["_share_pending"] = "upload"
+
+        # ── Share dialog ────────────────────────────────────────────────────
+        if st.session_state.get("_share_pending") == "upload":
+            all_users = _get_all_users()
+            other_scouts = [u for u in all_users if u != username]
+            if not other_scouts:
+                st.warning("No other scouts available.")
+                st.session_state.pop("_share_pending", None)
+            else:
+                sel_scout = st.selectbox(t("select_scout", L), other_scouts, key="upload_share_scout")
+                c_send, c_cancel = st.columns(2)
+                with c_send:
+                    if st.button(t("send_report", L), type="primary", use_container_width=True, key="upload_share_send"):
+                        s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                        with st.spinner(t("filling", L)):
+                            output = fill_from_bytes(
+                                st.session_state["upload_bytes"], template_cfg, s, c, v,
+                                player_data=st.session_state.get("player_data"),
+                                tm_stats=st.session_state.get("tm_stats"),
+                            )
+                        pptx_bytes = output.getvalue()
+                        pos = matched_name or "Unknown"
+                        rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
+                        storage.share_report(
+                            from_username=username,
+                            to_username=sel_scout,
+                            report_id=rid,
+                            position=pos,
+                            club=detected_club,
+                            language=detected_lang,
+                            pptx_bytes=pptx_bytes,
+                            player_name=_current_player_name(),
+                        )
+                        st.session_state.pop("_share_pending", None)
+                        # mailto link
+                        scout_email = all_users[sel_scout].get("email", "")
+                        player = _current_player_name() or pos
+                        if scout_email:
+                            import urllib.parse
+                            subject = urllib.parse.quote(f"Scout Report: {player}")
+                            body = urllib.parse.quote(f"Hi {sel_scout},\n\nI've shared a scouting report for {player} with you on the platform.\n\nBest,\n{username}")
+                            st.markdown(f'<a href="mailto:{scout_email}?subject={subject}&body={body}" target="_blank">📧 {t("send_report", L)} via email</a>', unsafe_allow_html=True)
+                        st.success(t("report_shared", L).format(name=sel_scout))
+                with c_cancel:
+                    if st.button("Cancel", use_container_width=True, key="upload_share_cancel"):
+                        st.session_state.pop("_share_pending", None)
+                        st.rerun()
