@@ -780,7 +780,7 @@ with st.sidebar:
         overflow: hidden; transition: opacity 0.15s;
     }
     .flag-box img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
-    .flag-box:hover { opacity: 1.0; }
+    .flag-box:hover { opacity: 0.0; }
     </style>
     """, unsafe_allow_html=True)
 
