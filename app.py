@@ -763,53 +763,85 @@ if _pending_draft_id and st.session_state.get("_loaded_draft") != _pending_draft
 with st.sidebar:
     st.markdown(f"**{t('logged_in_as', L)}:** {username}")
 
-    # ── Language flags ────────────────────────────────────────────────────
     _FLAG_DIR = LOGO_DIR / "flags"
     _FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
-    current_app_lang = _lang()
     _sel_club = st.session_state.get("club_select", "FC Den Bosch")
-    _flag_accent = '#7a1a1a' if _sel_club == 'Pro Vercelli' else '#1a3370'
+    _flag_accent = "#7a1a1a" if _sel_club == "Pro Vercelli" else "#1a3370"
 
-    # CSS to make flag buttons show the flag image inside
-    st.markdown("""
-    <style>
-    .flag-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
-    .flag-box {
-        width: 48px; height: 32px; border-radius: 6px; cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
-        overflow: hidden; transition: opacity 0.15s;
-    }
-    .flag-box img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
-    .flag-box:hover { opacity: 0.0; }
-    </style>
-    """, unsafe_allow_html=True)
+    # Sync language from query params -> session state
+    qp_lang = st.query_params.get("lang")
+    if qp_lang in _FLAGS and qp_lang != st.session_state.get("app_lang"):
+        st.session_state["app_lang"] = qp_lang
 
-    flag_cols = st.columns(len(_FLAGS))
-    for idx, (code, fname) in enumerate(_FLAGS.items()):
-        with flag_cols[idx]:
-            flag_path = _FLAG_DIR / fname
-            is_active = code == current_app_lang
-            border_css = f"3px solid {_flag_accent}" if is_active else "2px solid #d1d5db"
-            opacity = "1.0" if is_active else "0.45"
-            bg = _flag_accent if is_active else "#ffffff"
+    current_app_lang = _lang()
 
-            if flag_path.exists():
-                b64 = _img_b64(flag_path)
-                # Flag image overlaid on top of button via negative margin
-                st.markdown(
-                    f'<div style="text-align:center;margin-bottom:-44px;position:relative;z-index:1;pointer-events:none;">'
-                    f'<div class="flag-box" style="margin:0 auto;border:{border_css};opacity:{opacity};background:{bg};">'
-                    f'<img src="data:image/png;base64,{b64}"/>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-            # Actual clickable button (transparent, behind the flag image)
-            if st.button(" ", key=f"flag_{code}", use_container_width=True):
-                if code != current_app_lang:
-                    st.session_state["app_lang"] = code
-                    st.rerun()
+    st.markdown(
+        """
+        <style>
+        .flag-row {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .flag-link {
+            text-decoration: none;
+        }
+        .flag-box {
+            width: 48px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            transition: opacity 0.15s, transform 0.15s;
+            background: white;
+        }
+        .flag-box:hover {
+            opacity: 0.85;
+            transform: scale(1.03);
+        }
+        .flag-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 4px;
+            display: block;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    flag_html = ['<div class="flag-row">']
+    for code, fname in _FLAGS.items():
+        flag_path = _FLAG_DIR / fname
+        if not flag_path.exists():
+            continue
+
+        b64 = _img_b64(flag_path)
+        is_active = code == current_app_lang
+        border_css = f"3px solid {_flag_accent}" if is_active else "2px solid #d1d5db"
+        opacity = "1.0" if is_active else "0.45"
+        bg = _flag_accent if is_active else "#ffffff"
+
+        flag_html.append(
+            f"""
+            <a class="flag-link" href="?lang={code}">
+                <div class="flag-box" style="border:{border_css};opacity:{opacity};background:{bg};">
+                    <img src="data:image/png;base64,{b64}" alt="{code}">
+                </div>
+            </a>
+            """
+        )
+
+    flag_html.append("</div>")
+    st.markdown("".join(flag_html), unsafe_allow_html=True)
+
     L = _lang()
-
     # ── Club & template language ─────────────────────────────────────────────
     club = st.selectbox(t("choose_club", L), CLUBS, key="club_select")
     available_langs = CLUB_LANGUAGES[club]
