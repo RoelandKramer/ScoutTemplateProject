@@ -35,12 +35,15 @@ POSITION_ABBREV: Dict[str, str] = {
 SCISPORTS_TO_TEMPLATE: Dict[str, str] = {
     "Goalkeeper": "Goalkeeper",
     "RightBack": "Wingback", "RightFullback": "Wingback", "LeftBack": "Wingback",
-    "CentreBack": "Centerback",
-    "DefensiveMidfield": "Deep Lying Playmaker",
-    "CentreMidfield": "Box-to-Box Midfielder",
-    "AttackingMidfield": "Scoring 10",
-    "RightWing": "Dribbling Winger", "LeftWing": "Dribbling Winger",
-    "CentreForward": "Finisher", "Striker": "Finisher",
+    "Right Back": "Wingback", "Left Back": "Wingback",
+    "CentreBack": "Centerback", "Centre back": "Centerback", "Centre Back": "Centerback",
+    "DefensiveMidfield": "Deep Lying Playmaker", "Defensive midfield": "Deep Lying Playmaker", "Defensive Midfield": "Deep Lying Playmaker",
+    "CentreMidfield": "Box-to-Box Midfielder", "Centre midfield": "Box-to-Box Midfielder", "Centre Midfield": "Box-to-Box Midfielder",
+    "AttackingMidfield": "Scoring 10", "Attacking midfield": "Scoring 10", "Attacking Midfield": "Scoring 10",
+    "RightWing": "Dribbling Winger", "Right Wing": "Dribbling Winger",
+    "LeftWing": "Dribbling Winger", "Left Wing": "Dribbling Winger",
+    "CentreForward": "Finisher", "Centre forward": "Finisher", "Centre Forward": "Finisher",
+    "Striker": "Finisher",
 }
 
 

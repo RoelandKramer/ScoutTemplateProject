@@ -234,12 +234,18 @@ def _apply_theme(club: str) -> None:
     div.stButton > button:hover {{
         background-color: {th['bg']} !important; color: {th['primary']} !important;
     }}
-    /* Primary buttons — filled */
-    div.stButton > button[kind="primary"] {{
+    /* Primary buttons — filled (white text) */
+    div.stButton > button[kind="primary"],
+    div.stButton > button[kind="primary"] span,
+    div.stButton > button[kind="primary"] p,
+    [data-testid="stFormSubmitButton"] > button,
+    [data-testid="stFormSubmitButton"] > button span,
+    [data-testid="stFormSubmitButton"] > button p {{
         background-color: {th['btn_primary_bg']} !important; color: {th['btn_primary_text']} !important;
         border: 2px solid {th['btn_primary_bg']} !important;
     }}
-    div.stButton > button[kind="primary"]:hover {{
+    div.stButton > button[kind="primary"]:hover,
+    [data-testid="stFormSubmitButton"] > button:hover {{
         background-color: {th['primary_hover']} !important; color: #ffffff !important;
         border-color: {th['primary_hover']} !important;
     }}
@@ -639,18 +645,39 @@ L = _lang()
 with st.sidebar:
     st.markdown(f"**{t('logged_in_as', L)}:** {username}")
 
-    # ── Language flags ───────────────────────────────────────────────────────
-    st.caption(t("choose_language", L))
-    _FLAG_MAP = {"NL": "NL", "EN": "ENG", "IT": "ITA", "ZH": "CH"}
+    # ── Language flags (images with button fallback) ────────────────────────
+    _FLAG_DIR = LOGO_DIR / "flags"
+    _FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
     current_app_lang = _lang()
-    flag_cols = st.columns(len(_FLAG_MAP))
-    for idx, (code, label) in enumerate(_FLAG_MAP.items()):
+
+    flag_cols = st.columns(len(_FLAGS))
+    for idx, (code, fname) in enumerate(_FLAGS.items()):
         with flag_cols[idx]:
-            btn_type = "primary" if code == current_app_lang else "secondary"
-            if st.button(label, key=f"flag_{code}", type=btn_type, use_container_width=True):
-                if code != current_app_lang:
-                    st.session_state["app_lang"] = code
-                    st.rerun()
+            flag_path = _FLAG_DIR / fname
+            is_active = code == current_app_lang
+            if flag_path.exists():
+                # Show flag image; active flag is full opacity, others dimmed
+                opacity = "1.0" if is_active else "0.4"
+                _sel_club = st.session_state.get("club_select", "FC Den Bosch")
+                accent = '#7a1a1a' if _sel_club == 'Pro Vercelli' else '#1a3370'
+                border = f"3px solid {accent}" if is_active else "3px solid transparent"
+                st.markdown(
+                    f'<img src="data:image/png;base64,{_img_b64(flag_path)}" '
+                    f'style="width:100%;max-width:40px;border-radius:4px;opacity:{opacity};border:{border};"/>',
+                    unsafe_allow_html=True,
+                )
+                # Small invisible-looking button below
+                if st.button(" ", key=f"flag_{code}", use_container_width=True):
+                    if code != current_app_lang:
+                        st.session_state["app_lang"] = code
+                        st.rerun()
+            else:
+                # Fallback: text button if no flag image
+                btn_type = "primary" if is_active else "secondary"
+                if st.button(code, key=f"flag_{code}", type=btn_type, use_container_width=True):
+                    if code != current_app_lang:
+                        st.session_state["app_lang"] = code
+                        st.rerun()
     L = _lang()
 
     # ── Club & template language ─────────────────────────────────────────────
