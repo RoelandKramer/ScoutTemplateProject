@@ -17,7 +17,7 @@ import storage
 from i18n import t, APP_LANGUAGES
 
 # ─── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Scouting Report Platform", page_icon="", layout="wide")
+st.set_page_config(page_title="Scouting Pro", page_icon="+", layout="wide")
 
 # Global CSS for flag buttons (must be present before any theme, e.g. on login page)
 st.markdown("""
