@@ -19,31 +19,13 @@ from i18n import t, APP_LANGUAGES
 # ─── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Scouting Report Platform", page_icon="", layout="wide")
 
-# Global CSS for flag buttons (must be present before any theme, e.g. on login page)
+# Global CSS for flag row (flags are clickable <a> links — no Streamlit button)
 st.markdown("""
 <style>
-/* Make the Streamlit button wrapper completely invisible and overlay the flag */
-.flag-btn-hide {
-    margin-top: -30px !important;   /* overlap the flag image above */
-    position: relative;
-    z-index: 2;
-}
-.flag-btn-hide button {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    color: transparent !important;
-    padding: 0 !important;
-    min-height: 28px !important;
-    height: 28px !important;
-    width: 42px !important;
-    opacity: 0 !important;          /* fully invisible */
-    cursor: pointer !important;
-}
-.flag-btn-hide [data-testid="stBaseButton-secondary"] {
-    background: transparent !important;
-    border: none !important;
-}
+.flag-row { display:flex; gap:14px; padding:8px 0 4px 0; align-items:center; }
+.flag-row a { text-decoration:none !important; display:inline-block; line-height:0; }
+.flag-row img { display:block; transition: transform 0.12s ease, opacity 0.12s ease; }
+.flag-row a:hover img { transform: scale(1.08); opacity: 1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,37 +87,51 @@ _FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
 
 
 def _render_flags():
-    """Render language flag buttons at the top-left corner. Works on any page."""
+    """Render language flags as clickable <a> links (no Streamlit button chrome)."""
+    # ── Handle click via query-param ────────────────────────────────────────
+    set_lang = st.query_params.get("setlang")
+    if set_lang and set_lang in _FLAGS:
+        current_lang = _lang()
+        if set_lang != current_lang:
+            _cur_club = st.session_state.get("club_select", "FC Den Bosch")
+            _cur_lang_sel = st.session_state.get("lang_select")
+            st.session_state["app_lang"] = set_lang
+            st.session_state["club_select"] = _cur_club
+            if _cur_lang_sel:
+                st.session_state["lang_select"] = _cur_lang_sel
+        # Clear setlang but preserve the session token so the user stays logged in
+        token = st.query_params.get("s")
+        st.query_params.clear()
+        if token:
+            st.query_params["s"] = token
+        st.rerun()
+
     current = _lang()
     _club = st.session_state.get("club_select", "FC Den Bosch")
     accent = "#7a1a1a" if _club == "Pro Vercelli" else "#1a3370"
-    cols = st.columns([1, 1, 1, 1, 4])  # 4 flag slots + spacer
-    for idx, (code, fname) in enumerate(_FLAGS.items()):
-        with cols[idx]:
-            flag_path = _FLAG_DIR / fname
-            is_active = code == current
-            if flag_path.exists():
-                opacity = "1.0" if is_active else "0.35"
-                border = f"3px solid {accent}" if is_active else "2px solid transparent"
-                b64 = _img_b64(flag_path)
-                st.markdown(
-                    f'<img src="data:image/png;base64,{b64}" '
-                    f'style="width:42px;height:28px;object-fit:cover;border-radius:5px;'
-                    f'opacity:{opacity};border:{border};display:block;cursor:pointer;"/>',
-                    unsafe_allow_html=True,
-                )
-            # Invisible clickable button overlapping the flag image
-            st.markdown('<div class="flag-btn-hide">', unsafe_allow_html=True)
-            if st.button(".", key=f"flag_{code}"):
-                if code != current:
-                    _cur_club = st.session_state.get("club_select", "FC Den Bosch")
-                    _cur_lang = st.session_state.get("lang_select")
-                    st.session_state["app_lang"] = code
-                    st.session_state["club_select"] = _cur_club
-                    if _cur_lang:
-                        st.session_state["lang_select"] = _cur_lang
-                    st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    token = st.query_params.get("s", "")
+
+    parts = ['<div class="flag-row">']
+    for code, fname in _FLAGS.items():
+        flag_path = _FLAG_DIR / fname
+        if not flag_path.exists():
+            continue
+        b64 = _img_b64(flag_path)
+        is_active = code == current
+        opacity = "1.0" if is_active else "0.40"
+        border = f"3px solid {accent}" if is_active else "2px solid transparent"
+        href = f"?setlang={code}"
+        if token:
+            href += f"&s={token}"
+        parts.append(
+            f'<a href="{href}" title="{code}" target="_self">'
+            f'<img src="data:image/png;base64,{b64}" '
+            f'style="width:46px;height:30px;object-fit:cover;border-radius:6px;'
+            f'opacity:{opacity};border:{border};"/>'
+            f'</a>'
+        )
+    parts.append('</div>')
+    st.markdown("".join(parts), unsafe_allow_html=True)
 
 
 # ─── AI text improvement ────────────────────────────────────────────────────
