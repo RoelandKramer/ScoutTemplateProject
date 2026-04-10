@@ -86,26 +86,33 @@ _FLAG_DIR = Path(__file__).parent / "Logo's" / "flags"
 _FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
 
 
-def _render_flags():
-    """Render language flags as clickable <a> links (no Streamlit button chrome)."""
-    # ── Handle click via query-param ────────────────────────────────────────
-    set_lang = st.query_params.get("setlang")
-    if set_lang and set_lang in _FLAGS:
-        current_lang = _lang()
-        if set_lang != current_lang:
-            _cur_club = st.session_state.get("club_select", "FC Den Bosch")
-            _cur_lang_sel = st.session_state.get("lang_select")
-            st.session_state["app_lang"] = set_lang
-            st.session_state["club_select"] = _cur_club
-            if _cur_lang_sel:
-                st.session_state["lang_select"] = _cur_lang_sel
-        # Clear setlang but preserve the session token so the user stays logged in
-        token = st.query_params.get("s")
-        st.query_params.clear()
-        if token:
-            st.query_params["s"] = token
-        st.rerun()
+def _process_setlang_param():
+    """Apply ?setlang=XX to session_state BEFORE any widgets are instantiated.
 
+    MUST run at the very top of the script. Writing to widget-bound keys
+    (club_select / lang_select) after the sidebar widgets exist would raise
+    StreamlitAPIException, so we only touch `app_lang` here.
+    """
+    set_lang = st.query_params.get("setlang")
+    if not (set_lang and set_lang in _FLAGS):
+        return
+    if set_lang != st.session_state.get("app_lang", "EN"):
+        st.session_state["app_lang"] = set_lang
+    # Strip ?setlang but preserve the session token so the user stays logged in
+    token = st.query_params.get("s")
+    st.query_params.clear()
+    if token:
+        st.query_params["s"] = token
+    st.rerun()
+
+
+def _render_flags():
+    """Render language flags as clickable <a> links (no Streamlit button chrome).
+
+    This function is purely presentational — the click is handled by the
+    browser navigating to ?setlang=XX, which is then processed at the top of
+    the script by `_process_setlang_param()`.
+    """
     current = _lang()
     _club = st.session_state.get("club_select", "FC Den Bosch")
     accent = "#7a1a1a" if _club == "Pro Vercelli" else "#1a3370"
@@ -816,6 +823,9 @@ def _scisports_section(key_prefix: str = "sci") -> dict | None:
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGIN GATE — restore session on refresh
 # ══════════════════════════════════════════════════════════════════════════════
+
+# Process language switch via ?setlang=XX BEFORE any widgets are instantiated.
+_process_setlang_param()
 
 if not st.session_state.get("authenticated"):
     restored_user = _restore_session()
