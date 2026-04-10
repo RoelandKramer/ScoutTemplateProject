@@ -17,7 +17,7 @@ import storage
 from i18n import t, APP_LANGUAGES
 
 # ─── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Scouting Report Platform", page_icon="", layout="wide")
+st.set_page_config(page_title="Scouting Rapport Pro+", page_icon="", layout="wide")
 
 # Global CSS for flag row (flags are clickable <a> links — no Streamlit button)
 st.markdown("""

@@ -2,7 +2,7 @@
 
 TRANSLATIONS = {
     "EN": {
-        "scout_rating_tool": "Scouting Report Platform",
+        "scout_rating_tool": "Scouting Rapport Pro+",
         "logged_in_as": "Logged in as",
         "log_out": "Log out",
         "club": "Club",
@@ -65,7 +65,7 @@ TRANSLATIONS = {
         "discard": "Discard",
         "video_clip": "Upload video clip (mp4, mov, avi, wmv, mkv)",
         "rating": "Rating",
-        "login_title": "Scouting Report Platform",
+        "login_title": "Scouting Rapport Pro+",
         "login_subtitle": "FC Den Bosch & Pro Vercelli",
         "username": "Username or email",
         "password": "Password",
@@ -104,7 +104,7 @@ TRANSLATIONS = {
         "assists": "Assists",
     },
     "NL": {
-        "scout_rating_tool": "Scouting Rapport Platform",
+        "scout_rating_tool": "Scouting Rapport Pro+",
         "logged_in_as": "Ingelogd als",
         "log_out": "Uitloggen",
         "club": "Club",
@@ -167,7 +167,7 @@ TRANSLATIONS = {
         "discard": "Verwerpen",
         "video_clip": "Upload videoclip (mp4, mov, avi, wmv, mkv)",
         "rating": "Beoordeling",
-        "login_title": "Scouting Rapport Platform",
+        "login_title": "Scouting Rapport Pro+",
         "login_subtitle": "FC Den Bosch & Pro Vercelli",
         "username": "Gebruikersnaam of e-mail",
         "password": "Wachtwoord",
@@ -206,7 +206,7 @@ TRANSLATIONS = {
         "assists": "Assists",
     },
     "IT": {
-        "scout_rating_tool": "Piattaforma Report Scouting",
+        "scout_rating_tool": "Scouting Rapport Pro+",
         "logged_in_as": "Connesso come",
         "log_out": "Esci",
         "club": "Club",
@@ -269,7 +269,7 @@ TRANSLATIONS = {
         "discard": "Scarta",
         "video_clip": "Carica video (mp4, mov, avi, wmv, mkv)",
         "rating": "Valutazione",
-        "login_title": "Piattaforma Report Scouting",
+        "login_title": "Scouting Rapport Pro+",
         "login_subtitle": "FC Den Bosch & Pro Vercelli",
         "username": "Nome utente o email",
         "password": "Password",
@@ -308,7 +308,7 @@ TRANSLATIONS = {
         "assists": "Assist",
     },
     "ZH": {
-        "scout_rating_tool": "球探报告平台",
+        "scout_rating_tool": "Scouting Rapport Pro+",
         "logged_in_as": "已登录为",
         "log_out": "退出",
         "club": "俱乐部",
@@ -371,7 +371,7 @@ TRANSLATIONS = {
         "discard": "放弃",
         "video_clip": "上传视频片段 (mp4, mov, avi, wmv, mkv)",
         "rating": "评分",
-        "login_title": "球探报告平台",
+        "login_title": "Scouting Rapport Pro+",
         "login_subtitle": "FC Den Bosch 与 Pro Vercelli",
         "username": "用户名或邮箱",
         "password": "密码",
