@@ -19,15 +19,8 @@ from i18n import t, APP_LANGUAGES
 # ─── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Scouting Rapport Pro+", page_icon="", layout="wide")
 
-# Global CSS for flag row (flags are clickable <a> links — no Streamlit button)
-st.markdown("""
-<style>
-.flag-row { display:flex; gap:14px; padding:8px 0 4px 0; align-items:center; }
-.flag-row a { text-decoration:none !important; display:inline-block; line-height:0; }
-.flag-row img { display:block; transition: transform 0.12s ease, opacity 0.12s ease; }
-.flag-row a:hover img { transform: scale(1.08); opacity: 1 !important; }
-</style>
-""", unsafe_allow_html=True)
+# (Flag CSS is emitted from _render_flags() — AFTER _apply_theme() — so it
+#  can override the theme's global button styles with higher specificity.)
 
 _VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024
 
@@ -86,39 +79,27 @@ _FLAG_DIR = Path(__file__).parent / "Logo's" / "flags"
 _FLAGS = {"NL": "nl.png", "EN": "en.png", "IT": "it.png", "ZH": "zh.png"}
 
 
-def _process_setlang_param():
-    """Apply ?setlang=XX to session_state BEFORE any widgets are instantiated.
-
-    MUST run at the very top of the script. Writing to widget-bound keys
-    (club_select / lang_select) after the sidebar widgets exist would raise
-    StreamlitAPIException, so we only touch `app_lang` here.
-    """
-    set_lang = st.query_params.get("setlang")
-    if not (set_lang and set_lang in _FLAGS):
-        return
-    if set_lang != st.session_state.get("app_lang", "EN"):
-        st.session_state["app_lang"] = set_lang
-    # Strip ?setlang but preserve the session token so the user stays logged in
-    token = st.query_params.get("s")
-    st.query_params.clear()
-    if token:
-        st.query_params["s"] = token
-    st.rerun()
-
-
 def _render_flags():
-    """Render language flags as clickable <a> links (no Streamlit button chrome).
+    """Render language flags as Streamlit buttons styled to look like ONLY the flag.
 
-    This function is purely presentational — the click is handled by the
-    browser navigating to ?setlang=XX, which is then processed at the top of
-    the script by `_process_setlang_param()`.
+    Using real st.button triggers a normal Streamlit rerun (not a browser
+    navigation), so session_state (club_select, nav_page, player_data, …) is
+    preserved across language switches. Each button is wrapped in a uniquely
+    classed div so we can set its CSS background-image to the flag PNG.
+
+    The CSS is emitted here — AFTER _apply_theme() has run — so its specificity
+    can win over the theme's generic `div.stButton > button` rules.
     """
     current = _lang()
     _club = st.session_state.get("club_select", "FC Den Bosch")
     accent = "#7a1a1a" if _club == "Pro Vercelli" else "#1a3370"
-    token = st.query_params.get("s", "")
 
-    parts = ['<div class="flag-row">']
+    # Emit one CSS block per flag with its background-image baked in.
+    css_parts = ["<style>"]
+    css_parts.append(
+        ".flag-row-wrap { display:flex; gap:10px; padding:4px 0 8px 0; }"
+        ".flag-row-wrap > div { flex: 0 0 auto !important; width: 56px !important; }"
+    )
     for code, fname in _FLAGS.items():
         flag_path = _FLAG_DIR / fname
         if not flag_path.exists():
@@ -127,18 +108,55 @@ def _render_flags():
         is_active = code == current
         opacity = "1.0" if is_active else "0.40"
         border = f"3px solid {accent}" if is_active else "2px solid transparent"
-        href = f"?setlang={code}"
-        if token:
-            href += f"&s={token}"
-        parts.append(
-            f'<a href="{href}" title="{code}" target="_self">'
-            f'<img src="data:image/png;base64,{b64}" '
-            f'style="width:46px;height:30px;object-fit:cover;border-radius:6px;'
-            f'opacity:{opacity};border:{border};"/>'
-            f'</a>'
-        )
-    parts.append('</div>')
-    st.markdown("".join(parts), unsafe_allow_html=True)
+        css_parts.append(f"""
+        .flag-btn-{code} div.stButton > button {{
+            background-image: url("data:image/png;base64,{b64}") !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            background-color: transparent !important;
+            color: transparent !important;
+            width: 48px !important;
+            min-width: 48px !important;
+            max-width: 48px !important;
+            height: 32px !important;
+            min-height: 32px !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: {border} !important;
+            border-radius: 6px !important;
+            box-shadow: none !important;
+            opacity: {opacity};
+            transition: opacity 0.12s ease, transform 0.12s ease;
+        }}
+        .flag-btn-{code} div.stButton > button p,
+        .flag-btn-{code} div.stButton > button span,
+        .flag-btn-{code} div.stButton > button div {{
+            color: transparent !important;
+            visibility: hidden !important;
+        }}
+        .flag-btn-{code} div.stButton > button:hover {{
+            opacity: 1.0 !important;
+            transform: scale(1.08);
+            background-color: transparent !important;
+            border-color: {accent} !important;
+        }}
+        """)
+    css_parts.append("</style>")
+    st.markdown("".join(css_parts), unsafe_allow_html=True)
+
+    # Now render the actual buttons, each wrapped in its unique class div.
+    st.markdown('<div class="flag-row-wrap">', unsafe_allow_html=True)
+    cols = st.columns([1, 1, 1, 1, 10])
+    for idx, (code, _fname) in enumerate(_FLAGS.items()):
+        with cols[idx]:
+            st.markdown(f'<div class="flag-btn-{code}">', unsafe_allow_html=True)
+            clicked = st.button(" ", key=f"flagbtn_{code}", help=code)
+            st.markdown('</div>', unsafe_allow_html=True)
+            if clicked and code != current:
+                st.session_state["app_lang"] = code
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ─── AI text improvement ────────────────────────────────────────────────────
@@ -824,9 +842,6 @@ def _scisports_section(key_prefix: str = "sci") -> dict | None:
 # LOGIN GATE — restore session on refresh
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Process language switch via ?setlang=XX BEFORE any widgets are instantiated.
-_process_setlang_param()
-
 if not st.session_state.get("authenticated"):
     restored_user = _restore_session()
     if restored_user:
@@ -848,6 +863,17 @@ if _pending_draft_id and st.session_state.get("_loaded_draft") != _pending_draft
     if _pending_draft:
         st.session_state["club_select"] = _pending_draft.get("club", "FC Den Bosch")
         st.session_state["lang_select"] = _pending_draft.get("language", "NL")
+
+# Same pre-load for "Continue Editing" on a received report
+_pending_recv_id = st.session_state.get("edit_received_id")
+if _pending_recv_id and st.session_state.get("_loaded_draft") != f"recv_{_pending_recv_id}":
+    _recv_meta = next(
+        (m for m in storage.list_received(username) if m.get("report_id") == _pending_recv_id),
+        None,
+    )
+    if _recv_meta:
+        st.session_state["club_select"] = _recv_meta.get("club", "FC Den Bosch")
+        st.session_state["lang_select"] = _recv_meta.get("language", "NL")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -909,8 +935,25 @@ _render_header(club, lang)
 if page == "Dashboard":
     st.markdown("---")
 
+    # ── Filter by player name ───────────────────────────────────────────────
+    filter_query = st.text_input(
+        f"🔍 {t('filter_by_player', L)}",
+        key="dashboard_filter",
+        placeholder="…",
+    ).strip().lower()
+
+    def _matches_filter(meta: dict) -> bool:
+        if not filter_query:
+            return True
+        title = _report_title(meta).lower()
+        pname = (meta.get("player_name") or "").lower()
+        pd = meta.get("player_data") or {}
+        if isinstance(pd, dict):
+            pname = pname or pd.get("name", "").lower()
+        return filter_query in title or filter_query in pname
+
     st.subheader(f"📝  {t('in_progress', L)}")
-    drafts = storage.list_drafts(username)
+    drafts = [d for d in storage.list_drafts(username) if _matches_filter(d)]
     if not drafts:
         st.caption(t("no_drafts", L))
     else:
@@ -939,7 +982,7 @@ if page == "Dashboard":
     st.markdown("---")
 
     st.subheader(f"✅  {t('finished_reports', L)}")
-    finished = storage.list_finished(username)
+    finished = [f for f in storage.list_finished(username) if _matches_filter(f)]
     if not finished:
         st.caption(t("no_finished", L))
     else:
@@ -971,7 +1014,7 @@ if page == "Dashboard":
     st.markdown("---")
 
     st.subheader(f"📨  {t('received_reports', L)}")
-    received = storage.list_received(username)
+    received = [r for r in storage.list_received(username) if _matches_filter(r)]
     if not received:
         st.caption(t("no_received", L))
     else:
@@ -987,8 +1030,15 @@ if page == "Dashboard":
                 </div>""",
                 unsafe_allow_html=True,
             )
-            c1, c2 = st.columns([2, 1])
+            c1, c2, c3 = st.columns([2, 2, 1])
             with c1:
+                if st.button(t("continue_editing", L), key=f"cont_recv_{rid}", type="primary", use_container_width=True):
+                    st.session_state["edit_received_id"] = rid
+                    st.session_state["_nav_override"] = "Upload & Edit"
+                    st.session_state.pop("nav_page", None)
+                    st.session_state.pop("_loaded_draft", None)
+                    st.rerun()
+            with c2:
                 pptx_bytes = storage.load_received_pptx(username, rid)
                 if pptx_bytes:
                     st.download_button(
@@ -997,7 +1047,7 @@ if page == "Dashboard":
                         mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         key=f"dl_recv_{rid}", use_container_width=True,
                     )
-            with c2:
+            with c3:
                 if st.button(t("delete", L), key=f"del_recv_{rid}", use_container_width=True):
                     storage.delete_received(username, rid)
                     st.rerun()
@@ -1023,14 +1073,27 @@ elif page == "New Report":
 
     st.markdown("---")
 
-    # ── Role selector (pre-select from SciSports) ───────────────────────────
+    # ── Role selector (pre-select from SciSports, placeholder first) ────────
     template_names = list(TEMPLATES.keys())
-    if player_data and player_data.get("template_position"):
+    PLACEHOLDER = t("make_a_choice", L)
+    role_options = [PLACEHOLDER] + template_names
+    # If SciSports provided a template position, pre-select it on first render
+    if (
+        player_data
+        and player_data.get("template_position")
+        and "empty_template_select" not in st.session_state
+    ):
         sci_position = player_data["template_position"]
-        if sci_position in template_names and "empty_template_select" not in st.session_state:
-            st.session_state["empty_template_select"] = template_names.index(sci_position)
+        if sci_position in template_names:
+            st.session_state["empty_template_select"] = sci_position
 
-    template_name = st.selectbox(t("role_label", L), template_names, key="empty_template_select")
+    template_name = st.selectbox(t("role_label", L), role_options, key="empty_template_select")
+
+    # Until the user picks a real profile, show a prompt and skip the rest.
+    if template_name == PLACEHOLDER:
+        st.info(t("select_profile_prompt", L))
+        st.stop()
+
     template_cfg = get_template_config(template_name, club, lang)
 
     # Reset on club / language / position change
@@ -1186,6 +1249,37 @@ elif page == "Upload & Edit":
             if draft.get("tm_stats"):
                 st.session_state["tm_stats"] = draft["tm_stats"]
             st.session_state["_loaded_draft"] = _edit_draft_id
+
+    # ── Auto-load a received report PPTX when coming from "Continue Editing" ─
+    _edit_recv_id = st.session_state.pop("edit_received_id", None)
+    if _edit_recv_id and st.session_state.get("_loaded_draft") != f"recv_{_edit_recv_id}":
+        recv_bytes = storage.load_received_pptx(username, _edit_recv_id)
+        if recv_bytes:
+            with st.spinner(t("checking", L)):
+                check_result = check_template_compatibility(io.BytesIO(recv_bytes))
+            # Find the original meta so we preserve player_name for the title
+            recv_meta = next(
+                (m for m in storage.list_received(username) if m.get("report_id") == _edit_recv_id),
+                {},
+            )
+            fname = f"Received_{recv_meta.get('player_name', 'report')}.pptx"
+            st.session_state["upload_file_key"]     = f"recv_{_edit_recv_id}"
+            st.session_state["upload_bytes"]        = recv_bytes
+            st.session_state["upload_filename"]     = fname
+            st.session_state["upload_check_result"] = check_result
+            # No active_report_id — treat this as a fresh editing session so
+            # Save Draft creates a new draft owned by the current user.
+            st.session_state.pop("upload_active_report_id", None)
+            for i, val in enumerate(check_result.get("current_star_values", [])):
+                st.session_state[f"upload_{i}"] = float(val)
+            for i, cmt in enumerate(check_result.get("current_comments", [])):
+                st.session_state[f"upload_{i}_comment"] = cmt or ""
+            for i, vid in enumerate(check_result.get("current_videos", [])):
+                st.session_state[f"upload_{i}_video"] = vid
+            # Seed a player_data entry with at least the name from the meta
+            if recv_meta.get("player_name") and not st.session_state.get("player_data"):
+                st.session_state["player_data"] = {"name": recv_meta["player_name"]}
+            st.session_state["_loaded_draft"] = f"recv_{_edit_recv_id}"
 
     st.caption(t("upload_caption", L))
 
