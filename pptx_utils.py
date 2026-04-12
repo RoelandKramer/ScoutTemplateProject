@@ -138,6 +138,166 @@ def get_template_config(position: str, club: str, language: str) -> dict:
     }
 
 
+# ─── Competency description extraction ──────────────────────────────────────
+
+_desc_cache: dict[str, list[dict]] = {}   # keyed by template file path
+
+
+def extract_competency_descriptions(template_cfg: dict) -> list[dict]:
+    """Extract competency name, description and assessment criteria from the
+    explanation slide(s) of a template.
+
+    Templates with many variables (e.g. 9) may spread their competency
+    explanations across multiple slides immediately before the first detail
+    slide.  We scan every slide between the rating slide and the first detail
+    slide, skipping those that lack description text boxes (like the field
+    diagram and the calculation table).
+
+    Each explanation slide uses three kinds of text boxes:
+      - 'TextBox 17': competency **name**
+      - 'TextBox 30': short **description**
+      - 'TextBox 31': newline-separated **assessment criteria**
+
+    Returns one dict per variable, same order as the template's variable list:
+        [{"name": "Handling",
+          "description": "Defending a lot of balls",
+          "criteria": ["Inside 16m", "Outside 16m", ...]}, ...]
+    """
+    file_path = template_cfg["file"]
+    if file_path in _desc_cache:
+        return _desc_cache[file_path]
+
+    detail_slides = template_cfg.get("detail_slides", [])
+    if not detail_slides:
+        return []
+
+    try:
+        from pptx import Presentation as _Prs
+        prs = _Prs(file_path)
+    except Exception:
+        return []
+
+    # Scan all slides between rating_slide and first detail_slide that
+    # contain description text boxes (TextBox 30).
+    first_detail = detail_slides[0]
+    rating_idx = template_cfg.get("rating_slide_idx", 0)
+
+    names_boxes = []   # (left, top, text)  — global across explanation slides
+    desc_boxes = []
+    crit_boxes = []
+
+    for si in range(rating_idx + 1, first_detail):
+        if si < 0 or si >= len(prs.slides):
+            continue
+        slide = prs.slides[si]
+        has_descs = False
+        for sh in slide.shapes:
+            nm = sh.name or ""
+            if nm.startswith("TextBox 30") or nm == "TextBox 30":
+                has_descs = True
+                break
+        if not has_descs:
+            continue  # skip field diagram / table slides
+
+        # Use a large offset on `top` per slide so shapes from later slides
+        # sort after those on earlier slides.
+        slide_offset = si * 100 * 914400
+
+        for sh in slide.shapes:
+            if not sh.has_text_frame:
+                continue
+            txt = sh.text_frame.text.strip().strip("\v").strip("\r")
+            if not txt:
+                continue
+            nm = sh.name or ""
+            adj_top = sh.top + slide_offset
+            if nm.startswith("TextBox 17") or nm == "TextBox 17":
+                names_boxes.append((sh.left, adj_top, txt))
+            elif nm.startswith("TextBox 30") or nm == "TextBox 30":
+                desc_boxes.append((
+                    sh.left, adj_top,
+                    txt.strip("\u200b").strip('"').strip("\u201c\u201d").strip(),
+                ))
+            elif nm.startswith("TextBox 31") or nm == "TextBox 31":
+                items = [
+                    line.strip().strip("\u2022").strip()
+                    for line in txt.split("\n") if line.strip()
+                ]
+                crit_boxes.append((sh.left, adj_top, items))
+
+    variables = template_cfg["variables"]
+
+    # Sort name boxes in reading order (top then left)
+    names_boxes.sort(key=lambda b: (b[1], b[0]))
+
+    def _column_match(box_left, ref_left, tolerance=2 * 914400):
+        return abs(box_left - ref_left) < tolerance
+
+    results = []
+    matched_names: set[int] = set()
+
+    for var_name in variables:
+        var_lower = var_name.lower().strip()
+        best = None
+        # Exact match first
+        for i, (left, top, txt) in enumerate(names_boxes):
+            if i in matched_names:
+                continue
+            if txt.lower().strip() == var_lower:
+                best = i
+                break
+        # Substring match
+        if best is None:
+            for i, (left, top, txt) in enumerate(names_boxes):
+                if i in matched_names:
+                    continue
+                if var_lower in txt.lower() or txt.lower().strip() in var_lower:
+                    best = i
+                    break
+        # Take next unmatched in order
+        if best is None:
+            for i in range(len(names_boxes)):
+                if i not in matched_names:
+                    best = i
+                    break
+
+        if best is None:
+            results.append({"name": var_name, "description": "", "criteria": []})
+            continue
+
+        matched_names.add(best)
+        n_left, n_top, n_text = names_boxes[best]
+
+        # Find matching description (same column, closest below the name)
+        desc_text = ""
+        best_dist = float("inf")
+        for d_left, d_top, d_txt in desc_boxes:
+            if _column_match(d_left, n_left) and d_top > n_top:
+                dist = d_top - n_top
+                if dist < best_dist:
+                    best_dist = dist
+                    desc_text = d_txt
+
+        # Find matching criteria (same column, closest below the name)
+        crit_items: list[str] = []
+        best_dist = float("inf")
+        for c_left, c_top, c_items in crit_boxes:
+            if _column_match(c_left, n_left) and c_top > n_top:
+                dist = c_top - n_top
+                if dist < best_dist:
+                    best_dist = dist
+                    crit_items = c_items
+
+        results.append({
+            "name": n_text,
+            "description": desc_text,
+            "criteria": crit_items,
+        })
+
+    _desc_cache[file_path] = results
+    return results
+
+
 # ─── Star detection ──────────────────────────────────────────────────────────
 
 def _is_star_shape(shape) -> bool:

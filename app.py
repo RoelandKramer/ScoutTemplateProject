@@ -11,7 +11,7 @@ import streamlit as st
 from pptx_utils import (
     TEMPLATES, CLUBS, CLUB_LANGUAGES,
     get_template_config, fill_template, fill_from_bytes,
-    check_template_compatibility,
+    check_template_compatibility, extract_competency_descriptions,
 )
 import storage
 from i18n import t, APP_LANGUAGES
@@ -452,6 +452,88 @@ def _apply_theme(club: str) -> None:
         border-radius: 10px !important;
     }}
 
+    /* Competency info tooltip */
+    .comp-info-wrap {{
+        position: relative;
+        display: inline-block;
+        margin-left: 6px;
+        vertical-align: middle;
+        cursor: help;
+    }}
+    .comp-info-icon {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: {th['primary']};
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 700;
+        font-style: italic;
+        font-family: Georgia, serif;
+        line-height: 1;
+        user-select: none;
+    }}
+    .comp-info-card {{
+        display: none;
+        position: absolute;
+        left: 28px;
+        top: -8px;
+        z-index: 9999;
+        width: 320px;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0,0,0,.25);
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }}
+    .comp-info-wrap:hover .comp-info-card {{
+        display: block;
+    }}
+    .comp-info-card .ci-header {{
+        background: {th['primary']};
+        color: #ffffff;
+        padding: 14px 18px;
+        text-align: center;
+    }}
+    .comp-info-card .ci-header h4 {{
+        margin: 0;
+        font-size: 16px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: #ffffff !important;
+    }}
+    .comp-info-card .ci-desc {{
+        background: {th['primary']};
+        color: #ffffffdd;
+        padding: 0 18px 14px 18px;
+        text-align: center;
+        font-size: 13px;
+        font-style: italic;
+        line-height: 1.4;
+    }}
+    .comp-info-card .ci-body {{
+        background: {th['content_bg']};
+        padding: 14px 18px;
+    }}
+    .comp-info-card .ci-body h5 {{
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        font-weight: 700;
+        color: {th['heading']} !important;
+    }}
+    .comp-info-card .ci-body ul {{
+        margin: 0;
+        padding: 0 0 0 18px;
+    }}
+    .comp-info-card .ci-body li {{
+        font-size: 13px;
+        color: {th['text']} !important;
+        line-height: 1.5;
+    }}
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -512,7 +594,43 @@ def star_selector(label: str, key: str, default: float = 0.0) -> float:
     return value
 
 
-def competency_sections(variables, key_prefix, defaults_stars=None, defaults_comments=None, defaults_videos=None):
+def _info_tooltip_html(desc: dict) -> str:
+    """Build the HTML for a competency info tooltip card."""
+    name = desc.get("name", "")
+    description = desc.get("description", "")
+    criteria = desc.get("criteria", [])
+    if not description and not criteria:
+        return ""
+    desc_html = f'<div class="ci-desc">&ldquo;{description}&rdquo;</div>' if description else ""
+    li_items = "".join(f"<li>{c}</li>" for c in criteria if c and c != "?")
+    criteria_html = ""
+    if li_items:
+        criteria_html = (
+            '<div class="ci-body">'
+            '<h5>How do we assess this?</h5>'
+            f'<ul>{li_items}</ul>'
+            '</div>'
+        )
+    return (
+        '<span class="comp-info-wrap">'
+        '<span class="comp-info-icon">i</span>'
+        '<div class="comp-info-card">'
+        f'<div class="ci-header"><h4>{name}</h4></div>'
+        f'{desc_html}'
+        f'{criteria_html}'
+        '</div>'
+        '</span>'
+    )
+
+
+def competency_sections(
+    variables,
+    key_prefix,
+    defaults_stars=None,
+    defaults_comments=None,
+    defaults_videos=None,
+    comp_descriptions=None,
+):
     L = _lang()
     n = len(variables)
     if defaults_stars is None:
@@ -521,6 +639,8 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
         defaults_comments = [""] * n
     if defaults_videos is None:
         defaults_videos = [None] * n
+    if comp_descriptions is None:
+        comp_descriptions = []
 
     star_values, comments, video_data = [], [], []
 
@@ -537,6 +657,15 @@ def competency_sections(variables, key_prefix, defaults_stars=None, defaults_com
             st.session_state[comment_key] = defaults_comments[i] if i < len(defaults_comments) else ""
         if video_key not in st.session_state:
             st.session_state[video_key] = defaults_videos[i] if i < len(defaults_videos) else None
+
+        # Show info tooltip if description is available for this competency
+        desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
+        info_html = _info_tooltip_html(desc)
+        if info_html:
+            st.markdown(
+                f'<div style="display:inline-block; margin-bottom:-8px;">{info_html}</div>',
+                unsafe_allow_html=True,
+            )
 
         with st.expander(f"📽  {var}", expanded=False):
             uploaded_video = st.file_uploader(
@@ -1190,8 +1319,10 @@ elif page == "New Report":
     st.markdown("---")
     st.subheader(t("rate_each_competency", L))
 
+    _comp_descs = extract_competency_descriptions(template_cfg)
     star_values, comments, video_data = competency_sections(
         template_cfg["variables"], key_prefix="empty",
+        comp_descriptions=_comp_descs,
     )
 
     st.markdown("---")
@@ -1482,12 +1613,14 @@ elif page == "Upload & Edit":
         st.markdown("---")
         st.subheader(t("adjust_competencies", L))
 
+        _comp_descs_upload = extract_competency_descriptions(template_cfg)
         star_values, comments, video_data = competency_sections(
             template_cfg["variables"],
             key_prefix="upload",
             defaults_stars=check_result.get("current_star_values", []),
             defaults_comments=check_result.get("current_comments", []),
             defaults_videos=check_result.get("current_videos", []),
+            comp_descriptions=_comp_descs_upload,
         )
 
         st.markdown("---")
