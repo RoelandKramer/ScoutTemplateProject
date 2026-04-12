@@ -661,34 +661,9 @@ def competency_sections(
         # Show info tooltip if description is available for this competency
         desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
         info_html = _info_tooltip_html(desc)
-
-        # ── Three styling options shown simultaneously for review ──
         if info_html:
-            var_upper = var.upper()
-            var_title = var.title() if var == var.lower() else var
             st.markdown(
-                f'<div style="display:flex; gap:36px; align-items:center; flex-wrap:wrap; margin:6px 0 4px 0;">'
-                # Option 1: UPPERCASE name + i (no film icon)
-                f'<div style="display:flex; align-items:center; gap:6px;">'
-                f'<span style="font-weight:700; font-size:15px; letter-spacing:.5px;">{var_upper}</span>'
-                f'{info_html}'
-                f'<span style="color:#999; font-size:12px; margin-left:4px;">(optie 1)</span>'
-                f'</div>'
-                # Option 2: film icon + UPPERCASE name + i
-                f'<div style="display:flex; align-items:center; gap:6px;">'
-                f'<span style="font-size:15px;">🎥</span>'
-                f'<span style="font-weight:700; font-size:15px; letter-spacing:.5px;">{var_upper}</span>'
-                f'{info_html}'
-                f'<span style="color:#999; font-size:12px; margin-left:4px;">(optie 2)</span>'
-                f'</div>'
-                # Option 3: film icon + Title Case name + i
-                f'<div style="display:flex; align-items:center; gap:6px;">'
-                f'<span style="font-size:15px;">🎥</span>'
-                f'<span style="font-weight:700; font-size:15px;">{var_title}</span>'
-                f'{info_html}'
-                f'<span style="color:#999; font-size:12px; margin-left:4px;">(optie 3)</span>'
-                f'</div>'
-                f'</div>',
+                f'<div style="display:inline-block; margin-bottom:-8px;">{info_html}</div>',
                 unsafe_allow_html=True,
             )
 
