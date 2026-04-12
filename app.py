@@ -817,7 +817,7 @@ def _render_player_card(
             st.session_state[edit_key] = False
             st.rerun()
     else:
-        # Read-only display with edit button inside the card
+        # Read-only display with edit button pinned to bottom-right of card
         rows_html = ""
         for label_key, data_key in _PLAYER_FIELDS:
             value = pdata.get(data_key, "")
@@ -826,12 +826,17 @@ def _render_player_card(
                 <div class="info-label">{t(label_key, L)}</div>
                 <div class="info-value">{value or '—'}</div>
             </div>"""
+
+        if editable:
+            rows_html += '<div style="display:flex; justify-content:flex-end; padding-top:8px;" id="edit-placeholder-player"></div>'
+
         st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
 
         if editable:
-            _, edit_col = st.columns([5, 1])
+            # Place st.button right-aligned just below the card (visually overlaps)
+            _, edit_col = st.columns([11, 1])
             with edit_col:
-                st.markdown('<div class="edit-btn-small">', unsafe_allow_html=True)
+                st.markdown('<div class="edit-btn-small" style="margin-top:-30px;">', unsafe_allow_html=True)
                 if st.button("✏️", key=f"{key_prefix}_edit", help=t("edit_info", L)):
                     st.session_state[edit_key] = True
                     st.rerun()
@@ -887,7 +892,7 @@ def _render_stats_card(
             st.session_state[edit_key] = False
             st.rerun()
     else:
-        # Read-only display
+        # Read-only display with edit button pinned to bottom-right of card
         rows_html = ""
         for group_label_key, fields in _STATS_FIELDS:
             rows_html += f'<div class="info-row" style="border-bottom:none;padding-bottom:0;"><div class="info-label" style="font-size:0.95rem;">{t(group_label_key, L)}</div></div>'
@@ -901,9 +906,9 @@ def _render_stats_card(
         st.markdown(f'<div class="player-info-card">{rows_html}</div>', unsafe_allow_html=True)
 
         if editable:
-            _, edit_col = st.columns([5, 1])
+            _, edit_col = st.columns([11, 1])
             with edit_col:
-                st.markdown('<div class="edit-btn-small">', unsafe_allow_html=True)
+                st.markdown('<div class="edit-btn-small" style="margin-top:-30px;">', unsafe_allow_html=True)
                 if st.button("✏️", key=f"{key_prefix}_edit", help=t("edit_info", L)):
                     st.session_state[edit_key] = True
                     st.rerun()

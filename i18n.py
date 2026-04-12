@@ -96,7 +96,7 @@ TRANSLATIONS = {
         "no_received": "No received reports yet.",
         "shared_by": "Shared by",
         "player_stats_tm": "Player Stats (Transfermarkt)",
-        "fetch_tm_stats": "Fetch from Transfermarkt",
+        "fetch_tm_stats": "Obtain Transfermarkt Stats",
         "fetching_tm": "Fetching stats from Transfermarkt...",
         "tm_not_found": "Player not found on Transfermarkt.",
         "season_label": "Season",
