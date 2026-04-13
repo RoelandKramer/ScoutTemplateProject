@@ -428,7 +428,7 @@ def _apply_theme(club: str) -> None:
         background: {th['card_bg']} !important;
         border: 1px solid {th['border_light']} !important;
         color: {th['primary_light']} !important;
-        font-size: 0.85rem !important;
+        font-size: 0.95rem !important;
         padding: 2px 8px !important;
         min-height: 0 !important;
         border-radius: 6px !important;
