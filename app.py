@@ -452,6 +452,19 @@ def _apply_theme(club: str) -> None:
         border-radius: 10px !important;
     }}
 
+    /* Competency label row — overlaps the expander bar below it */
+    .comp-label-row {{
+        position: relative;
+        z-index: 6;
+        pointer-events: auto;
+        margin-bottom: -50px;   /* pull expander up so bar sits under us */
+        padding: 13px 18px 13px 42px;  /* match expander padding (leave room for arrow) */
+    }}
+    /* Hide the native expander label text when our custom row is present */
+    .comp-label-row + div [data-testid="stExpander"] summary span {{
+        visibility: hidden !important;
+    }}
+
     /* Competency info tooltip */
     .comp-info-wrap {{
         position: relative;
@@ -659,11 +672,10 @@ def competency_sections(
         if video_key not in st.session_state:
             st.session_state[video_key] = defaults_videos[i] if i < len(defaults_videos) else None
 
-        # Show info tooltip overlaid on the expander bar (right side)
+        # Build expander label based on comp_style
         desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
         info_html = _info_tooltip_html(desc)
 
-        # Build expander label based on comp_style
         if comp_style == 1:
             exp_label = var.upper()
         elif comp_style == 2:
@@ -673,13 +685,25 @@ def competency_sections(
         else:
             exp_label = f"📽  {var}"
 
-        # Render info icon overlay BEFORE the expander — negative margin
-        # pulls it down to sit on the right side of the expander bar.
+        # Render label + info icon as a single HTML row, then pull the
+        # expander up so they visually merge into one bar.
         if info_html:
+            # Build the styled label text matching the expander style
+            if comp_style == 1:
+                label_html = f'<span style="font-weight:600;">{var.upper()}</span>'
+            elif comp_style == 2:
+                label_html = f'🎥&ensp;<span style="font-weight:600;">{var.upper()}</span>'
+            elif comp_style == 3:
+                vt = var.title() if var == var.lower() else var
+                label_html = f'🎥&ensp;<span style="font-weight:600;">{vt}</span>'
+            else:
+                label_html = f'📽&ensp;<span style="font-weight:600;">{var}</span>'
+
             st.markdown(
-                f'<div style="text-align:right; padding-right:50px; margin-bottom:-44px;'
-                f' position:relative; z-index:5; pointer-events:auto;">'
-                f'{info_html}</div>',
+                f'<div class="comp-label-row">'
+                f'<span style="display:inline-flex; align-items:center; gap:6px;">'
+                f'{label_html} {info_html}'
+                f'</span></div>',
                 unsafe_allow_html=True,
             )
 
