@@ -534,49 +534,6 @@ def _apply_theme(club: str) -> None:
         line-height: 1.5;
     }}
 
-    /* Overlay container: collapse to zero height so it doesn't add
-       vertical space between elements, but let content overflow visibly */
-    .comp-info-above {{
-        height: 0 !important;
-        min-height: 0 !important;
-        overflow: visible !important;
-        position: relative;
-        z-index: 100;
-        pointer-events: none;
-        line-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }}
-    /* Collapse Streamlit wrapper divs around the overlay to eliminate gap */
-    [data-testid="stVerticalBlockBorderWrapper"]:has(.comp-info-above) {{
-        height: 0 !important;
-        min-height: 0 !important;
-        overflow: visible !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }}
-    [data-testid="element-container"]:has(.comp-info-above) {{
-        height: 0 !important;
-        min-height: 0 !important;
-        overflow: visible !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }}
-    [data-testid="stMarkdown"]:has(.comp-info-above) {{
-        height: 0 !important;
-        min-height: 0 !important;
-        overflow: visible !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }}
-    [data-testid="stMarkdown"]:has(.comp-info-above) > div {{
-        height: 0 !important;
-        min-height: 0 !important;
-        overflow: visible !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }}
-
     </style>
     """, unsafe_allow_html=True)
 
@@ -673,7 +630,7 @@ def competency_sections(
     defaults_comments=None,
     defaults_videos=None,
     comp_descriptions=None,
-    comp_style=0,
+    template_name=None,
 ):
     L = _lang()
     n = len(variables)
@@ -702,75 +659,36 @@ def competency_sections(
         if video_key not in st.session_state:
             st.session_state[video_key] = defaults_videos[i] if i < len(defaults_videos) else None
 
-        # Build expander label based on comp_style
+        # Determine label formatting based on template profile
+        if template_name == "Centerback":
+            display_label = var
+        elif template_name == "Wingback":
+            display_label = var.upper()
+        elif template_name == "Deep Lying Playmaker":
+            display_label = f"🎥 {var.upper()}"
+        else:
+            display_label = f"📽  {var}"
+
+        # Show info tooltip if description is available for this competency
         desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
         info_html = _info_tooltip_html(desc)
-
-        if comp_style == 1:
-            exp_label = var.upper()
-        elif comp_style == 2:
-            exp_label = f"🎥  {var.upper()}"
-        elif comp_style == 3:
-            exp_label = f"🎥  {var.title() if var == var.lower() else var}"
-        else:
-            exp_label = f"📽  {var}"
-
-        # Give each expander a unique key so we can target its native
-        # label via CSS and overlay our custom label + (i) icon on it.
-        exp_key = f"comp_{key_prefix}_{i}"
-
+        
         if info_html:
-            # Escape the label for use inside CSS content: ""
-            css_label = exp_label.replace('\\', '\\\\').replace('"', '\\"')
-
-            # Calculate left position for the (i) overlay.
-            # Arrow icon ≈ 2rem (32px), each char ≈ 8.4px at 14px/600wt
-            info_left = int(32 + len(exp_label) * 8.4 + 10)
-
-            # Per-expander CSS that:
-            # 1) Hides the native label text
-            # 2) Injects our label via ::after (perfectly centred)
-            # Plus the (i)+tooltip HTML in a zero-height overlay div.
+            # Create a strictly decreasing z-index so top rows layer over bottom rows
+            z_index = 999 - i
+            
+            # Use a "phantom text" ruler. We render the exact same text invisibly 
+            # so the browser calculates the precise proportional width, and place 
+            # the (i) icon immediately after it perfectly every time.
             st.markdown(
-                f'<style>'
-                # Hide native label text inside the summary
-                f'.st-key-{exp_key} [data-testid="stExpander"] details > summary > span {{'
-                f'  visibility: hidden !important;'
-                f'  font-size: 0 !important;'
-                f'  width: 0 !important; height: 0 !important;'
-                f'  overflow: hidden !important;'
-                f'  position: absolute !important;'
-                f'}}'
-                # Make summary a positioning context & inject label
-                f'.st-key-{exp_key} [data-testid="stExpander"] details > summary {{'
-                f'  position: relative !important;'
-                f'  height: 48px !important;'             # <-- FORCE strict height
-                f'  min-height: 48px !important;'         # <-- PREVENT emoji stretching
-                f'}}'
-                f'.st-key-{exp_key} [data-testid="stExpander"] details > summary::after {{'
-                f'  content: "{css_label}";'
-                f'  visibility: visible !important;'
-                f'  position: absolute !important;'
-                f'  left: 2rem; top: 24px;'               # <-- ANCHOR to the exact same 24px as your icon
-                
-                f'  transform: translateY(-50%);'
-                f'  font-weight: 600; font-size: 0.875rem;'
-                f'  white-space: nowrap;'
-                f'  pointer-events: none;'
-                f'}}'
-                f'</style>'
-                # Zero-height overlay: the (i) icon + hover tooltip
-                f'<div class="comp-info-above">'
-                f'<div style="position:absolute;left:{info_left}px;'
-                f'top:24px;transform:translateY(-50%);'
-                f'pointer-events:auto;z-index:100;">'
-                f'{info_html}'
-                f'</div>'
+                f'<div style="position:absolute; z-index:{z_index}; margin-top:13px; display:flex; align-items:center; pointer-events:none;">'
+                f'<div style="visibility:hidden; font-family:-apple-system, BlinkMacSystemFont, sans-serif; font-weight:600; font-size:14px; padding-left:46px; white-space:pre; margin:0;">{display_label}</div>'
+                f'<div style="pointer-events:auto; margin-left:8px;">{info_html}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
-        with st.expander(exp_label, expanded=False, key=exp_key):
+        with st.expander(display_label, expanded=False):
             uploaded_video = st.file_uploader(
                 t("video_clip", L),
                 type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
@@ -1428,13 +1346,10 @@ elif page == "New Report":
     st.subheader(t("rate_each_competency", L))
 
     _comp_descs = extract_competency_descriptions(template_cfg)
-    # Showcase: each position uses a different bar style for team review
-    _style_map = {"Centerback": 1, "Wingback": 2, "Deep Lying Playmaker": 3}
-    _comp_style = _style_map.get(template_name, 0)
     star_values, comments, video_data = competency_sections(
         template_cfg["variables"], key_prefix="empty",
         comp_descriptions=_comp_descs,
-        comp_style=_comp_style,
+        template_name=template_name,
     )
 
     st.markdown("---")
@@ -1726,8 +1641,6 @@ elif page == "Upload & Edit":
         st.subheader(t("adjust_competencies", L))
 
         _comp_descs_upload = extract_competency_descriptions(template_cfg)
-        _style_map_up = {"Centerback": 1, "Wingback": 2, "Deep Lying Playmaker": 3}
-        _comp_style_up = _style_map_up.get(matched_name or "", 0)
         star_values, comments, video_data = competency_sections(
             template_cfg["variables"],
             key_prefix="upload",
@@ -1735,7 +1648,7 @@ elif page == "Upload & Edit":
             defaults_comments=check_result.get("current_comments", []),
             defaults_videos=check_result.get("current_videos", []),
             comp_descriptions=_comp_descs_upload,
-            comp_style=_comp_style_up,
+            template_name=matched_name,
         )
 
         st.markdown("---")
