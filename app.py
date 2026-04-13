@@ -630,6 +630,7 @@ def competency_sections(
     defaults_comments=None,
     defaults_videos=None,
     comp_descriptions=None,
+    template_name=None,
 ):
     L = _lang()
     n = len(variables)
@@ -658,26 +659,36 @@ def competency_sections(
         if video_key not in st.session_state:
             st.session_state[video_key] = defaults_videos[i] if i < len(defaults_videos) else None
 
+        # Determine label formatting based on template profile
+        if template_name == "Centerback":
+            display_label = var
+        elif template_name == "Wingback":
+            display_label = var.upper()
+        elif template_name == "Deep Lying Playmaker":
+            display_label = f"🎥 {var.upper()}"
+        else:
+            display_label = f"📽  {var}"
+
         # Show info tooltip if description is available for this competency
         desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
         info_html = _info_tooltip_html(desc)
         
         if info_html:
+            # Create a strictly decreasing z-index so top rows layer over bottom rows
+            z_index = 999 - i
+            
             # Use a "phantom text" ruler. We render the exact same text invisibly 
             # so the browser calculates the precise proportional width, and place 
             # the (i) icon immediately after it perfectly every time.
-            
-            # Create a strictly decreasing z-index so top rows layer over bottom rows
-            z_index = 999 - i 
-            
             st.markdown(
                 f'<div style="position:absolute; z-index:{z_index}; margin-top:13px; display:flex; align-items:center; pointer-events:none;">'
-                f'<div style="visibility:hidden; font-family:-apple-system, BlinkMacSystemFont, sans-serif; font-weight:600; font-size:14px; padding-left:46px; white-space:pre; margin:0;">📽  {var}</div>'
+                f'<div style="visibility:hidden; font-family:-apple-system, BlinkMacSystemFont, sans-serif; font-weight:600; font-size:14px; padding-left:46px; white-space:pre; margin:0;">{display_label}</div>'
                 f'<div style="pointer-events:auto; margin-left:8px;">{info_html}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        with st.expander(f"📽  {var}", expanded=False):
+
+        with st.expander(display_label, expanded=False):
             uploaded_video = st.file_uploader(
                 t("video_clip", L),
                 type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
@@ -1338,6 +1349,7 @@ elif page == "New Report":
     star_values, comments, video_data = competency_sections(
         template_cfg["variables"], key_prefix="empty",
         comp_descriptions=_comp_descs,
+        template_name=template_name,
     )
 
     st.markdown("---")
@@ -1636,6 +1648,7 @@ elif page == "Upload & Edit":
             defaults_comments=check_result.get("current_comments", []),
             defaults_videos=check_result.get("current_videos", []),
             comp_descriptions=_comp_descs_upload,
+            template_name=matched_name,
         )
 
         st.markdown("---")
