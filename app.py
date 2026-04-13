@@ -744,12 +744,15 @@ def competency_sections(
                 # Make summary a positioning context & inject label
                 f'.st-key-{exp_key} [data-testid="stExpander"] details > summary {{'
                 f'  position: relative !important;'
+                f'  height: 48px !important;'             # <-- FORCE strict height
+                f'  min-height: 48px !important;'         # <-- PREVENT emoji stretching
                 f'}}'
                 f'.st-key-{exp_key} [data-testid="stExpander"] details > summary::after {{'
                 f'  content: "{css_label}";'
                 f'  visibility: visible !important;'
                 f'  position: absolute !important;'
-                f'  left: 2rem; top: 50%;'
+                f'  left: 2rem; top: 24px;'               # <-- ANCHOR to the exact same 24px as your icon
+                
                 f'  transform: translateY(-50%);'
                 f'  font-weight: 600; font-size: 0.875rem;'
                 f'  white-space: nowrap;'
