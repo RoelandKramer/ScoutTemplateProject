@@ -666,14 +666,17 @@ def competency_sections(
             # Use a "phantom text" ruler. We render the exact same text invisibly 
             # so the browser calculates the precise proportional width, and place 
             # the (i) icon immediately after it perfectly every time.
+            
+            # Create a strictly decreasing z-index so top rows layer over bottom rows
+            z_index = 999 - i 
+            
             st.markdown(
-                f'<div style="position:absolute; z-index:99; margin-top:13px; display:flex; align-items:center; pointer-events:none;">'
+                f'<div style="position:absolute; z-index:{z_index}; margin-top:13px; display:flex; align-items:center; pointer-events:none;">'
                 f'<div style="visibility:hidden; font-family:-apple-system, BlinkMacSystemFont, sans-serif; font-weight:600; font-size:14px; padding-left:46px; white-space:pre; margin:0;">📽  {var}</div>'
                 f'<div style="pointer-events:auto; margin-left:8px;">{info_html}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-
         with st.expander(f"📽  {var}", expanded=False):
             uploaded_video = st.file_uploader(
                 t("video_clip", L),
