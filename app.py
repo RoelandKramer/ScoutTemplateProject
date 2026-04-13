@@ -452,19 +452,6 @@ def _apply_theme(club: str) -> None:
         border-radius: 10px !important;
     }}
 
-    /* Competency label row — overlaps the expander bar below it */
-    .comp-label-row {{
-        position: relative;
-        z-index: 6;
-        pointer-events: auto;
-        margin-bottom: -50px;   /* pull expander up so bar sits under us */
-        padding: 13px 18px 13px 42px;  /* match expander padding (leave room for arrow) */
-    }}
-    /* Hide the native expander label text when our custom row is present */
-    .comp-label-row + div [data-testid="stExpander"] summary span {{
-        visibility: hidden !important;
-    }}
-
     /* Competency info tooltip */
     .comp-info-wrap {{
         position: relative;
@@ -685,10 +672,12 @@ def competency_sections(
         else:
             exp_label = f"📽  {var}"
 
-        # Render label + info icon as a single HTML row, then pull the
-        # expander up so they visually merge into one bar.
+        # Give each expander a unique key so we can target its native
+        # label via CSS and overlay our custom label + (i) icon on it.
+        exp_key = f"comp_{key_prefix}_{i}"
+
         if info_html:
-            # Build the styled label text matching the expander style
+            # Build styled label matching the expander text
             if comp_style == 1:
                 label_html = f'<span style="font-weight:600;">{var.upper()}</span>'
             elif comp_style == 2:
@@ -699,15 +688,27 @@ def competency_sections(
             else:
                 label_html = f'📽&ensp;<span style="font-weight:600;">{var}</span>'
 
+            # Per-expander CSS: hide the native label text so only our
+            # overlay is visible. The overlay uses pointer-events:none so
+            # clicks pass straight through to the expander toggle.
             st.markdown(
-                f'<div class="comp-label-row">'
-                f'<span style="display:inline-flex; align-items:center; gap:6px;">'
-                f'{label_html} {info_html}'
+                f'<style>'
+                f'.st-key-{exp_key} [data-testid="stExpander"] details summary span {{'
+                f'  color: transparent !important;'
+                f'  font-size: 0 !important;'
+                f'}}'
+                f'</style>'
+                f'<div style="position:relative; z-index:6; margin-bottom:-48px;'
+                f' padding:14px 18px 14px 42px; pointer-events:none;">'
+                f'<span style="display:inline-flex; align-items:center; gap:6px;'
+                f' pointer-events:none;">'
+                f'{label_html}'
+                f'<span style="pointer-events:auto;">{info_html}</span>'
                 f'</span></div>',
                 unsafe_allow_html=True,
             )
 
-        with st.expander(exp_label, expanded=False):
+        with st.expander(exp_label, expanded=False, key=exp_key):
             uploaded_video = st.file_uploader(
                 t("video_clip", L),
                 type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
