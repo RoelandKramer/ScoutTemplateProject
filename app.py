@@ -693,9 +693,14 @@ def competency_sections(
             # clicks pass straight through to the expander toggle.
             st.markdown(
                 f'<style>'
-                f'.st-key-{exp_key} [data-testid="stExpander"] details summary span {{'
-                f'  color: transparent !important;'
-                f'  font-size: 0 !important;'
+                f'.st-key-{exp_key} [data-testid="stExpander"] details summary span,'
+                f'.st-key-{exp_key} [data-testid="stExpander"] details summary p,'
+                f'.st-key-{exp_key} [data-testid="stExpander"] details > summary > span {{'
+                f'  visibility: hidden !important;'
+                f'  position: absolute !important;'
+                f'  width: 0 !important;'
+                f'  height: 0 !important;'
+                f'  overflow: hidden !important;'
                 f'}}'
                 f'</style>'
                 f'<div style="position:relative; z-index:6; margin-bottom:-48px;'
