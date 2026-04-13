@@ -1,4 +1,3 @@
-
 """FC Den Bosch / Pro Vercelli — Scouting Report Platform (Streamlit app)."""
 
 import io
@@ -662,9 +661,13 @@ def competency_sections(
         # Show info tooltip if description is available for this competency
         desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
         info_html = _info_tooltip_html(desc)
+        
         if info_html:
+            # Estimate width of the label to float the (i) just to the right of the text natively
+            # ~46px for the left padding + emoji + space, and ~8.5px per character of text
+            left_offset = int(46 + (len(var) * 8.5))
             st.markdown(
-                f'<div style="display:inline-block; margin-bottom:-8px;">{info_html}</div>',
+                f'<div style="position:absolute; z-index:99; margin-top:13px; margin-left:{left_offset}px; pointer-events:auto;">{info_html}</div>',
                 unsafe_allow_html=True,
             )
 
