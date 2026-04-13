@@ -704,7 +704,7 @@ def competency_sections(
                 f'}}'
                 f'</style>'
                 f'<div style="position:relative; z-index:6; margin-bottom:-48px;'
-                f' padding:14px 18px 14px 42px; pointer-events:none;">'
+                f' padding:17px 18px 14px 42px; pointer-events:none;">'
                 f'<span style="display:inline-flex; align-items:center; gap:6px;'
                 f' pointer-events:none;">'
                 f'{label_html}'
