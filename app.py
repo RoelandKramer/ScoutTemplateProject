@@ -630,6 +630,7 @@ def competency_sections(
     defaults_comments=None,
     defaults_videos=None,
     comp_descriptions=None,
+    comp_style=0,
 ):
     L = _lang()
     n = len(variables)
@@ -658,16 +659,31 @@ def competency_sections(
         if video_key not in st.session_state:
             st.session_state[video_key] = defaults_videos[i] if i < len(defaults_videos) else None
 
-        # Show info tooltip if description is available for this competency
+        # Show info tooltip overlaid on the expander bar (right side)
         desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
         info_html = _info_tooltip_html(desc)
+
+        # Build expander label based on comp_style
+        if comp_style == 1:
+            exp_label = var.upper()
+        elif comp_style == 2:
+            exp_label = f"🎥  {var.upper()}"
+        elif comp_style == 3:
+            exp_label = f"🎥  {var.title() if var == var.lower() else var}"
+        else:
+            exp_label = f"📽  {var}"
+
+        # Render info icon overlay BEFORE the expander — negative margin
+        # pulls it down to sit on the right side of the expander bar.
         if info_html:
             st.markdown(
-                f'<div style="display:inline-block; margin-bottom:-8px;">{info_html}</div>',
+                f'<div style="text-align:right; padding-right:50px; margin-bottom:-44px;'
+                f' position:relative; z-index:5; pointer-events:auto;">'
+                f'{info_html}</div>',
                 unsafe_allow_html=True,
             )
 
-        with st.expander(f"📽  {var}", expanded=False):
+        with st.expander(exp_label, expanded=False):
             uploaded_video = st.file_uploader(
                 t("video_clip", L),
                 type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
@@ -1325,9 +1341,13 @@ elif page == "New Report":
     st.subheader(t("rate_each_competency", L))
 
     _comp_descs = extract_competency_descriptions(template_cfg)
+    # Showcase: each position uses a different bar style for team review
+    _style_map = {"Centerback": 1, "Wingback": 2, "Deep Lying Playmaker": 3}
+    _comp_style = _style_map.get(template_name, 0)
     star_values, comments, video_data = competency_sections(
         template_cfg["variables"], key_prefix="empty",
         comp_descriptions=_comp_descs,
+        comp_style=_comp_style,
     )
 
     st.markdown("---")
@@ -1619,6 +1639,8 @@ elif page == "Upload & Edit":
         st.subheader(t("adjust_competencies", L))
 
         _comp_descs_upload = extract_competency_descriptions(template_cfg)
+        _style_map_up = {"Centerback": 1, "Wingback": 2, "Deep Lying Playmaker": 3}
+        _comp_style_up = _style_map_up.get(matched_name or "", 0)
         star_values, comments, video_data = competency_sections(
             template_cfg["variables"],
             key_prefix="upload",
@@ -1626,6 +1648,7 @@ elif page == "Upload & Edit":
             defaults_comments=check_result.get("current_comments", []),
             defaults_videos=check_result.get("current_videos", []),
             comp_descriptions=_comp_descs_upload,
+            comp_style=_comp_style_up,
         )
 
         st.markdown("---")
