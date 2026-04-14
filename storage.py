@@ -51,6 +51,8 @@ def save_draft(
     upload_filename: str | None = None,
     player_data: dict | None = None,
     tm_stats: dict | None = None,
+    photo_full: bytes | None = None,
+    photo_circular: bytes | None = None,
 ) -> str:
     """Save or update a draft. Returns the report_id."""
     if not report_id:
@@ -77,6 +79,17 @@ def save_draft(
         upath.write_bytes(upload_bytes)
         upload_ref = {"filename": upload_filename or "upload.pptx", "path": str(upath.name)}
 
+    # Save player photos if present
+    photo_refs = {}
+    if photo_full:
+        pfull_path = drafts / f"{report_id}_photo_full.png"
+        pfull_path.write_bytes(photo_full)
+        photo_refs["full"] = str(pfull_path.name)
+    if photo_circular:
+        pcirc_path = drafts / f"{report_id}_photo_circ.png"
+        pcirc_path.write_bytes(photo_circular)
+        photo_refs["circular"] = str(pcirc_path.name)
+
     meta = {
         "report_id": report_id,
         "position": position,
@@ -89,6 +102,7 @@ def save_draft(
         "upload_ref": upload_ref,
         "player_data": player_data,
         "tm_stats": tm_stats,
+        "photo_refs": photo_refs if photo_refs else None,
         "updated_at": time.time(),
         "created_at": _load_draft_meta(username, report_id).get("created_at", time.time()),
     }
@@ -133,6 +147,17 @@ def load_draft(username: str, report_id: str) -> dict | None:
             meta["upload_bytes"] = upath.read_bytes()
             meta["upload_filename"] = uref["filename"]
 
+    # Resolve photo refs
+    prefs = meta.get("photo_refs") or {}
+    if prefs.get("full"):
+        pfull = drafts / prefs["full"]
+        if pfull.exists():
+            meta["photo_full"] = pfull.read_bytes()
+    if prefs.get("circular"):
+        pcirc = drafts / prefs["circular"]
+        if pcirc.exists():
+            meta["photo_circular"] = pcirc.read_bytes()
+
     return meta
 
 
@@ -170,11 +195,22 @@ def save_finished(
     player_name: str = "",
     player_data: dict | None = None,
     star_values: list[float] | None = None,
+    photo_full: bytes | None = None,
+    photo_circular: bytes | None = None,
 ) -> str:
     """Save a finished PPTX + metadata. Returns the report_id."""
     finished = _finished_dir(username)
 
     (finished / f"{report_id}.pptx").write_bytes(pptx_bytes)
+
+    # Save photos
+    photo_refs = {}
+    if photo_full:
+        (finished / f"{report_id}_photo_full.png").write_bytes(photo_full)
+        photo_refs["full"] = f"{report_id}_photo_full.png"
+    if photo_circular:
+        (finished / f"{report_id}_photo_circ.png").write_bytes(photo_circular)
+        photo_refs["circular"] = f"{report_id}_photo_circ.png"
 
     meta = {
         "report_id": report_id,
@@ -185,6 +221,7 @@ def save_finished(
         "finished_at": time.time(),
         "player_data": player_data,
         "star_values": star_values or [],
+        "photo_refs": photo_refs if photo_refs else None,
     }
     (finished / f"{report_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -256,6 +293,8 @@ def share_report(
     video_data: list | None = None,
     player_data: dict | None = None,
     tm_stats: dict | None = None,
+    photo_full: bytes | None = None,
+    photo_circular: bytes | None = None,
 ) -> str:
     """Copy a finished report into the recipient's received folder,
     preserving the full editable state (videos, player data, stats) so the
@@ -279,6 +318,15 @@ def share_report(
             else:
                 video_refs.append(None)
 
+    # Save player photos
+    photo_refs = {}
+    if photo_full:
+        (received / f"{share_id}_photo_full.png").write_bytes(photo_full)
+        photo_refs["full"] = f"{share_id}_photo_full.png"
+    if photo_circular:
+        (received / f"{share_id}_photo_circ.png").write_bytes(photo_circular)
+        photo_refs["circular"] = f"{share_id}_photo_circ.png"
+
     meta = {
         "report_id": share_id,
         "original_id": report_id,
@@ -293,6 +341,7 @@ def share_report(
         "video_refs": video_refs,
         "player_data": player_data,
         "tm_stats": tm_stats,
+        "photo_refs": photo_refs if photo_refs else None,
     }
     (received / f"{share_id}.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -346,6 +395,17 @@ def load_received(username: str, report_id: str) -> dict | None:
     pptx_path = received / f"{report_id}.pptx"
     if pptx_path.exists():
         meta["pptx_bytes"] = pptx_path.read_bytes()
+
+    # Resolve photo refs
+    prefs = meta.get("photo_refs") or {}
+    if prefs.get("full"):
+        pfull = received / prefs["full"]
+        if pfull.exists():
+            meta["photo_full"] = pfull.read_bytes()
+    if prefs.get("circular"):
+        pcirc = received / prefs["circular"]
+        if pcirc.exists():
+            meta["photo_circular"] = pcirc.read_bytes()
 
     return meta
 

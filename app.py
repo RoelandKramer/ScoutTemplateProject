@@ -321,17 +321,29 @@ def _apply_theme(club: str) -> None:
     [data-baseweb="popover"] [role="option"] {{ background-color: #ffffff !important; color: #374151 !important; }}
     [data-baseweb="popover"] [role="option"]:hover {{ background-color: {th['bg']} !important; color: {th['heading']} !important; }}
 
-    /* Radio buttons (navigation) — dots in theme primary color */
+    /* Radio buttons (navigation) — dots in dark button color */
     [data-testid="stSidebar"] [role="radiogroup"] label {{ color: {th['text']} !important; }}
+    [data-testid="stSidebar"] [role="radiogroup"] label p {{ color: {th['text']} !important; }}
     [data-testid="stSidebar"] [role="radio"] > div:first-child {{
-        border-color: {th['primary']} !important;
+        border-color: {th['btn_primary_bg']} !important;
     }}
     [data-testid="stSidebar"] [role="radio"][aria-checked="true"] > div:first-child {{
-        background-color: {th['primary']} !important;
-        border-color: {th['primary']} !important;
+        background-color: {th['btn_primary_bg']} !important;
+        border-color: {th['btn_primary_bg']} !important;
     }}
     [data-testid="stSidebar"] [role="radio"][aria-checked="true"] > div:first-child > div {{
-        background-color: {th['primary']} !important;
+        background-color: {th['btn_primary_bg']} !important;
+    }}
+    /* Also target stRadio in case of newer Streamlit DOM */
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"] > div:first-child {{
+        border-color: {th['btn_primary_bg']} !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"][aria-checked="true"] > div:first-child {{
+        background-color: {th['btn_primary_bg']} !important;
+        border-color: {th['btn_primary_bg']} !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"][aria-checked="true"] > div:first-child > div {{
+        background-color: {th['btn_primary_bg']} !important;
     }}
 
     /* Slider */
@@ -999,14 +1011,18 @@ def _transfermarkt_section(
 
 # ─── Player photo section ─────────────────────────────────────────────────
 
-def _player_photo_section(state_key: str = "player_photo") -> bytes | None:
+def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None, bytes | None]:
     """Upload a player image, crop it circularly, and preview.
 
-    Returns the cropped image bytes (PNG) or None.
+    Returns (full_image_bytes, circular_crop_bytes) or (None, None).
+    The full image goes on the welcome slide; the circular crop on the rating slide.
     """
     from PIL import Image, ImageDraw
 
     L = _lang()
+    full_key = f"{state_key}_full"
+    circ_key = f"{state_key}_circ"
+
     st.markdown(f"### {t('player_photo', L)}")
 
     uploaded = st.file_uploader(
@@ -1023,12 +1039,16 @@ def _player_photo_section(state_key: str = "player_photo") -> bytes | None:
         if f"{state_key}_orig" not in st.session_state or st.session_state.get(f"{state_key}_fname") != uploaded.name:
             st.session_state[f"{state_key}_orig"] = img_bytes
             st.session_state[f"{state_key}_fname"] = uploaded.name
+            # Store full image as PNG
+            full_buf = io.BytesIO()
+            img.convert("RGB").save(full_buf, format="PNG")
+            st.session_state[full_key] = full_buf.getvalue()
 
         col_full, col_crop = st.columns(2)
 
         with col_full:
             st.markdown(f"**{t('original_image', L)}**")
-            st.image(img_bytes, use_container_width=True)
+            st.image(img_bytes, width=250)
 
         with col_crop:
             st.markdown(f"**{t('circular_preview', L)}**")
@@ -1060,7 +1080,6 @@ def _player_photo_section(state_key: str = "player_photo") -> bytes | None:
             bottom = min(h, int(cy + crop_size / 2))
 
             cropped = img.crop((left, top, right, bottom))
-            # Resize to a standard output size
             out_size = 400
             cropped = cropped.resize((out_size, out_size), Image.LANCZOS)
 
@@ -1071,25 +1090,34 @@ def _player_photo_section(state_key: str = "player_photo") -> bytes | None:
             preview = Image.new("RGBA", (out_size, out_size), (0, 0, 0, 0))
             preview.paste(cropped.convert("RGBA"), mask=mask)
 
-            # Display preview
+            # Display circular preview at a smaller size
             buf = io.BytesIO()
             preview.save(buf, format="PNG")
-            st.image(buf.getvalue(), use_container_width=True)
+            st.image(buf.getvalue(), width=200)
 
             # Accept button
             if st.button(f"✅ {t('accept_photo', L)}", key=f"{state_key}_accept", type="primary", use_container_width=True):
-                # Store the cropped (square) image as PNG bytes for PPTX
-                square_buf = io.BytesIO()
-                cropped.save(square_buf, format="PNG")
-                st.session_state[state_key] = square_buf.getvalue()
+                # Store circular crop (with transparency) as PNG
+                circ_buf = io.BytesIO()
+                preview.save(circ_buf, format="PNG")
+                st.session_state[circ_key] = circ_buf.getvalue()
+                # Also store the full image (in case not yet saved)
+                full_buf2 = io.BytesIO()
+                img.convert("RGB").save(full_buf2, format="PNG")
+                st.session_state[full_key] = full_buf2.getvalue()
                 st.success(t("photo_accepted", L))
 
-    elif st.session_state.get(state_key):
-        # Show previously accepted photo
+    elif st.session_state.get(full_key):
+        # Show previously accepted photos
         st.caption(t("photo_set", L))
-        st.image(st.session_state[state_key], width=150)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.image(st.session_state[full_key], width=150, caption=t("original_image", L))
+        with c2:
+            if st.session_state.get(circ_key):
+                st.image(st.session_state[circ_key], width=150, caption=t("circular_preview", L))
 
-    return st.session_state.get(state_key)
+    return st.session_state.get(full_key), st.session_state.get(circ_key)
 
 
 # ─── SciSports UI section ───────────────────────────────────────────────────
@@ -1329,6 +1357,17 @@ if page == "Dashboard":
                         st.session_state["upload_active_report_id"] = rid
                         st.session_state["club_select"] = meta.get("club", "FC Den Bosch")
                         st.session_state["lang_select"] = meta.get("language", "NL")
+                        # Restore photos from finished report
+                        _fdir = storage._finished_dir(username)
+                        _prefs = meta.get("photo_refs") or {}
+                        if _prefs.get("full"):
+                            _fp = _fdir / _prefs["full"]
+                            if _fp.exists():
+                                st.session_state["upload_player_photo_full"] = _fp.read_bytes()
+                        if _prefs.get("circular"):
+                            _cp = _fdir / _prefs["circular"]
+                            if _cp.exists():
+                                st.session_state["upload_player_photo_circ"] = _cp.read_bytes()
                 else:
                     st.session_state["edit_draft_id"] = rid
                 st.session_state["_nav_override"] = "Upload & Edit"
@@ -1477,7 +1516,7 @@ elif page == "New Report":
         tm_stats = st.session_state.get(NEW_TM_KEY)
 
     # ── Player photo ──────────────────────────────────────────────────────
-    _player_photo_section(state_key="new_player_photo")
+    _new_photo_full, _new_photo_circ = _player_photo_section(state_key="new_player_photo")
 
     st.markdown("---")
 
@@ -1537,7 +1576,8 @@ elif page == "New Report":
                     template_cfg, s, c, v,
                     player_data=st.session_state.get(NEW_PDATA_KEY),
                     tm_stats=st.session_state.get(NEW_TM_KEY),
-                    player_photo=st.session_state.get("new_player_photo"),
+                    player_photo=st.session_state.get("new_player_photo_full"),
+                    player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
             snapshot_bytes = snapshot.getvalue()
             rid = storage.save_draft(
@@ -1549,6 +1589,8 @@ elif page == "New Report":
                 upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
                 player_data=st.session_state.get(NEW_PDATA_KEY),
                 tm_stats=st.session_state.get(NEW_TM_KEY),
+                photo_full=st.session_state.get("new_player_photo_full"),
+                photo_circular=st.session_state.get("new_player_photo_circ"),
             )
             st.session_state["active_report_id"] = rid
             st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
@@ -1561,7 +1603,8 @@ elif page == "New Report":
                     template_cfg, s, c, v,
                     player_data=st.session_state.get(NEW_PDATA_KEY),
                     tm_stats=st.session_state.get(NEW_TM_KEY),
-                    player_photo=st.session_state.get("new_player_photo"),
+                    player_photo=st.session_state.get("new_player_photo_full"),
+                    player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
             pptx_bytes = output.getvalue()
 
@@ -1569,7 +1612,9 @@ elif page == "New Report":
             storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                   player_name=_current_player_name(NEW_PDATA_KEY),
                                   player_data=st.session_state.get(NEW_PDATA_KEY),
-                                  star_values=s)
+                                  star_values=s,
+                                  photo_full=st.session_state.get("new_player_photo_full"),
+                                  photo_circular=st.session_state.get("new_player_photo_circ"))
             st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))
@@ -1602,7 +1647,8 @@ elif page == "New Report":
                             template_cfg, s, c, v,
                             player_data=st.session_state.get(NEW_PDATA_KEY),
                             tm_stats=st.session_state.get(NEW_TM_KEY),
-                            player_photo=st.session_state.get("new_player_photo"),
+                            player_photo=st.session_state.get("new_player_photo_full"),
+                            player_photo_circular=st.session_state.get("new_player_photo_circ"),
                         )
                     pptx_bytes = output.getvalue()
                     rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
@@ -1621,12 +1667,16 @@ elif page == "New Report":
                         video_data=v,
                         player_data=st.session_state.get(NEW_PDATA_KEY),
                         tm_stats=st.session_state.get(NEW_TM_KEY),
+                        photo_full=st.session_state.get("new_player_photo_full"),
+                        photo_circular=st.session_state.get("new_player_photo_circ"),
                     )
                     # Also save as finished + mark shared
                     storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                           player_name=_current_player_name(NEW_PDATA_KEY),
                                           player_data=st.session_state.get(NEW_PDATA_KEY),
-                                          star_values=s)
+                                          star_values=s,
+                                          photo_full=st.session_state.get("new_player_photo_full"),
+                                          photo_circular=st.session_state.get("new_player_photo_circ"))
                     storage.mark_shared(username, rid, sel_scout)
                     st.session_state.pop("_share_pending", None)
                     # Auto-send notification emails (receiver gets platform link)
@@ -1698,6 +1748,11 @@ elif page == "Upload & Edit":
                 st.session_state[UPLOAD_TM_KEY] = draft["tm_stats"]
             else:
                 st.session_state.pop(UPLOAD_TM_KEY, None)
+            # Restore player photos
+            if draft.get("photo_full"):
+                st.session_state["upload_player_photo_full"] = draft["photo_full"]
+            if draft.get("photo_circular"):
+                st.session_state["upload_player_photo_circ"] = draft["photo_circular"]
             st.session_state["_loaded_draft"] = _edit_draft_id
 
     # ── Auto-load a received report PPTX when coming from "Continue Editing" ─
@@ -1744,6 +1799,11 @@ elif page == "Upload & Edit":
                 st.session_state[UPLOAD_TM_KEY] = recv["tm_stats"]
             else:
                 st.session_state.pop(UPLOAD_TM_KEY, None)
+            # Restore player photos
+            if recv.get("photo_full"):
+                st.session_state["upload_player_photo_full"] = recv["photo_full"]
+            if recv.get("photo_circular"):
+                st.session_state["upload_player_photo_circ"] = recv["photo_circular"]
 
             st.session_state["_loaded_draft"] = f"recv_{_edit_recv_id}"
 
@@ -1822,7 +1882,7 @@ elif page == "Upload & Edit":
                     )
 
         # ── Player photo ──────────────────────────────────────────────
-        _player_photo_section(state_key="upload_player_photo")
+        _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
 
         st.markdown("---")
         st.subheader(t("adjust_competencies", L))
@@ -1849,7 +1909,8 @@ elif page == "Upload & Edit":
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                        player_photo=st.session_state.get("upload_player_photo"),
+                        player_photo=st.session_state.get("upload_player_photo_full"),
+                        player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
                 _snap_bytes = _snap.getvalue()
                 rid = storage.save_draft(
@@ -1861,6 +1922,8 @@ elif page == "Upload & Edit":
                     upload_filename=st.session_state.get("upload_filename"),
                     player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                     tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                    photo_full=st.session_state.get("upload_player_photo_full"),
+                    photo_circular=st.session_state.get("upload_player_photo_circ"),
                 )
                 st.session_state["upload_active_report_id"] = rid
                 st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
@@ -1873,7 +1936,8 @@ elif page == "Upload & Edit":
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                        player_photo=st.session_state.get("upload_player_photo"),
+                        player_photo=st.session_state.get("upload_player_photo_full"),
+                        player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
                 pptx_bytes = output.getvalue()
                 pos = matched_name or "Unknown"
@@ -1888,7 +1952,9 @@ elif page == "Upload & Edit":
                 storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                       player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                       player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                      star_values=s)
+                                      star_values=s,
+                                      photo_full=st.session_state.get("upload_player_photo_full"),
+                                      photo_circular=st.session_state.get("upload_player_photo_circ"))
                 st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))
@@ -1921,7 +1987,8 @@ elif page == "Upload & Edit":
                                 st.session_state["upload_bytes"], template_cfg, s, c, v,
                                 player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                                 tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                                player_photo=st.session_state.get("upload_player_photo"),
+                                player_photo=st.session_state.get("upload_player_photo_full"),
+                                player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                             )
                         pptx_bytes = output.getvalue()
                         pos = matched_name or "Unknown"
@@ -1941,12 +2008,16 @@ elif page == "Upload & Edit":
                             video_data=v,
                             player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                             tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                            photo_full=st.session_state.get("upload_player_photo_full"),
+                            photo_circular=st.session_state.get("upload_player_photo_circ"),
                         )
                         # Also save as finished + mark shared
                         storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                               player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                               player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                              star_values=s)
+                                              star_values=s,
+                                              photo_full=st.session_state.get("upload_player_photo_full"),
+                                              photo_circular=st.session_state.get("upload_player_photo_circ"))
                         storage.mark_shared(username, rid, sel_scout)
                         st.session_state.pop("_share_pending", None)
                         # Auto-send notification emails (receiver gets platform link)
