@@ -963,28 +963,57 @@ def fill_player_photo(
         from PIL import Image as _PILImage
         slide0 = prs.slides[0]
 
-        # Find the name bar (TextBox 28) — the image bottom aligns with its top.
-        name_bar_top = int(8.36 * 914400)  # fallback
+        # Find reference shapes to position the image exactly like the
+        # reference layout:
+        #   • left bound  = left edge of WELKOM/WELCOME text ("W" position)
+        #   • right bound = right edge of the name TextBox 28 on the slide
+        #   • bottom      = top of the Rechthoek (name-bar background)
+        # These live on the slide layout or slide master.
+
+        welkom_left = int(10.09 * 914400)    # fallback FC Den Bosch
+        bar_top = int(8.18 * 914400)         # fallback
+        name_right = int(16.46 * 914400)     # fallback
+
+        # Search layout first, then master as fallback
+        _welkom_found = False
+        _bar_found = False
+        _search_pools = [slide0.slide_layout.shapes]
+        try:
+            _search_pools.append(slide0.slide_layout.slide_master.shapes)
+        except Exception:
+            pass
+        for pool in _search_pools:
+            for shape in pool:
+                nm = shape.name or ""
+                txt = shape.text if hasattr(shape, "text") else ""
+                if not _welkom_found and ("WELKOM" in txt or "WELCOME" in txt):
+                    welkom_left = shape.left
+                    _welkom_found = True
+                if not _bar_found and nm == "Rechthoek":
+                    bar_top = shape.top
+                    _bar_found = True
+
+        # Name TextBox 28 on the actual slide
         for shape in slide0.shapes:
             if shape.name == "TextBox 28":
-                name_bar_top = shape.top
+                name_right = shape.left + shape.width
                 break
 
-        # Target box: horizontally x ≈ 2.5 – 10.5 in,
-        # vertically from y ≈ 0.5 in down to the name bar top.
-        box_left = int(2.5 * 914400)
-        box_top = int(0.5 * 914400)
-        box_w = int(8.0 * 914400)   # 10.5 - 2.5
-        box_h = name_bar_top - box_top
+        # Target box: between the "W" and end of name, top at y ≈ 0 in
+        box_left = welkom_left
+        box_right = name_right
+        box_w = box_right - box_left
+        box_top = 0
+        box_h = bar_top - box_top
 
         _img = _PILImage.open(io.BytesIO(full_photo))
         iw, ih = _img.size
         scale = min(box_w / iw, box_h / ih)
         pic_w = int(iw * scale)
         pic_h = int(ih * scale)
-        # Centre horizontally, anchor bottom to name bar
+        # Centre horizontally, anchor bottom to bar top
         pic_left = box_left + (box_w - pic_w) // 2
-        pic_top = name_bar_top - pic_h
+        pic_top = bar_top - pic_h
 
         img_stream = io.BytesIO(full_photo)
         slide0.shapes.add_picture(img_stream, pic_left, pic_top, pic_w, pic_h)

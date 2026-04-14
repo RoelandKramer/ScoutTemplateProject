@@ -1043,79 +1043,102 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
         if f"{state_key}_orig" not in st.session_state or st.session_state.get(f"{state_key}_fname") != uploaded.name:
             st.session_state[f"{state_key}_orig"] = img_bytes
             st.session_state[f"{state_key}_fname"] = uploaded.name
-            # Store full image as PNG (preserve alpha/transparency if present)
-            full_buf = io.BytesIO()
-            if img.mode == "RGBA":
-                img.save(full_buf, format="PNG")
-            else:
-                img.convert("RGBA").save(full_buf, format="PNG")
-            st.session_state[full_key] = full_buf.getvalue()
+
+        w, h = img.size
 
         col_full, col_crop = st.columns(2)
 
+        # ── Left column: Original image with crop controls ─────────────
         with col_full:
             st.markdown(f"**{t('original_image', L)}**")
-            st.image(img_bytes, width=250)
 
+            # Crop sliders (percentage of each edge to trim)
+            crop_t = st.slider(t("crop_top", L), 0, 50, 0, key=f"{state_key}_ct")
+            crop_b = st.slider(t("crop_bottom", L), 0, 50, 0, key=f"{state_key}_cb")
+            crop_l = st.slider(t("crop_left", L), 0, 50, 0, key=f"{state_key}_cl")
+            crop_r = st.slider(t("crop_right", L), 0, 50, 0, key=f"{state_key}_cr")
+
+            # Apply crop to original
+            ct_px = int(h * crop_t / 100)
+            cb_px = int(h * crop_b / 100)
+            cl_px = int(w * crop_l / 100)
+            cr_px = int(w * crop_r / 100)
+            cropped_full = img.crop((cl_px, ct_px, w - cr_px, h - cb_px))
+
+            # Show cropped original preview
+            full_preview_buf = io.BytesIO()
+            cropped_full.save(full_preview_buf, format="PNG")
+            st.image(full_preview_buf.getvalue(), width=250)
+
+        # ── Right column: Circular preview ─────────────────────────────
         with col_crop:
             st.markdown(f"**{t('circular_preview', L)}**")
 
-            # Zoom and position controls
+            # Build circular preview from the cropped original.
+            # Use a placeholder so the preview image appears ABOVE the sliders.
+            preview_placeholder = st.empty()
+
+            cw, ch = cropped_full.size
+
+            # Zoom and position sliders
             zoom = st.slider(
                 t("zoom", L), min_value=1.0, max_value=3.0, value=1.0, step=0.1,
                 key=f"{state_key}_zoom",
             )
-            w, h = img.size
-            crop_size = min(w, h) / zoom
-            # Allow moving the crop circle to any position in the image
-            max_offset_x = max(0, int((w - crop_size) / 2))
-            max_offset_y = max(0, int((h - crop_size) / 2))
+            circ_crop_size = min(cw, ch) / zoom
+            max_offset_x = max(0, int((cw - circ_crop_size) / 2))
+            max_offset_y = max(0, int((ch - circ_crop_size) / 2))
+            # Clamp existing slider values when zoom changes
+            ox_key = f"{state_key}_ox"
+            oy_key = f"{state_key}_oy"
+            if ox_key in st.session_state:
+                st.session_state[ox_key] = max(-max_offset_x, min(max_offset_x, st.session_state[ox_key]))
+            if oy_key in st.session_state:
+                st.session_state[oy_key] = max(-max_offset_y, min(max_offset_y, st.session_state[oy_key]))
+
             offset_x = st.slider(
                 t("horizontal_pos", L), min_value=-max_offset_x, max_value=max_offset_x, value=0,
-                key=f"{state_key}_ox",
+                key=ox_key,
             ) if max_offset_x > 0 else 0
             offset_y = st.slider(
                 t("vertical_pos", L), min_value=-max_offset_y, max_value=max_offset_y, value=0,
-                key=f"{state_key}_oy",
+                key=oy_key,
             ) if max_offset_y > 0 else 0
 
-            # Compute crop box
-            cx = w / 2 + offset_x
-            cy = h / 2 + offset_y
-            left = max(0, int(cx - crop_size / 2))
-            top = max(0, int(cy - crop_size / 2))
-            right = min(w, int(cx + crop_size / 2))
-            bottom = min(h, int(cy + crop_size / 2))
+            ccx = cw / 2 + offset_x
+            ccy = ch / 2 + offset_y
+            cl = max(0, int(ccx - circ_crop_size / 2))
+            ct = max(0, int(ccy - circ_crop_size / 2))
+            cr = min(cw, int(ccx + circ_crop_size / 2))
+            cb = min(ch, int(ccy + circ_crop_size / 2))
 
-            cropped = img.crop((left, top, right, bottom))
+            circ_square = cropped_full.crop((cl, ct, cr, cb))
             out_size = 400
-            cropped = cropped.resize((out_size, out_size), Image.LANCZOS)
+            circ_square = circ_square.resize((out_size, out_size), Image.LANCZOS)
 
-            # Apply circular mask for preview
+            # Apply circular mask
             mask = Image.new("L", (out_size, out_size), 0)
             draw = ImageDraw.Draw(mask)
             draw.ellipse((0, 0, out_size - 1, out_size - 1), fill=255)
             preview = Image.new("RGBA", (out_size, out_size), (0, 0, 0, 0))
-            preview.paste(cropped.convert("RGBA"), mask=mask)
+            preview.paste(circ_square.convert("RGBA"), mask=mask)
 
-            # Display circular preview at a smaller size
+            # Fill the placeholder above the sliders with the preview image
             buf = io.BytesIO()
             preview.save(buf, format="PNG")
-            st.image(buf.getvalue(), width=200)
+            preview_placeholder.image(buf.getvalue(), width=200)
 
-            # Accept button
-            if st.button(f"✅ {t('accept_photo', L)}", key=f"{state_key}_accept", type="primary", use_container_width=True):
-                # Store circular crop (with transparency) as PNG
+            # Accept button (no emoji)
+            if st.button(t("accept_photo", L), key=f"{state_key}_accept", type="primary", use_container_width=True):
+                # Store circular crop as PNG
                 circ_buf = io.BytesIO()
                 preview.save(circ_buf, format="PNG")
                 st.session_state[circ_key] = circ_buf.getvalue()
-                # Also store the full image (preserve transparency)
-                full_buf2 = io.BytesIO()
-                if img.mode == "RGBA":
-                    img.save(full_buf2, format="PNG")
-                else:
-                    img.convert("RGBA").save(full_buf2, format="PNG")
-                st.session_state[full_key] = full_buf2.getvalue()
+                # Store the cropped full image (preserve transparency)
+                full_buf = io.BytesIO()
+                _save_img = cropped_full.convert("RGBA") if cropped_full.mode != "RGBA" else cropped_full
+                _save_img.save(full_buf, format="PNG")
+                st.session_state[full_key] = full_buf.getvalue()
                 st.success(t("photo_accepted", L))
 
     elif st.session_state.get(full_key):

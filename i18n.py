@@ -119,6 +119,10 @@ TRANSLATIONS = {
         "accept_photo": "Accept photo",
         "photo_accepted": "Photo accepted!",
         "photo_set": "Photo has been set.",
+        "crop_top": "Crop top",
+        "crop_bottom": "Crop bottom",
+        "crop_left": "Crop left",
+        "crop_right": "Crop right",
     },
     "NL": {
         "scout_rating_tool": "Scouting Rapport Pro+",
@@ -238,6 +242,10 @@ TRANSLATIONS = {
         "accept_photo": "Foto accepteren",
         "photo_accepted": "Foto geaccepteerd!",
         "photo_set": "Foto is ingesteld.",
+        "crop_top": "Bijsnijden boven",
+        "crop_bottom": "Bijsnijden onder",
+        "crop_left": "Bijsnijden links",
+        "crop_right": "Bijsnijden rechts",
     },
     "IT": {
         "scout_rating_tool": "Scouting Rapport Pro+",
@@ -357,6 +365,10 @@ TRANSLATIONS = {
         "accept_photo": "Accetta foto",
         "photo_accepted": "Foto accettata!",
         "photo_set": "Foto impostata.",
+        "crop_top": "Ritaglia sopra",
+        "crop_bottom": "Ritaglia sotto",
+        "crop_left": "Ritaglia sinistra",
+        "crop_right": "Ritaglia destra",
     },
     "ZH": {
         "scout_rating_tool": "Scouting Rapport Pro+",
@@ -476,6 +488,10 @@ TRANSLATIONS = {
         "accept_photo": "确认照片",
         "photo_accepted": "照片已确认！",
         "photo_set": "照片已设置。",
+        "crop_top": "裁剪上方",
+        "crop_bottom": "裁剪下方",
+        "crop_left": "裁剪左侧",
+        "crop_right": "裁剪右侧",
     },
 }
 
