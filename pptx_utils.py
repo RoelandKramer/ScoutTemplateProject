@@ -963,17 +963,14 @@ def fill_player_photo(
         from PIL import Image as _PILImage
         slide0 = prs.slides[0]
 
-        # Find reference shapes to position the image exactly like the
-        # reference layout:
-        #   • left bound  = left edge of WELKOM/WELCOME text ("W" position)
-        #   • right bound = left edge of the name bar (Rechthoek) or name TextBox 28
+        # Find reference shapes to position the image:
+        #   • left bound  = left edge of name bar (Rechthoek)
+        #   • right bound = left edge of WELKOM/WELCOME text
         #   • bottom      = top of the Rechthoek (name-bar background)
-        # These live on the slide layout or slide master.
 
         welkom_left = int(10.09 * 914400)    # fallback FC Den Bosch
         bar_top = int(8.18 * 914400)         # fallback
-        bar_left = None                      # will track the Rechthoek's left edge
-        name_left = int(10.09 * 914400)      # fallback
+        bar_left = int(4.97 * 914400)        # fallback
 
         # Search layout first, then master as fallback
         _welkom_found = False
@@ -992,28 +989,13 @@ def fill_player_photo(
                     _welkom_found = True
                 if not _bar_found and nm == "Rechthoek":
                     bar_top = shape.top
-                    bar_left = shape.left    # Capture the left edge of the name bar
+                    bar_left = shape.left
                     _bar_found = True
 
-        # Name TextBox 28 on the actual slide
-        for shape in slide0.shapes:
-            if shape.name == "TextBox 28":
-                name_left = shape.left
-                break
-
-        # If the "name bar" (Rechthoek) wasn't found, fallback to the text box's left edge
-        if bar_left is None:
-            bar_left = name_left
-
-        # Target box: between the "W" and the left side of the name bar, top at y ≈ 0 in
-        box_left = welkom_left
-        box_right = bar_left
+        # Target box: from Rechthoek left to WELKOM left, top y=0 to bar top
+        box_left = bar_left
+        box_right = welkom_left
         box_w = box_right - box_left
-        
-        # Safeguard just in case slide layouts give us a zero or negative width
-        if box_w <= 0:
-            box_w = int(5.0 * 914400)
-            
         box_top = 0
         box_h = bar_top - box_top
 

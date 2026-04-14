@@ -1053,6 +1053,9 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
         with col_full:
             st.markdown(f"**{t('original_image', L)}**")
 
+            # Placeholder so preview appears above sliders
+            full_preview_placeholder = st.empty()
+
             # Crop sliders (percentage of each edge to trim)
             crop_t = st.slider(t("crop_top", L), 0, 50, 0, key=f"{state_key}_ct")
             crop_b = st.slider(t("crop_bottom", L), 0, 50, 0, key=f"{state_key}_cb")
@@ -1066,10 +1069,10 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
             cr_px = int(w * crop_r / 100)
             cropped_full = img.crop((cl_px, ct_px, w - cr_px, h - cb_px))
 
-            # Show cropped original preview
+            # Fill placeholder with cropped preview (above the sliders)
             full_preview_buf = io.BytesIO()
             cropped_full.save(full_preview_buf, format="PNG")
-            st.image(full_preview_buf.getvalue(), width=250)
+            full_preview_placeholder.image(full_preview_buf.getvalue(), width=250)
 
         # ── Right column: Circular preview ─────────────────────────────
         with col_crop:
@@ -1289,6 +1292,13 @@ with st.sidebar:
     st.markdown(f"**{t('logged_in_as', L)}:** {username}")
 
     # ── Club & template language ─────────────────────────────────────────────
+    # Apply deferred club/lang changes (from dashboard "Continue editing")
+    _pc = st.session_state.pop("_pending_club", None)
+    if _pc:
+        st.session_state["club_select"] = _pc
+    _pl = st.session_state.pop("_pending_lang", None)
+    if _pl:
+        st.session_state["lang_select"] = _pl
     club = st.selectbox(t("choose_club", L), CLUBS, key="club_select")
     available_langs = CLUB_LANGUAGES[club]
     lang = st.selectbox(t("choose_template_language", L), available_langs, key="lang_select")
@@ -1390,8 +1400,9 @@ if page == "Dashboard":
                         )
                         st.session_state["upload_file_key"] = f"finished_{rid}"
                         st.session_state["upload_active_report_id"] = rid
-                        st.session_state["club_select"] = meta.get("club", "FC Den Bosch")
-                        st.session_state["lang_select"] = meta.get("language", "NL")
+                        # Defer club/lang change to before widget render (next rerun)
+                        st.session_state["_pending_club"] = meta.get("club", "FC Den Bosch")
+                        st.session_state["_pending_lang"] = meta.get("language", "NL")
                         # Restore photos from finished report
                         _fdir = storage._finished_dir(username)
                         _prefs = meta.get("photo_refs") or {}
