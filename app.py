@@ -1136,18 +1136,14 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
             preview.save(buf, format="PNG")
             preview_placeholder.image(buf.getvalue(), width=200)
 
-            # Accept button (no emoji)
-            if st.button(t("accept_photo", L), key=f"{state_key}_accept", type="primary", use_container_width=True):
-                # Store circular crop as PNG
-                circ_buf = io.BytesIO()
-                preview.save(circ_buf, format="PNG")
-                st.session_state[circ_key] = circ_buf.getvalue()
-                # Store the cropped full image (preserve transparency)
-                full_buf = io.BytesIO()
-                _save_img = cropped_full.convert("RGBA") if cropped_full.mode != "RGBA" else cropped_full
-                _save_img.save(full_buf, format="PNG")
-                st.session_state[full_key] = full_buf.getvalue()
-                st.success(t("photo_accepted", L))
+            # Always store the current crop results into session state
+            circ_buf = io.BytesIO()
+            preview.save(circ_buf, format="PNG")
+            st.session_state[circ_key] = circ_buf.getvalue()
+            full_buf = io.BytesIO()
+            _save_img = cropped_full.convert("RGBA") if cropped_full.mode != "RGBA" else cropped_full
+            _save_img.save(full_buf, format="PNG")
+            st.session_state[full_key] = full_buf.getvalue()
 
     elif st.session_state.get(full_key):
         # Show previously accepted photos
