@@ -378,7 +378,11 @@ def _apply_theme(club: str) -> None:
         border: 2px solid {th['btn_primary_bg']} !important;
     }}
     div.stButton > button[kind="primary"]:hover,
-    [data-testid="stFormSubmitButton"] > button:hover {{
+    div.stButton > button[kind="primary"]:hover span,
+    div.stButton > button[kind="primary"]:hover p,
+    [data-testid="stFormSubmitButton"] > button:hover,
+    [data-testid="stFormSubmitButton"] > button:hover span,
+    [data-testid="stFormSubmitButton"] > button:hover p {{
         background-color: {th['primary_hover']} !important; color: #ffffff !important;
         border-color: {th['primary_hover']} !important;
     }}
