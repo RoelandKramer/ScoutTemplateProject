@@ -1390,30 +1390,11 @@ if page == "Dashboard":
                 if edit_mode == "received":
                     st.session_state["edit_received_id"] = rid
                 elif edit_mode == "finished":
-                    # Load finished PPTX into upload editor
-                    pptx = load_pptx_fn(username, rid)
-                    if pptx:
-                        st.session_state["upload_bytes"] = pptx
-                        st.session_state["upload_filename"] = _build_pptx_fname(
-                            meta.get("position", ""),
-                            meta.get("player_name", ""),
-                        )
-                        st.session_state["upload_file_key"] = f"finished_{rid}"
-                        st.session_state["upload_active_report_id"] = rid
-                        # Defer club/lang change to before widget render (next rerun)
-                        st.session_state["_pending_club"] = meta.get("club", "FC Den Bosch")
-                        st.session_state["_pending_lang"] = meta.get("language", "NL")
-                        # Restore photos from finished report
-                        _fdir = storage._finished_dir(username)
-                        _prefs = meta.get("photo_refs") or {}
-                        if _prefs.get("full"):
-                            _fp = _fdir / _prefs["full"]
-                            if _fp.exists():
-                                st.session_state["upload_player_photo_full"] = _fp.read_bytes()
-                        if _prefs.get("circular"):
-                            _cp = _fdir / _prefs["circular"]
-                            if _cp.exists():
-                                st.session_state["upload_player_photo_circ"] = _cp.read_bytes()
+                    st.session_state["edit_finished_id"] = rid
+                    st.session_state["_edit_finished_meta"] = meta
+                    # Defer club/lang change to before widget render (next rerun)
+                    st.session_state["_pending_club"] = meta.get("club", "FC Den Bosch")
+                    st.session_state["_pending_lang"] = meta.get("language", "NL")
                 else:
                     st.session_state["edit_draft_id"] = rid
                 st.session_state["_nav_override"] = "Upload & Edit"
@@ -1658,7 +1639,8 @@ elif page == "New Report":
             storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                   player_name=_current_player_name(NEW_PDATA_KEY),
                                   player_data=st.session_state.get(NEW_PDATA_KEY),
-                                  star_values=s,
+                                  star_values=s, comments=c, video_data=v,
+                                  tm_stats=st.session_state.get(NEW_TM_KEY),
                                   photo_full=st.session_state.get("new_player_photo_full"),
                                   photo_circular=st.session_state.get("new_player_photo_circ"))
             st.session_state.pop("active_report_id", None)
@@ -1720,7 +1702,8 @@ elif page == "New Report":
                     storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                           player_name=_current_player_name(NEW_PDATA_KEY),
                                           player_data=st.session_state.get(NEW_PDATA_KEY),
-                                          star_values=s,
+                                          star_values=s, comments=c, video_data=v,
+                                          tm_stats=st.session_state.get(NEW_TM_KEY),
                                           photo_full=st.session_state.get("new_player_photo_full"),
                                           photo_circular=st.session_state.get("new_player_photo_circ"))
                     storage.mark_shared(username, rid, sel_scout)
@@ -1852,6 +1835,56 @@ elif page == "Upload & Edit":
                 st.session_state["upload_player_photo_circ"] = recv["photo_circular"]
 
             st.session_state["_loaded_draft"] = f"recv_{_edit_recv_id}"
+
+    # ── Auto-load a finished report when coming from "Continue Editing" ──────
+    _edit_fin_id = st.session_state.pop("edit_finished_id", None)
+    _edit_fin_meta = st.session_state.pop("_edit_finished_meta", None)
+    if _edit_fin_id and st.session_state.get("_loaded_draft") != f"fin_{_edit_fin_id}":
+        fin = storage.load_finished(username, _edit_fin_id)
+        if fin and fin.get("pptx_bytes"):
+            fin_bytes = fin["pptx_bytes"]
+            with st.spinner(t("checking", L)):
+                check_result = check_template_compatibility(io.BytesIO(fin_bytes))
+            fname = _build_pptx_fname(
+                fin.get("position", ""),
+                fin.get("player_name", ""),
+            )
+            st.session_state["upload_file_key"]     = f"finished_{_edit_fin_id}"
+            st.session_state["upload_bytes"]        = fin_bytes
+            st.session_state["upload_filename"]     = fname
+            st.session_state["upload_check_result"] = check_result
+            st.session_state["upload_active_report_id"] = _edit_fin_id
+
+            # Prefer the rich state stored in meta over PPTX-parsed values
+            fin_stars = fin.get("star_values") or check_result.get("current_star_values", [])
+            fin_comments = fin.get("comments") or check_result.get("current_comments", [])
+            fin_videos = fin.get("video_data") or check_result.get("current_videos", [])
+
+            for i, val in enumerate(fin_stars):
+                st.session_state[f"upload_{i}"] = float(val)
+            for i, cmt in enumerate(fin_comments):
+                st.session_state[f"upload_{i}_comment"] = cmt or ""
+            for i, vid in enumerate(fin_videos):
+                st.session_state[f"upload_{i}_video"] = vid
+
+            # Restore player/stats data
+            _clear_player_card_inputs("upload_sci_card")
+            _clear_stats_card_inputs("upload_tm_card")
+            if fin.get("player_data"):
+                st.session_state[UPLOAD_PDATA_KEY] = fin["player_data"]
+            else:
+                st.session_state.pop(UPLOAD_PDATA_KEY, None)
+            if fin.get("tm_stats"):
+                st.session_state[UPLOAD_TM_KEY] = fin["tm_stats"]
+            else:
+                st.session_state.pop(UPLOAD_TM_KEY, None)
+            # Restore photos
+            if fin.get("photo_full"):
+                st.session_state["upload_player_photo_full"] = fin["photo_full"]
+            if fin.get("photo_circular"):
+                st.session_state["upload_player_photo_circ"] = fin["photo_circular"]
+
+            st.session_state["_loaded_draft"] = f"fin_{_edit_fin_id}"
 
     st.caption(t("upload_caption", L))
 
@@ -1998,7 +2031,8 @@ elif page == "Upload & Edit":
                 storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                       player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                       player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                      star_values=s,
+                                      star_values=s, comments=c, video_data=v,
+                                      tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                                       photo_full=st.session_state.get("upload_player_photo_full"),
                                       photo_circular=st.session_state.get("upload_player_photo_circ"))
                 st.session_state.pop("upload_active_report_id", None)
@@ -2062,6 +2096,9 @@ elif page == "Upload & Edit":
                                               player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                               player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                                               star_values=s,
+                                              comments=c,
+                                              video_data=v,
+                                              tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                                               photo_full=st.session_state.get("upload_player_photo_full"),
                                               photo_circular=st.session_state.get("upload_player_photo_circ"))
                         storage.mark_shared(username, rid, sel_scout)

@@ -195,6 +195,9 @@ def save_finished(
     player_name: str = "",
     player_data: dict | None = None,
     star_values: list[float] | None = None,
+    comments: list[str] | None = None,
+    video_data: list | None = None,
+    tm_stats: dict | None = None,
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
 ) -> str:
@@ -212,6 +215,19 @@ def save_finished(
         (finished / f"{report_id}_photo_circ.png").write_bytes(photo_circular)
         photo_refs["circular"] = f"{report_id}_photo_circ.png"
 
+    # Save video files separately
+    video_refs = []
+    if video_data:
+        for i, vd in enumerate(video_data):
+            if vd is not None:
+                vbytes, vname = vd
+                ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
+                vpath = finished / f"{report_id}_video_{i}.{ext}"
+                vpath.write_bytes(vbytes)
+                video_refs.append({"filename": vname, "path": str(vpath.name)})
+            else:
+                video_refs.append(None)
+
     meta = {
         "report_id": report_id,
         "position": position,
@@ -221,6 +237,9 @@ def save_finished(
         "finished_at": time.time(),
         "player_data": player_data,
         "star_values": star_values or [],
+        "comments": comments or [],
+        "video_refs": video_refs,
+        "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
     }
     (finished / f"{report_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -249,6 +268,48 @@ def load_finished_pptx(username: str, report_id: str) -> bytes | None:
     """Return the PPTX bytes for a finished report."""
     p = _finished_dir(username) / f"{report_id}.pptx"
     return p.read_bytes() if p.exists() else None
+
+
+def load_finished(username: str, report_id: str) -> dict | None:
+    """Load a finished report's full state including PPTX, videos, photos.
+    Returns None if not found.
+    """
+    finished = _finished_dir(username)
+    p = finished / f"{report_id}.json"
+    if not p.exists():
+        return None
+    meta = json.loads(p.read_text(encoding="utf-8"))
+
+    # Attach PPTX bytes
+    pptx_path = finished / f"{report_id}.pptx"
+    if pptx_path.exists():
+        meta["pptx_bytes"] = pptx_path.read_bytes()
+
+    # Resolve video refs to bytes
+    video_data = []
+    for vref in meta.get("video_refs", []) or []:
+        if vref is not None:
+            vpath = finished / vref["path"]
+            if vpath.exists():
+                video_data.append((vpath.read_bytes(), vref["filename"]))
+            else:
+                video_data.append(None)
+        else:
+            video_data.append(None)
+    meta["video_data"] = video_data
+
+    # Resolve photo refs
+    prefs = meta.get("photo_refs") or {}
+    if prefs.get("full"):
+        pfull = finished / prefs["full"]
+        if pfull.exists():
+            meta["photo_full"] = pfull.read_bytes()
+    if prefs.get("circular"):
+        pcirc = finished / prefs["circular"]
+        if pcirc.exists():
+            meta["photo_circular"] = pcirc.read_bytes()
+
+    return meta
 
 
 def mark_shared(username: str, report_id: str, shared_to: str) -> None:
