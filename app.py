@@ -715,7 +715,7 @@ def competency_sections(
         with st.expander(display_label, expanded=False):
             uploaded_video = st.file_uploader(
                 t("video_clip", L),
-                type=["mp4", "mov", "avi", "wmv", "mkv", "webm"],
+                type=["mp4", "mov", "avi"],
                 key=f"{key_prefix}_{i}_uploader",
             )
             if uploaded_video is not None:
