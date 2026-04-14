@@ -418,6 +418,9 @@ def _apply_theme(club: str) -> None:
         border: 1px solid {th['border']} !important;
         border-radius: 10px !important;
     }}
+    /* Override Streamlit's "Press Enter to submit form" text */
+    [data-testid="InputInstructions"] {{ font-size: 0 !important; }}
+    [data-testid="InputInstructions"]::after {{ content: "Press Enter to submit"; font-size: 0.875rem; }}
 
     /* Dividers */
     hr {{ border-color: {th['border_light']} !important; }}
