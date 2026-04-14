@@ -792,21 +792,32 @@ def _current_player_name(state_key: str = "player_data") -> str:
     return ""
 
 
+_POSITION_JERSEY = {
+    "Goalkeeper": "#1",
+    "Wingback": "#2 #5",
+    "Centerback": "#4",
+    "Deep Lying Playmaker": "#6",
+    "Box-to-Box Midfielder": "#8",
+    "Scoring 10": "#10",
+    "Fast Winger": "#7",
+    "Dribbling Winger": "#11",
+    "Finisher": "#9",
+}
+
+
 def _pptx_filename(position: str, state_key: str = "player_data") -> str:
-    """Build PPTX filename like  14042026 #8 Box to box midfielder Sven Simons.pptx"""
+    """Build PPTX filename like  14042026 #8 Box-to-Box Midfielder Sven Simons.pptx"""
     pd = st.session_state.get(state_key)
     name = ""
-    nr = ""
     if pd and isinstance(pd, dict):
         name = pd.get("name", "")
-        nr = pd.get("jersey_number", "")
-    return _build_pptx_fname(position, name, nr)
+    return _build_pptx_fname(position, name)
 
 
-def _build_pptx_fname(position: str, player_name: str = "", jersey_nr: str = "") -> str:
-    """Build PPTX filename like  14042026 #8 Box to box midfielder Sven Simons.pptx"""
+def _build_pptx_fname(position: str, player_name: str = "") -> str:
+    """Build PPTX filename like  14042026 #8 Box-to-Box Midfielder Sven Simons.pptx"""
     date_str = datetime.now(_NL_TZ).strftime("%d%m%Y")
-    nr_part = f" #{jersey_nr}" if jersey_nr else ""
+    nr_part = f" {_POSITION_JERSEY[position]}" if position in _POSITION_JERSEY else ""
     role_part = f" {position}" if position else ""
     name_part = f" {player_name}" if player_name else ""
     fname = f"{date_str}{nr_part}{role_part}{name_part}".strip()
@@ -827,7 +838,6 @@ def _collect_editor_state(key_prefix: str, n_vars: int):
 # ─── Editable player info card ──────────────────────────────────────────────
 
 _PLAYER_FIELDS = [
-    ("jersey_number", "jersey_number"),
     ("date_of_birth", "date_of_birth"),
     ("city_of_birth", "city_of_birth"),
     ("nationality", "nationality"),
@@ -1415,7 +1425,6 @@ if page == "Dashboard":
                     file_name=_build_pptx_fname(
                         meta.get("position", ""),
                         meta.get("player_name", ""),
-                        (meta.get("player_data") or {}).get("jersey_number", ""),
                     ),
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     key=f"dl_{prefix}_{rid}", use_container_width=True,
