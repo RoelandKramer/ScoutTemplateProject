@@ -2054,7 +2054,7 @@ elif page == "Upload & Edit":
 
                 st.success(t("done", L))
                 st.download_button(
-                    f"📥  {t('download_filled', L)}", data=pptx_bytes,
+                    f"📥  {t('download_pptx', L)}", data=pptx_bytes,
                     file_name=_pptx_filename(pos, UPLOAD_PDATA_KEY),
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     use_container_width=True,
