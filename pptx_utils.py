@@ -966,13 +966,14 @@ def fill_player_photo(
         # Find reference shapes to position the image exactly like the
         # reference layout:
         #   • left bound  = left edge of WELKOM/WELCOME text ("W" position)
-        #   • right bound = right edge of the name TextBox 28 on the slide
+        #   • right bound = left edge of the name bar (Rechthoek) or name TextBox 28
         #   • bottom      = top of the Rechthoek (name-bar background)
         # These live on the slide layout or slide master.
 
         welkom_left = int(10.09 * 914400)    # fallback FC Den Bosch
         bar_top = int(8.18 * 914400)         # fallback
-        name_right = int(16.46 * 914400)     # fallback
+        bar_left = None                      # will track the Rechthoek's left edge
+        name_left = int(10.09 * 914400)      # fallback
 
         # Search layout first, then master as fallback
         _welkom_found = False
@@ -991,18 +992,28 @@ def fill_player_photo(
                     _welkom_found = True
                 if not _bar_found and nm == "Rechthoek":
                     bar_top = shape.top
+                    bar_left = shape.left    # Capture the left edge of the name bar
                     _bar_found = True
 
         # Name TextBox 28 on the actual slide
         for shape in slide0.shapes:
             if shape.name == "TextBox 28":
-                name_right = shape.left + shape.width
+                name_left = shape.left
                 break
 
-        # Target box: between the "W" and end of name, top at y ≈ 0 in
+        # If the "name bar" (Rechthoek) wasn't found, fallback to the text box's left edge
+        if bar_left is None:
+            bar_left = name_left
+
+        # Target box: between the "W" and the left side of the name bar, top at y ≈ 0 in
         box_left = welkom_left
-        box_right = name_right
+        box_right = bar_left
         box_w = box_right - box_left
+        
+        # Safeguard just in case slide layouts give us a zero or negative width
+        if box_w <= 0:
+            box_w = int(5.0 * 914400)
+            
         box_top = 0
         box_h = bar_top - box_top
 
@@ -1011,7 +1022,7 @@ def fill_player_photo(
         scale = min(box_w / iw, box_h / ih)
         pic_w = int(iw * scale)
         pic_h = int(ih * scale)
-        # Centre horizontally, anchor bottom to bar top
+        # Centre horizontally within our new left-side box, anchor bottom to bar top
         pic_left = box_left + (box_w - pic_w) // 2
         pic_top = bar_top - pic_h
 
@@ -1036,7 +1047,6 @@ def fill_player_photo(
             sp.getparent().remove(sp)
             img_stream = io.BytesIO(photo_for_rating)
             rating_slide.shapes.add_picture(img_stream, left, top, width, height)
-
 
 def fill_template(
     template_cfg: dict,
