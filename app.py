@@ -5,7 +5,8 @@ import os
 import uuid
 import time
 import base64
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import zoneinfo
 from pathlib import Path
 import streamlit as st
 from pptx_utils import (
@@ -768,8 +769,10 @@ def competency_sections(
     return star_values, comments, video_data
 
 
+_NL_TZ = zoneinfo.ZoneInfo("Europe/Amsterdam")
+
 def _ts_str(ts: float) -> str:
-    return datetime.fromtimestamp(ts).strftime("%d %b %Y, %H:%M")
+    return datetime.fromtimestamp(ts, tz=_NL_TZ).strftime("%d %b %Y, %H:%M")
 
 
 def _report_title(meta: dict) -> str:
@@ -802,7 +805,7 @@ def _pptx_filename(position: str, state_key: str = "player_data") -> str:
 
 def _build_pptx_fname(position: str, player_name: str = "", jersey_nr: str = "") -> str:
     """Build PPTX filename like  14042026 #8 Box to box midfielder Sven Simons.pptx"""
-    date_str = datetime.now().strftime("%d%m%Y")
+    date_str = datetime.now(_NL_TZ).strftime("%d%m%Y")
     nr_part = f" #{jersey_nr}" if jersey_nr else ""
     role_part = f" {position}" if position else ""
     name_part = f" {player_name}" if player_name else ""
