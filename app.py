@@ -206,6 +206,7 @@ def improve_text(text: str) -> str:
         return text
 
 
+
 # ─── Authentication ──────────────────────────────────────────────────────────
 
 def _get_all_users() -> dict[str, dict]:
