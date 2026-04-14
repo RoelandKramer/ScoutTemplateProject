@@ -1043,9 +1043,12 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
         if f"{state_key}_orig" not in st.session_state or st.session_state.get(f"{state_key}_fname") != uploaded.name:
             st.session_state[f"{state_key}_orig"] = img_bytes
             st.session_state[f"{state_key}_fname"] = uploaded.name
-            # Store full image as PNG
+            # Store full image as PNG (preserve alpha/transparency if present)
             full_buf = io.BytesIO()
-            img.convert("RGB").save(full_buf, format="PNG")
+            if img.mode == "RGBA":
+                img.save(full_buf, format="PNG")
+            else:
+                img.convert("RGBA").save(full_buf, format="PNG")
             st.session_state[full_key] = full_buf.getvalue()
 
         col_full, col_crop = st.columns(2)
@@ -1106,9 +1109,12 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
                 circ_buf = io.BytesIO()
                 preview.save(circ_buf, format="PNG")
                 st.session_state[circ_key] = circ_buf.getvalue()
-                # Also store the full image (in case not yet saved)
+                # Also store the full image (preserve transparency)
                 full_buf2 = io.BytesIO()
-                img.convert("RGB").save(full_buf2, format="PNG")
+                if img.mode == "RGBA":
+                    img.save(full_buf2, format="PNG")
+                else:
+                    img.convert("RGBA").save(full_buf2, format="PNG")
                 st.session_state[full_key] = full_buf2.getvalue()
                 st.success(t("photo_accepted", L))
 

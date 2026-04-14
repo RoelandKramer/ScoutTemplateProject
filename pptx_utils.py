@@ -963,22 +963,28 @@ def fill_player_photo(
         from PIL import Image as _PILImage
         slide0 = prs.slides[0]
 
-        # Determine the original image aspect ratio so the picture is not
-        # stretched.  Target box: between x ≈ 2.5 in and x ≈ 10.5 in,
-        # vertically from 0.5 in to 14 in (matching the reference layout).
+        # Find the name bar (TextBox 28) — the image bottom aligns with its top.
+        name_bar_top = int(8.36 * 914400)  # fallback
+        for shape in slide0.shapes:
+            if shape.name == "TextBox 28":
+                name_bar_top = shape.top
+                break
+
+        # Target box: horizontally x ≈ 2.5 – 10.5 in,
+        # vertically from y ≈ 0.5 in down to the name bar top.
         box_left = int(2.5 * 914400)
         box_top = int(0.5 * 914400)
         box_w = int(8.0 * 914400)   # 10.5 - 2.5
-        box_h = int(13.5 * 914400)  # 14.0 - 0.5
+        box_h = name_bar_top - box_top
 
         _img = _PILImage.open(io.BytesIO(full_photo))
         iw, ih = _img.size
         scale = min(box_w / iw, box_h / ih)
         pic_w = int(iw * scale)
         pic_h = int(ih * scale)
-        # Centre inside the target box
+        # Centre horizontally, anchor bottom to name bar
         pic_left = box_left + (box_w - pic_w) // 2
-        pic_top = box_top + (box_h - pic_h) // 2
+        pic_top = name_bar_top - pic_h
 
         img_stream = io.BytesIO(full_photo)
         slide0.shapes.add_picture(img_stream, pic_left, pic_top, pic_w, pic_h)
