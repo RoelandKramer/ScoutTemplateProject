@@ -947,6 +947,46 @@ def fill_player_stats(prs, template_cfg: dict, tm_stats: dict) -> None:
                 idx += 1
 
 
+def fill_player_photo(
+    prs,
+    template_cfg: dict,
+    full_photo: bytes | None = None,
+    circular_photo: bytes | None = None,
+) -> None:
+    """Place player photos in the presentation.
+
+    * **full_photo** → welcome slide (slide 0), left side
+    * **circular_photo** → rating slide, replacing the 'Browse' placeholder
+    """
+    # ── Full image on welcome slide (slide 0) ──────────────────────────────
+    if full_photo:
+        slide0 = prs.slides[0]
+        slide_h = prs.slide_height
+        # Place on the left ~45 % of the slide, full height
+        img_w = int(prs.slide_width * 0.45)
+        img_stream = io.BytesIO(full_photo)
+        slide0.shapes.add_picture(img_stream, 0, 0, img_w, slide_h)
+
+    # ── Circular crop on rating slide ──────────────────────────────────────
+    photo_for_rating = circular_photo or full_photo
+    if photo_for_rating:
+        rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+        browse_shape = None
+        for shape in rating_slide.shapes:
+            if shape.name.startswith("Browse"):
+                browse_shape = shape
+                break
+        if browse_shape is not None:
+            left = browse_shape.left
+            top = browse_shape.top
+            width = browse_shape.width
+            height = browse_shape.height
+            sp = browse_shape._element
+            sp.getparent().remove(sp)
+            img_stream = io.BytesIO(photo_for_rating)
+            rating_slide.shapes.add_picture(img_stream, left, top, width, height)
+
+
 def fill_template(
     template_cfg: dict,
     star_values: list,
@@ -954,6 +994,8 @@ def fill_template(
     video_data: list | None = None,
     player_data: dict | None = None,
     tm_stats: dict | None = None,
+    player_photo: bytes | None = None,
+    player_photo_circular: bytes | None = None,
 ) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
@@ -961,6 +1003,8 @@ def fill_template(
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:
         fill_player_stats(prs, template_cfg, tm_stats)
+    if player_photo or player_photo_circular:
+        fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)
@@ -976,6 +1020,8 @@ def fill_from_bytes(
     video_data: list | None = None,
     player_data: dict | None = None,
     tm_stats: dict | None = None,
+    player_photo: bytes | None = None,
+    player_photo_circular: bytes | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
@@ -983,6 +1029,8 @@ def fill_from_bytes(
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:
         fill_player_stats(prs, template_cfg, tm_stats)
+    if player_photo or player_photo_circular:
+        fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
     output = io.BytesIO()
     prs.save(output)

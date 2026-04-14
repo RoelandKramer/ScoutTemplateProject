@@ -168,6 +168,8 @@ def save_finished(
     language: str,
     pptx_bytes: bytes,
     player_name: str = "",
+    player_data: dict | None = None,
+    star_values: list[float] | None = None,
 ) -> str:
     """Save a finished PPTX + metadata. Returns the report_id."""
     finished = _finished_dir(username)
@@ -181,6 +183,8 @@ def save_finished(
         "language": language,
         "player_name": player_name,
         "finished_at": time.time(),
+        "player_data": player_data,
+        "star_values": star_values or [],
     }
     (finished / f"{report_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -208,6 +212,20 @@ def load_finished_pptx(username: str, report_id: str) -> bytes | None:
     """Return the PPTX bytes for a finished report."""
     p = _finished_dir(username) / f"{report_id}.pptx"
     return p.read_bytes() if p.exists() else None
+
+
+def mark_shared(username: str, report_id: str, shared_to: str) -> None:
+    """Mark a finished report as shared to another user."""
+    p = _finished_dir(username) / f"{report_id}.json"
+    if not p.exists():
+        return
+    meta = json.loads(p.read_text(encoding="utf-8"))
+    shared_list = meta.get("shared_to", [])
+    if shared_to not in shared_list:
+        shared_list.append(shared_to)
+    meta["shared_to"] = shared_list
+    meta["shared_at"] = time.time()
+    p.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def delete_finished(username: str, report_id: str) -> None:

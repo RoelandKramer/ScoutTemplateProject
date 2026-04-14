@@ -451,6 +451,10 @@ def _apply_theme(club: str) -> None:
         border: 1px solid {th['border']} !important;
         border-radius: 10px !important;
     }}
+    /* Align "Upload video clip" label with the Browse button */
+    [data-testid="stFileUploader"] label {{
+        padding-left: 1rem !important;
+    }}
 
     /* Competency info tooltip */
     .comp-info-wrap {{
@@ -548,13 +552,13 @@ def _render_header(club: str, tmpl_lang: str):
     lang_display = {"NL": "Nederlands", "ENG": "English"}.get(tmpl_lang, tmpl_lang)
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; gap:18px; padding:0.8rem 0 0.5rem 0;">
+        <div style="display:flex; align-items:center; gap:14px; padding:0.8rem 0 0.5rem 0;">
             <img src="data:image/png;base64,{logo_b64}" width="65"/>
             <div>
-                <h1 style="margin:0; font-size:1.6rem; color:{club_color}; letter-spacing:1px; text-transform:uppercase;">
+                <h1 style="margin:0; padding:0; font-size:1.6rem; color:{club_color}; letter-spacing:1px; text-transform:uppercase; line-height:1.2;">
                     {t('scout_rating_tool', L)}
                 </h1>
-                <p style="margin:0; color:{club_color}; font-size:.85rem; opacity:.7;">
+                <p style="margin:0; padding:0; color:{club_color}; font-size:.85rem; opacity:.7; line-height:1.2; margin-top:2px;">
                     {club} — {lang_display}
                 </p>
             </div>
@@ -645,6 +649,10 @@ def competency_sections(
 
     star_values, comments, video_data = [], [], []
 
+    # Find the longest variable name so all (i) icons align at the same
+    # fixed horizontal position (the user wants them in a neat column).
+    longest_label = max(variables, key=len) if variables else ""
+
     for i, var in enumerate(variables):
         video_key   = f"{key_prefix}_{i}_video"
         comment_key = f"{key_prefix}_{i}_comment"
@@ -659,30 +667,22 @@ def competency_sections(
         if video_key not in st.session_state:
             st.session_state[video_key] = defaults_videos[i] if i < len(defaults_videos) else None
 
-        # Determine label formatting based on template profile
-        if template_name == "Centerback":
-            display_label = var
-        elif template_name == "Wingback":
-            display_label = var.upper()
-        elif template_name == "Deep Lying Playmaker":
-            display_label = f"🎥 {var.upper()}"
-        else:
-            display_label = f"📽  {var}"
+        # Plain label for all profiles (no caps, no emoji)
+        display_label = var
 
         # Show info tooltip if description is available for this competency
         desc = comp_descriptions[i] if i < len(comp_descriptions) else {}
         info_html = _info_tooltip_html(desc)
-        
+
         if info_html:
             # Create a strictly decreasing z-index so top rows layer over bottom rows
             z_index = 999 - i
-            
-            # Use a "phantom text" ruler. We render the exact same text invisibly 
-            # so the browser calculates the precise proportional width, and place 
-            # the (i) icon immediately after it perfectly every time.
+
+            # Use a hidden ruler matching the LONGEST label so all (i)
+            # icons line up at the same horizontal position.
             st.markdown(
                 f'<div style="position:absolute; z-index:{z_index}; margin-top:13px; display:flex; align-items:center; pointer-events:none;">'
-                f'<div style="visibility:hidden; font-family:-apple-system, BlinkMacSystemFont, sans-serif; font-weight:600; font-size:14px; padding-left:46px; white-space:pre; margin:0;">{display_label}</div>'
+                f'<div style="visibility:hidden; font-family:-apple-system, BlinkMacSystemFont, sans-serif; font-weight:600; font-size:14px; padding-left:46px; white-space:pre; margin:0;">{longest_label}</div>'
                 f'<div style="pointer-events:auto; margin-left:8px;">{info_html}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -765,6 +765,29 @@ def _current_player_name(state_key: str = "player_data") -> str:
     return ""
 
 
+def _pptx_filename(position: str, state_key: str = "player_data") -> str:
+    """Build PPTX filename like  14042026 #8 Box to box midfielder Sven Simons.pptx"""
+    pd = st.session_state.get(state_key)
+    name = ""
+    nr = ""
+    if pd and isinstance(pd, dict):
+        name = pd.get("name", "")
+        nr = pd.get("jersey_number", "")
+    return _build_pptx_fname(position, name, nr)
+
+
+def _build_pptx_fname(position: str, player_name: str = "", jersey_nr: str = "") -> str:
+    """Build PPTX filename like  14042026 #8 Box to box midfielder Sven Simons.pptx"""
+    date_str = datetime.now().strftime("%d%m%Y")
+    nr_part = f" #{jersey_nr}" if jersey_nr else ""
+    role_part = f" {position}" if position else ""
+    name_part = f" {player_name}" if player_name else ""
+    fname = f"{date_str}{nr_part}{role_part}{name_part}".strip()
+    for ch in '<>:"/\\|?*':
+        fname = fname.replace(ch, "_")
+    return f"{fname}.pptx"
+
+
 def _collect_editor_state(key_prefix: str, n_vars: int):
     stars, comments, videos = [], [], []
     for i in range(n_vars):
@@ -777,6 +800,7 @@ def _collect_editor_state(key_prefix: str, n_vars: int):
 # ─── Editable player info card ──────────────────────────────────────────────
 
 _PLAYER_FIELDS = [
+    ("jersey_number", "jersey_number"),
     ("date_of_birth", "date_of_birth"),
     ("city_of_birth", "city_of_birth"),
     ("nationality", "nationality"),
@@ -969,6 +993,101 @@ def _transfermarkt_section(
             stats, player_name,
             editable=True, key_prefix=f"{key_prefix}_card", state_key=state_key,
         )
+
+    return st.session_state.get(state_key)
+
+
+# ─── Player photo section ─────────────────────────────────────────────────
+
+def _player_photo_section(state_key: str = "player_photo") -> bytes | None:
+    """Upload a player image, crop it circularly, and preview.
+
+    Returns the cropped image bytes (PNG) or None.
+    """
+    from PIL import Image, ImageDraw
+
+    L = _lang()
+    st.markdown(f"### {t('player_photo', L)}")
+
+    uploaded = st.file_uploader(
+        t("upload_photo", L),
+        type=["png", "jpg", "jpeg", "webp"],
+        key=f"{state_key}_uploader",
+    )
+
+    if uploaded is not None:
+        img_bytes = uploaded.getvalue()
+        img = Image.open(io.BytesIO(img_bytes))
+
+        # Store original for zoom/pan
+        if f"{state_key}_orig" not in st.session_state or st.session_state.get(f"{state_key}_fname") != uploaded.name:
+            st.session_state[f"{state_key}_orig"] = img_bytes
+            st.session_state[f"{state_key}_fname"] = uploaded.name
+
+        col_full, col_crop = st.columns(2)
+
+        with col_full:
+            st.markdown(f"**{t('original_image', L)}**")
+            st.image(img_bytes, use_container_width=True)
+
+        with col_crop:
+            st.markdown(f"**{t('circular_preview', L)}**")
+
+            # Zoom and position controls
+            zoom = st.slider(
+                t("zoom", L), min_value=1.0, max_value=3.0, value=1.0, step=0.1,
+                key=f"{state_key}_zoom",
+            )
+            w, h = img.size
+            max_offset_x = max(0, int(w * (1 - 1 / zoom) / 2))
+            max_offset_y = max(0, int(h * (1 - 1 / zoom) / 2))
+            offset_x = st.slider(
+                t("horizontal_pos", L), min_value=-max_offset_x, max_value=max_offset_x, value=0,
+                key=f"{state_key}_ox",
+            ) if max_offset_x > 0 else 0
+            offset_y = st.slider(
+                t("vertical_pos", L), min_value=-max_offset_y, max_value=max_offset_y, value=0,
+                key=f"{state_key}_oy",
+            ) if max_offset_y > 0 else 0
+
+            # Compute crop box
+            crop_size = min(w, h) / zoom
+            cx = w / 2 + offset_x
+            cy = h / 2 + offset_y
+            left = max(0, int(cx - crop_size / 2))
+            top = max(0, int(cy - crop_size / 2))
+            right = min(w, int(cx + crop_size / 2))
+            bottom = min(h, int(cy + crop_size / 2))
+
+            cropped = img.crop((left, top, right, bottom))
+            # Resize to a standard output size
+            out_size = 400
+            cropped = cropped.resize((out_size, out_size), Image.LANCZOS)
+
+            # Apply circular mask for preview
+            mask = Image.new("L", (out_size, out_size), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, out_size - 1, out_size - 1), fill=255)
+            preview = Image.new("RGBA", (out_size, out_size), (0, 0, 0, 0))
+            preview.paste(cropped.convert("RGBA"), mask=mask)
+
+            # Display preview
+            buf = io.BytesIO()
+            preview.save(buf, format="PNG")
+            st.image(buf.getvalue(), use_container_width=True)
+
+            # Accept button
+            if st.button(f"✅ {t('accept_photo', L)}", key=f"{state_key}_accept", type="primary", use_container_width=True):
+                # Store the cropped (square) image as PNG bytes for PPTX
+                square_buf = io.BytesIO()
+                cropped.save(square_buf, format="PNG")
+                st.session_state[state_key] = square_buf.getvalue()
+                st.success(t("photo_accepted", L))
+
+    elif st.session_state.get(state_key):
+        # Show previously accepted photo
+        st.caption(t("photo_set", L))
+        st.image(st.session_state[state_key], width=150)
 
     return st.session_state.get(state_key)
 
@@ -1176,41 +1295,104 @@ if page == "Dashboard":
             pname = pname or pd.get("name", "").lower()
         return filter_query in title or filter_query in pname
 
+    # ── Helpers ─────────────────────────────────────────────────────────────
+    def _all_stars_assigned(meta: dict) -> bool:
+        """True when every competency has a non-zero star value."""
+        sv = meta.get("star_values") or []
+        return len(sv) > 0 and all(v > 0 for v in sv)
+
+    def _report_actions(meta: dict, prefix: str, load_pptx_fn, delete_fn, edit_mode: str = "draft"):
+        """Render the 3 action buttons (Continue editing | Download | Delete).
+
+        edit_mode:
+          "draft"    – pure draft, load via edit_draft_id
+          "finished" – finished/shared report, re-load PPTX into upload editor
+          "received" – received report, load via edit_received_id
+        """
+        rid = meta["report_id"]
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            btn_key = f"cont_{prefix}_{rid}"
+            if st.button(t("continue_editing", L), key=btn_key, type="primary", use_container_width=True):
+                if edit_mode == "received":
+                    st.session_state["edit_received_id"] = rid
+                elif edit_mode == "finished":
+                    # Load finished PPTX into upload editor
+                    pptx = load_pptx_fn(username, rid)
+                    if pptx:
+                        st.session_state["upload_bytes"] = pptx
+                        st.session_state["upload_filename"] = _build_pptx_fname(
+                            meta.get("position", ""),
+                            meta.get("player_name", ""),
+                        )
+                        st.session_state["upload_file_key"] = f"finished_{rid}"
+                        st.session_state["upload_active_report_id"] = rid
+                        st.session_state["club_select"] = meta.get("club", "FC Den Bosch")
+                        st.session_state["lang_select"] = meta.get("language", "NL")
+                else:
+                    st.session_state["edit_draft_id"] = rid
+                st.session_state["_nav_override"] = "Upload & Edit"
+                st.session_state.pop("nav_page", None)
+                st.session_state.pop("_loaded_draft", None)
+                st.rerun()
+        with c2:
+            pptx_bytes = load_pptx_fn(username, rid)
+            if pptx_bytes:
+                st.download_button(
+                    f"📥  {t('download_pptx', L)}", data=pptx_bytes,
+                    file_name=_build_pptx_fname(
+                        meta.get("position", ""),
+                        meta.get("player_name", ""),
+                        (meta.get("player_data") or {}).get("jersey_number", ""),
+                    ),
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    key=f"dl_{prefix}_{rid}", use_container_width=True,
+                )
+        with c3:
+            if st.button(t("delete", L), key=f"del_{prefix}_{rid}", use_container_width=True):
+                delete_fn(username, rid)
+                st.rerun()
+
+    # ── Collect all finished reports and split into categories ──────────────
+    all_finished = [f for f in storage.list_finished(username) if _matches_filter(f)]
+    shared_finished = [f for f in all_finished if f.get("shared_to")]
+    truly_finished = [f for f in all_finished if not f.get("shared_to") and _all_stars_assigned(f)]
+    incomplete_finished = [f for f in all_finished if not f.get("shared_to") and not _all_stars_assigned(f)]
+
+    # ── In Progress: drafts + finished reports without all stars ───────────
     st.subheader(f"📝  {t('in_progress', L)}")
     drafts = [d for d in storage.list_drafts(username) if _matches_filter(d)]
-    if not drafts:
+    in_progress = drafts + incomplete_finished
+    if not in_progress:
         st.caption(t("no_drafts", L))
     else:
-        for d in drafts:
-            rid = d["report_id"]
-            title = _report_title(d)
+        for item in in_progress:
+            rid = item["report_id"]
+            title = _report_title(item)
+            ts_key = "updated_at" if "updated_at" in item else "finished_at"
+            ts_label = t("last_saved", L) if "updated_at" in item else t("finished_at", L)
             st.markdown(
                 f"""<div class="report-card">
                 <h4>{title}</h4>
-                <div class="meta">{d['club']} ({d['language']}) · {t('last_saved', L)}: {_ts_str(d['updated_at'])}</div>
+                <div class="meta">{item.get('club','')} ({item.get('language','')}) · {ts_label}: {_ts_str(item.get(ts_key, 0))}</div>
                 </div>""",
                 unsafe_allow_html=True,
             )
-            c1, c2 = st.columns([2, 1])
-            with c1:
-                if st.button(t("continue_editing", L), key=f"cont_{rid}", type="primary", use_container_width=True):
-                    st.session_state["edit_draft_id"] = rid
-                    st.session_state["_nav_override"] = "Upload & Edit"
-                    st.session_state.pop("nav_page", None)
-                    st.rerun()
-            with c2:
-                if st.button(t("delete", L), key=f"del_draft_{rid}", use_container_width=True):
-                    storage.delete_draft(username, rid)
-                    st.rerun()
+            if "updated_at" in item and "finished_at" not in item:
+                # Pure draft — load from drafts storage
+                _report_actions(item, "draft", lambda u, r: (storage.load_draft(u, r) or {}).get("upload_bytes"), storage.delete_draft, edit_mode="draft")
+            else:
+                # Incomplete finished report
+                _report_actions(item, "incfin", storage.load_finished_pptx, storage.delete_finished, edit_mode="finished")
 
     st.markdown("---")
 
+    # ── Finished Reports: all stars assigned, not shared ───────────────────
     st.subheader(f"✅  {t('finished_reports', L)}")
-    finished = [f for f in storage.list_finished(username) if _matches_filter(f)]
-    if not finished:
+    if not truly_finished:
         st.caption(t("no_finished", L))
     else:
-        for f in finished:
+        for f in truly_finished:
             rid = f["report_id"]
             title = _report_title(f)
             st.markdown(
@@ -1220,23 +1402,31 @@ if page == "Dashboard":
                 </div>""",
                 unsafe_allow_html=True,
             )
-            c1, c2 = st.columns([2, 1])
-            with c1:
-                pptx_bytes = storage.load_finished_pptx(username, rid)
-                if pptx_bytes:
-                    st.download_button(
-                        f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                        file_name=f"Scout_{title.replace(' ','_').replace('—','_')}_{rid[:8]}.pptx",
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        key=f"dl_{rid}", use_container_width=True,
-                    )
-            with c2:
-                if st.button(t("delete", L), key=f"del_fin_{rid}", use_container_width=True):
-                    storage.delete_finished(username, rid)
-                    st.rerun()
+            _report_actions(f, "fin", storage.load_finished_pptx, storage.delete_finished, edit_mode="finished")
 
     st.markdown("---")
 
+    # ── Shared Reports: finished reports that were shared ──────────────────
+    st.subheader(f"📤  {t('shared_reports', L)}")
+    if not shared_finished:
+        st.caption(t("no_shared", L))
+    else:
+        for f in shared_finished:
+            rid = f["report_id"]
+            title = _report_title(f)
+            shared_to_list = ", ".join(f.get("shared_to", []))
+            st.markdown(
+                f"""<div class="report-card">
+                <h4>{title}</h4>
+                <div class="meta">{f['club']} ({f['language']}) · {t('shared_with', L)}: {shared_to_list} · {_ts_str(f.get('shared_at', f['finished_at']))}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            _report_actions(f, "shared", storage.load_finished_pptx, storage.delete_finished, edit_mode="finished")
+
+    st.markdown("---")
+
+    # ── Received Reports ──────────────────────────────────────────────────
     st.subheader(f"📨  {t('received_reports', L)}")
     received = [r for r in storage.list_received(username) if _matches_filter(r)]
     if not received:
@@ -1254,27 +1444,7 @@ if page == "Dashboard":
                 </div>""",
                 unsafe_allow_html=True,
             )
-            c1, c2, c3 = st.columns([2, 2, 1])
-            with c1:
-                if st.button(t("continue_editing", L), key=f"cont_recv_{rid}", type="primary", use_container_width=True):
-                    st.session_state["edit_received_id"] = rid
-                    st.session_state["_nav_override"] = "Upload & Edit"
-                    st.session_state.pop("nav_page", None)
-                    st.session_state.pop("_loaded_draft", None)
-                    st.rerun()
-            with c2:
-                pptx_bytes = storage.load_received_pptx(username, rid)
-                if pptx_bytes:
-                    st.download_button(
-                        f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                        file_name=f"Received_{title.replace(' ','_').replace('—','_')}_{rid[:8]}.pptx",
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        key=f"dl_recv_{rid}", use_container_width=True,
-                    )
-            with c3:
-                if st.button(t("delete", L), key=f"del_recv_{rid}", use_container_width=True):
-                    storage.delete_received(username, rid)
-                    st.rerun()
+            _report_actions(r, "recv", storage.load_received_pptx, storage.delete_received, edit_mode="received")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1305,6 +1475,9 @@ elif page == "New Report":
         )
     else:
         tm_stats = st.session_state.get(NEW_TM_KEY)
+
+    # ── Player photo ──────────────────────────────────────────────────────
+    _player_photo_section(state_key="new_player_photo")
 
     st.markdown("---")
 
@@ -1364,6 +1537,7 @@ elif page == "New Report":
                     template_cfg, s, c, v,
                     player_data=st.session_state.get(NEW_PDATA_KEY),
                     tm_stats=st.session_state.get(NEW_TM_KEY),
+                    player_photo=st.session_state.get("new_player_photo"),
                 )
             snapshot_bytes = snapshot.getvalue()
             rid = storage.save_draft(
@@ -1387,18 +1561,21 @@ elif page == "New Report":
                     template_cfg, s, c, v,
                     player_data=st.session_state.get(NEW_PDATA_KEY),
                     tm_stats=st.session_state.get(NEW_TM_KEY),
+                    player_photo=st.session_state.get("new_player_photo"),
                 )
             pptx_bytes = output.getvalue()
 
             rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
             storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
-                                  player_name=_current_player_name(NEW_PDATA_KEY))
+                                  player_name=_current_player_name(NEW_PDATA_KEY),
+                                  player_data=st.session_state.get(NEW_PDATA_KEY),
+                                  star_values=s)
             st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))
             st.download_button(
                 f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                file_name=f"Scout_Report_{template_name.replace(' ', '_')}_{club.replace(' ', '_')}_{lang}.pptx",
+                file_name=_pptx_filename(template_name, NEW_PDATA_KEY),
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True,
             )
@@ -1425,6 +1602,7 @@ elif page == "New Report":
                             template_cfg, s, c, v,
                             player_data=st.session_state.get(NEW_PDATA_KEY),
                             tm_stats=st.session_state.get(NEW_TM_KEY),
+                            player_photo=st.session_state.get("new_player_photo"),
                         )
                     pptx_bytes = output.getvalue()
                     rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
@@ -1444,6 +1622,12 @@ elif page == "New Report":
                         player_data=st.session_state.get(NEW_PDATA_KEY),
                         tm_stats=st.session_state.get(NEW_TM_KEY),
                     )
+                    # Also save as finished + mark shared
+                    storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
+                                          player_name=_current_player_name(NEW_PDATA_KEY),
+                                          player_data=st.session_state.get(NEW_PDATA_KEY),
+                                          star_values=s)
+                    storage.mark_shared(username, rid, sel_scout)
                     st.session_state.pop("_share_pending", None)
                     # Auto-send notification emails (receiver gets platform link)
                     try:
@@ -1637,6 +1821,9 @@ elif page == "Upload & Edit":
                         key_prefix="upload_tm_card", state_key=UPLOAD_TM_KEY,
                     )
 
+        # ── Player photo ──────────────────────────────────────────────
+        _player_photo_section(state_key="upload_player_photo")
+
         st.markdown("---")
         st.subheader(t("adjust_competencies", L))
 
@@ -1662,6 +1849,7 @@ elif page == "Upload & Edit":
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                        player_photo=st.session_state.get("upload_player_photo"),
                     )
                 _snap_bytes = _snap.getvalue()
                 rid = storage.save_draft(
@@ -1685,6 +1873,7 @@ elif page == "Upload & Edit":
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                        player_photo=st.session_state.get("upload_player_photo"),
                     )
                 pptx_bytes = output.getvalue()
                 pos = matched_name or "Unknown"
@@ -1697,14 +1886,15 @@ elif page == "Upload & Edit":
                     player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                 )
                 storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
-                                      player_name=_current_player_name(UPLOAD_PDATA_KEY))
+                                      player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                      player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                                      star_values=s)
                 st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))
-                fname = st.session_state.get("upload_filename", "report.pptx")
                 st.download_button(
                     f"📥  {t('download_filled', L)}", data=pptx_bytes,
-                    file_name=f"Filled_{fname}",
+                    file_name=_pptx_filename(pos, UPLOAD_PDATA_KEY),
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     use_container_width=True,
                 )
@@ -1731,6 +1921,7 @@ elif page == "Upload & Edit":
                                 st.session_state["upload_bytes"], template_cfg, s, c, v,
                                 player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                                 tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                                player_photo=st.session_state.get("upload_player_photo"),
                             )
                         pptx_bytes = output.getvalue()
                         pos = matched_name or "Unknown"
@@ -1751,6 +1942,12 @@ elif page == "Upload & Edit":
                             player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                             tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                         )
+                        # Also save as finished + mark shared
+                        storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
+                                              player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                              player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                                              star_values=s)
+                        storage.mark_shared(username, rid, sel_scout)
                         st.session_state.pop("_share_pending", None)
                         # Auto-send notification emails (receiver gets platform link)
                         try:
