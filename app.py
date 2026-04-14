@@ -321,6 +321,10 @@ def _apply_theme(club: str) -> None:
     [data-baseweb="popover"] [role="option"] {{ background-color: #ffffff !important; color: #374151 !important; }}
     [data-baseweb="popover"] [role="option"]:hover {{ background-color: {th['bg']} !important; color: {th['heading']} !important; }}
 
+    /* Override Streamlit primary color variable for radio dots */
+    :root, [data-testid="stSidebar"] {{
+        --primary-color: {th['btn_primary_bg']} !important;
+    }}
     /* Radio buttons (navigation) — dots in dark button color */
     [data-testid="stSidebar"] [role="radiogroup"] label {{ color: {th['text']} !important; }}
     [data-testid="stSidebar"] [role="radiogroup"] label p {{ color: {th['text']} !important; }}
@@ -334,15 +338,15 @@ def _apply_theme(club: str) -> None:
     [data-testid="stSidebar"] [role="radio"][aria-checked="true"] > div:first-child > div {{
         background-color: {th['btn_primary_bg']} !important;
     }}
-    /* Also target stRadio in case of newer Streamlit DOM */
-    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"] > div:first-child {{
-        border-color: {th['btn_primary_bg']} !important;
-    }}
-    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"][aria-checked="true"] > div:first-child {{
+    /* Broader selectors for all Streamlit versions */
+    [data-testid="stSidebar"] .st-emotion-cache-1gwvy71 {{
         background-color: {th['btn_primary_bg']} !important;
         border-color: {th['btn_primary_bg']} !important;
     }}
-    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"][aria-checked="true"] > div:first-child > div {{
+    [data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child > div {{
+        border-color: {th['btn_primary_bg']} !important;
+    }}
+    [data-testid="stSidebar"] div[data-testid="stRadio"] label[data-checked="true"] > div:first-child > div {{
         background-color: {th['btn_primary_bg']} !important;
     }}
 
@@ -1059,8 +1063,10 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
                 key=f"{state_key}_zoom",
             )
             w, h = img.size
-            max_offset_x = max(0, int(w * (1 - 1 / zoom) / 2))
-            max_offset_y = max(0, int(h * (1 - 1 / zoom) / 2))
+            crop_size = min(w, h) / zoom
+            # Allow moving the crop circle to any position in the image
+            max_offset_x = max(0, int((w - crop_size) / 2))
+            max_offset_y = max(0, int((h - crop_size) / 2))
             offset_x = st.slider(
                 t("horizontal_pos", L), min_value=-max_offset_x, max_value=max_offset_x, value=0,
                 key=f"{state_key}_ox",
@@ -1071,7 +1077,6 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
             ) if max_offset_y > 0 else 0
 
             # Compute crop box
-            crop_size = min(w, h) / zoom
             cx = w / 2 + offset_x
             cy = h / 2 + offset_y
             left = max(0, int(cx - crop_size / 2))

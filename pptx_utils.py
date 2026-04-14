@@ -960,12 +960,28 @@ def fill_player_photo(
     """
     # ── Full image on welcome slide (slide 0) ──────────────────────────────
     if full_photo:
+        from PIL import Image as _PILImage
         slide0 = prs.slides[0]
-        slide_h = prs.slide_height
-        # Place on the left ~45 % of the slide, full height
-        img_w = int(prs.slide_width * 0.45)
+
+        # Determine the original image aspect ratio so the picture is not
+        # stretched.  Target box: between x ≈ 2.5 in and x ≈ 10.5 in,
+        # vertically from 0.5 in to 14 in (matching the reference layout).
+        box_left = int(2.5 * 914400)
+        box_top = int(0.5 * 914400)
+        box_w = int(8.0 * 914400)   # 10.5 - 2.5
+        box_h = int(13.5 * 914400)  # 14.0 - 0.5
+
+        _img = _PILImage.open(io.BytesIO(full_photo))
+        iw, ih = _img.size
+        scale = min(box_w / iw, box_h / ih)
+        pic_w = int(iw * scale)
+        pic_h = int(ih * scale)
+        # Centre inside the target box
+        pic_left = box_left + (box_w - pic_w) // 2
+        pic_top = box_top + (box_h - pic_h) // 2
+
         img_stream = io.BytesIO(full_photo)
-        slide0.shapes.add_picture(img_stream, 0, 0, img_w, slide_h)
+        slide0.shapes.add_picture(img_stream, pic_left, pic_top, pic_w, pic_h)
 
     # ── Circular crop on rating slide ──────────────────────────────────────
     photo_for_rating = circular_photo or full_photo
