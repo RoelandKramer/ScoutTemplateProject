@@ -972,7 +972,7 @@ def fill_player_photo(
 
         welkom_left = int(10.09 * 914400)    # fallback FC Den Bosch
         bar_top = int(8.18 * 914400)         # fallback
-        bar_left = None                      # will track the Rechthoek's left edge
+        bar_left = int(6.9 * 914400)                      # will track the Rechthoek's left edge
         name_left = int(10.09 * 914400)      # fallback
 
         # Search layout first, then master as fallback
