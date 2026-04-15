@@ -9,7 +9,8 @@ from typing import Optional
 from urllib.parse import quote
 
 # Import requests from curl_cffi instead
-from curl_cffi import requests
+from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 from bs4 import BeautifulSoup
 
 _HEADERS = {
@@ -47,47 +48,24 @@ def _get_session():
 _session: requests.Session | None = None
 
 
-def _fetch(url: str, params: dict | None = None) -> requests.Response:
-    """Fetch a URL with retry logic and session cookies.
+def fetch_with_browser(url: str) -> BeautifulSoup:
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        
+        # Apply stealth to hide the fact that this is automated
+        stealth_sync(page)
+        
+        # Go to the site and wait for the network to be idle
+        page.goto(url, wait_until="networkidle")
+        
+        # Extract the fully rendered HTML
+        html = page.content()
+        browser.close()
+        
+        return BeautifulSoup(html, "lxml")
+    
 
-    Raises TmBlockedError on persistent 403 so callers can show a friendly message.
-    """
-    global _session
-    if _session is None:
-        _session = _get_session()
-        # Warm up session with a visit to the homepage (sets cookies)
-        try:
-            _session.get(_BASE, timeout=10)
-            time.sleep(0.5)
-        except Exception:
-            pass
-
-    last_exc = None
-    for attempt in range(_MAX_RETRIES + 1):
-        if attempt > 0:
-            time.sleep(_DELAY * (attempt + 1))
-        try:
-            resp = _session.get(url, params=params, timeout=15)
-            if resp.status_code == 200:
-                return resp
-            if resp.status_code == 403:
-                # Reset session and retry (get fresh cookies)
-                _session = _get_session()
-                try:
-                    _session.get(_BASE, timeout=10)
-                    time.sleep(0.5)
-                except Exception:
-                    pass
-                last_exc = TmBlockedError(
-                    "Transfermarkt is blocking requests from this server. "
-                    "Stats must be entered manually."
-                )
-                continue
-            resp.raise_for_status()
-        except TmBlockedError:
-            last_exc = last_exc  # keep it
-        except Exception as e:
-            last_exc = e
 
     if isinstance(last_exc, TmBlockedError):
         raise last_exc
