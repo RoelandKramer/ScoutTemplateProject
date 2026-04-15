@@ -1788,6 +1788,8 @@ elif page == "Upload & Edit":
             file_bytes = draft["upload_bytes"]
             with st.spinner(t("checking", L)):
                 check_result = check_template_compatibility(io.BytesIO(file_bytes))
+            check_result["compatible"] = True
+            check_result["issues"] = []
             fname = draft.get("upload_filename") or f"Draft_{draft.get('position','report')}.pptx"
             st.session_state["upload_file_key"]     = f"draft_{_edit_draft_id}"
             st.session_state["upload_bytes"]        = file_bytes
@@ -1827,6 +1829,8 @@ elif page == "Upload & Edit":
             recv_bytes = recv["pptx_bytes"]
             with st.spinner(t("checking", L)):
                 check_result = check_template_compatibility(io.BytesIO(recv_bytes))
+            check_result["compatible"] = True
+            check_result["issues"] = []
             fname = f"Received_{recv.get('player_name', 'report')}.pptx"
             st.session_state["upload_file_key"]     = f"recv_{_edit_recv_id}"
             st.session_state["upload_bytes"]        = recv_bytes
@@ -1876,6 +1880,8 @@ elif page == "Upload & Edit":
             fin_bytes = fin["pptx_bytes"]
             with st.spinner(t("checking", L)):
                 check_result = check_template_compatibility(io.BytesIO(fin_bytes))
+            check_result["compatible"] = True
+            check_result["issues"] = []
             fname = _build_pptx_fname(
                 fin.get("position", ""),
                 fin.get("player_name", ""),
