@@ -1,38 +1,208 @@
 """Persistent storage for scout report drafts and finished reports.
 
-Each user gets a folder under  data/<username>/
-  - drafts/<report_id>.json   — in-progress reports (stars, comments, metadata)
-  - finished/<report_id>.pptx — generated PowerPoint files
-  - finished/<report_id>.json — metadata for finished reports
+Uses the GitHub Contents API when credentials are configured (for Streamlit Cloud),
+falls back to local filesystem for local development.
 
-Videos within drafts are stored as separate files to keep JSON small:
-  - drafts/<report_id>_video_<i>.<ext>
+GitHub structure (inside the configured repo/branch):
+  data/{username}/drafts/{report_id}.json
+  data/{username}/finished/{report_id}.pptx
+  data/{username}/finished/{report_id}.json
+  ...
+
+IMPORTANT: Use a **separate** GitHub repo for data (e.g. ScoutData) so that
+commits don't trigger Streamlit Cloud redeployment of the app repo.
 """
 
 import base64
 import json
-import os
 import time
 import uuid
 from pathlib import Path
 
+import requests as _requests  # already in requirements
+
+# ─── Storage backend ────────────────────────────────────────────────────────
+
+_backend = None          # "github" | "local"
+_gh_token = None
+_gh_repo = None          # "owner/repo"
+_gh_branch = "main"
+_gh_prefix = "data"      # root folder inside the repo
 DATA_DIR = Path(__file__).parent / "data"
 
-
-def _user_dir(username: str) -> Path:
-    return DATA_DIR / username
-
-
-def _drafts_dir(username: str) -> Path:
-    d = _user_dir(username) / "drafts"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+# Upper size limit for GitHub uploads (100 MB via Contents API;
+# we stay at 80 MB to leave room for base64 overhead).
+_GH_MAX_BYTES = 80_000_000
 
 
-def _finished_dir(username: str) -> Path:
-    d = _user_dir(username) / "finished"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def _init_backend():
+    """Lazy-initialise: GitHub if credentials exist, else local filesystem."""
+    global _backend, _gh_token, _gh_repo, _gh_branch, _gh_prefix
+    if _backend is not None:
+        return
+    try:
+        import streamlit as st
+        cfg = st.secrets["github_storage"]
+        _gh_token = cfg["token"]
+        _gh_repo = cfg["repo"]
+        if not _gh_token or not _gh_repo:
+            raise ValueError("GitHub credentials not configured")
+        _gh_branch = cfg.get("branch", "main")
+        _gh_prefix = cfg.get("path_prefix", "data")
+        _backend = "github"
+    except Exception:
+        _backend = "local"
+
+
+# ─── GitHub helpers ─────────────────────────────────────────────────────────
+
+def _gh_headers():
+    return {
+        "Authorization": f"Bearer {_gh_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+
+def _gh_path(username: str, subfolder: str, filename: str) -> str:
+    return f"{_gh_prefix}/{username}/{subfolder}/{filename}"
+
+
+def _gh_get_file_meta(path: str) -> dict | None:
+    """GET file metadata (sha, download_url, content). Returns None on 404."""
+    r = _requests.get(
+        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
+        headers=_gh_headers(),
+        params={"ref": _gh_branch},
+    )
+    return r.json() if r.status_code == 200 else None
+
+
+def _gh_read(path: str) -> bytes | None:
+    """Download file bytes from GitHub."""
+    meta = _gh_get_file_meta(path)
+    if meta is None:
+        return None
+    # Files ≤ 1 MB have base64 content inline
+    if meta.get("content"):
+        return base64.b64decode(meta["content"])
+    # Larger files: follow the download URL
+    if meta.get("download_url"):
+        dl = _requests.get(meta["download_url"], headers=_gh_headers())
+        if dl.status_code == 200:
+            return dl.content
+    return None
+
+
+def _gh_write(path: str, data: bytes, message: str = "auto-save") -> bool:
+    """Create or update a file in the repo. Returns True on success."""
+    if len(data) > _GH_MAX_BYTES:
+        return False  # skip files too large for Contents API
+    # Need the current SHA if the file already exists (for update)
+    meta = _gh_get_file_meta(path)
+    body: dict = {
+        "message": message,
+        "content": base64.b64encode(data).decode("ascii"),
+        "branch": _gh_branch,
+    }
+    if meta and meta.get("sha"):
+        body["sha"] = meta["sha"]
+    r = _requests.put(
+        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
+        headers=_gh_headers(),
+        json=body,
+    )
+    return r.status_code in (200, 201)
+
+
+def _gh_delete_file(path: str, message: str = "auto-delete") -> bool:
+    """Delete a single file from the repo."""
+    meta = _gh_get_file_meta(path)
+    if not meta or not meta.get("sha"):
+        return False
+    r = _requests.delete(
+        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
+        headers=_gh_headers(),
+        json={"message": message, "sha": meta["sha"], "branch": _gh_branch},
+    )
+    return r.status_code == 200
+
+
+def _gh_list_dir(dirpath: str) -> list[str]:
+    """List file names in a GitHub directory. Returns [] on 404."""
+    r = _requests.get(
+        f"https://api.github.com/repos/{_gh_repo}/contents/{dirpath}",
+        headers=_gh_headers(),
+        params={"ref": _gh_branch},
+    )
+    if r.status_code != 200:
+        return []
+    items = r.json()
+    if not isinstance(items, list):
+        return []
+    return [f["name"] for f in items if f.get("type") == "file"]
+
+
+# ─── Unified low-level helpers ──────────────────────────────────────────────
+
+def _write_bytes(username: str, subfolder: str, filename: str, data: bytes) -> None:
+    _init_backend()
+    if _backend == "github":
+        path = _gh_path(username, subfolder, filename)
+        _gh_write(path, data, message=f"Save {username}/{subfolder}/{filename}")
+    else:
+        d = DATA_DIR / username / subfolder
+        d.mkdir(parents=True, exist_ok=True)
+        (d / filename).write_bytes(data)
+
+
+def _write_text(username: str, subfolder: str, filename: str, text: str) -> None:
+    _write_bytes(username, subfolder, filename, text.encode("utf-8"))
+
+
+def _read_bytes(username: str, subfolder: str, filename: str) -> bytes | None:
+    _init_backend()
+    if _backend == "github":
+        return _gh_read(_gh_path(username, subfolder, filename))
+    else:
+        p = DATA_DIR / username / subfolder / filename
+        return p.read_bytes() if p.exists() else None
+
+
+def _read_text(username: str, subfolder: str, filename: str) -> str | None:
+    data = _read_bytes(username, subfolder, filename)
+    return data.decode("utf-8") if data else None
+
+
+def _list_filenames(username: str, subfolder: str) -> list[str]:
+    """Return all filenames in a user's subfolder."""
+    _init_backend()
+    if _backend == "github":
+        return _gh_list_dir(f"{_gh_prefix}/{username}/{subfolder}")
+    else:
+        d = DATA_DIR / username / subfolder
+        if not d.exists():
+            return []
+        return [f.name for f in d.iterdir() if f.is_file()]
+
+
+def _delete_prefix(username: str, subfolder: str, prefix: str) -> None:
+    """Delete all files whose name starts with *prefix*."""
+    _init_backend()
+    if _backend == "github":
+        dirpath = f"{_gh_prefix}/{username}/{subfolder}"
+        names = _gh_list_dir(dirpath)
+        for n in names:
+            if n.startswith(prefix):
+                try:
+                    _gh_delete_file(f"{dirpath}/{n}",
+                                    message=f"Delete {username}/{subfolder}/{n}")
+                except Exception:
+                    pass
+    else:
+        d = DATA_DIR / username / subfolder
+        if d.exists():
+            for f in d.glob(f"{prefix}*"):
+                f.unlink(missing_ok=True)
 
 
 # ─── Draft operations ────────────────────────────────────────────────────────
@@ -58,7 +228,7 @@ def save_draft(
     if not report_id:
         report_id = uuid.uuid4().hex[:12]
 
-    drafts = _drafts_dir(username)
+    sub = "drafts"
 
     # Save video files separately
     video_refs = []
@@ -66,29 +236,32 @@ def save_draft(
         if vd is not None:
             vbytes, vname = vd
             ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-            vpath = drafts / f"{report_id}_video_{i}.{ext}"
-            vpath.write_bytes(vbytes)
-            video_refs.append({"filename": vname, "path": str(vpath.name)})
+            fname = f"{report_id}_video_{i}.{ext}"
+            _write_bytes(username, sub, fname, vbytes)
+            video_refs.append({"filename": vname, "path": fname})
         else:
             video_refs.append(None)
 
     # Save upload bytes if present
     upload_ref = None
     if upload_bytes:
-        upath = drafts / f"{report_id}_upload.pptx"
-        upath.write_bytes(upload_bytes)
-        upload_ref = {"filename": upload_filename or "upload.pptx", "path": str(upath.name)}
+        ufname = f"{report_id}_upload.pptx"
+        _write_bytes(username, sub, ufname, upload_bytes)
+        upload_ref = {"filename": upload_filename or "upload.pptx", "path": ufname}
 
     # Save player photos if present
     photo_refs = {}
     if photo_full:
-        pfull_path = drafts / f"{report_id}_photo_full.png"
-        pfull_path.write_bytes(photo_full)
-        photo_refs["full"] = str(pfull_path.name)
+        pfname = f"{report_id}_photo_full.png"
+        _write_bytes(username, sub, pfname, photo_full)
+        photo_refs["full"] = pfname
     if photo_circular:
-        pcirc_path = drafts / f"{report_id}_photo_circ.png"
-        pcirc_path.write_bytes(photo_circular)
-        photo_refs["circular"] = str(pcirc_path.name)
+        pcfname = f"{report_id}_photo_circ.png"
+        _write_bytes(username, sub, pcfname, photo_circular)
+        photo_refs["circular"] = pcfname
+
+    # Load existing meta for created_at timestamp
+    existing = _load_draft_meta(username, report_id)
 
     meta = {
         "report_id": report_id,
@@ -104,17 +277,21 @@ def save_draft(
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
         "updated_at": time.time(),
-        "created_at": _load_draft_meta(username, report_id).get("created_at", time.time()),
+        "created_at": existing.get("created_at", time.time()),
     }
 
-    (drafts / f"{report_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_text(username, sub, f"{report_id}.json",
+                json.dumps(meta, ensure_ascii=False, indent=2))
     return report_id
 
 
 def _load_draft_meta(username: str, report_id: str) -> dict:
-    p = _drafts_dir(username) / f"{report_id}.json"
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
+    text = _read_text(username, "drafts", f"{report_id}.json")
+    if text:
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
     return {}
 
 
@@ -124,15 +301,15 @@ def load_draft(username: str, report_id: str) -> dict | None:
     if not meta:
         return None
 
-    drafts = _drafts_dir(username)
+    sub = "drafts"
 
     # Resolve video refs to actual bytes
     video_data = []
     for vref in meta.get("video_refs", []):
         if vref is not None:
-            vpath = drafts / vref["path"]
-            if vpath.exists():
-                video_data.append((vpath.read_bytes(), vref["filename"]))
+            vbytes = _read_bytes(username, sub, vref["path"])
+            if vbytes:
+                video_data.append((vbytes, vref["filename"]))
             else:
                 video_data.append(None)
         else:
@@ -142,45 +319,44 @@ def load_draft(username: str, report_id: str) -> dict | None:
     # Resolve upload ref
     uref = meta.get("upload_ref")
     if uref:
-        upath = drafts / uref["path"]
-        if upath.exists():
-            meta["upload_bytes"] = upath.read_bytes()
+        ubytes = _read_bytes(username, sub, uref["path"])
+        if ubytes:
+            meta["upload_bytes"] = ubytes
             meta["upload_filename"] = uref["filename"]
 
     # Resolve photo refs
     prefs = meta.get("photo_refs") or {}
     if prefs.get("full"):
-        pfull = drafts / prefs["full"]
-        if pfull.exists():
-            meta["photo_full"] = pfull.read_bytes()
+        pfull = _read_bytes(username, sub, prefs["full"])
+        if pfull:
+            meta["photo_full"] = pfull
     if prefs.get("circular"):
-        pcirc = drafts / prefs["circular"]
-        if pcirc.exists():
-            meta["photo_circular"] = pcirc.read_bytes()
+        pcirc = _read_bytes(username, sub, prefs["circular"])
+        if pcirc:
+            meta["photo_circular"] = pcirc
 
     return meta
 
 
 def list_drafts(username: str) -> list[dict]:
     """Return all drafts for a user, sorted by most recently updated."""
-    drafts = _drafts_dir(username)
+    filenames = _list_filenames(username, "drafts")
     results = []
-    for f in drafts.glob("*.json"):
-        if f.stem.count("_") == 0:  # only root JSON, not video refs
-            try:
-                meta = json.loads(f.read_text(encoding="utf-8"))
-                results.append(meta)
-            except Exception:
-                pass
+    for fname in filenames:
+        if fname.endswith(".json") and "_" not in fname.replace(".json", ""):
+            text = _read_text(username, "drafts", fname)
+            if text:
+                try:
+                    results.append(json.loads(text))
+                except Exception:
+                    pass
     results.sort(key=lambda m: m.get("updated_at", 0), reverse=True)
     return results
 
 
 def delete_draft(username: str, report_id: str) -> None:
     """Delete a draft and all its associated files."""
-    drafts = _drafts_dir(username)
-    for f in drafts.glob(f"{report_id}*"):
-        f.unlink(missing_ok=True)
+    _delete_prefix(username, "drafts", report_id)
 
 
 # ─── Finished report operations ──────────────────────────────────────────────
@@ -202,18 +378,20 @@ def save_finished(
     photo_circular: bytes | None = None,
 ) -> str:
     """Save a finished PPTX + metadata. Returns the report_id."""
-    finished = _finished_dir(username)
+    sub = "finished"
 
-    (finished / f"{report_id}.pptx").write_bytes(pptx_bytes)
+    _write_bytes(username, sub, f"{report_id}.pptx", pptx_bytes)
 
     # Save photos
     photo_refs = {}
     if photo_full:
-        (finished / f"{report_id}_photo_full.png").write_bytes(photo_full)
-        photo_refs["full"] = f"{report_id}_photo_full.png"
+        pfname = f"{report_id}_photo_full.png"
+        _write_bytes(username, sub, pfname, photo_full)
+        photo_refs["full"] = pfname
     if photo_circular:
-        (finished / f"{report_id}_photo_circ.png").write_bytes(photo_circular)
-        photo_refs["circular"] = f"{report_id}_photo_circ.png"
+        pcfname = f"{report_id}_photo_circ.png"
+        _write_bytes(username, sub, pcfname, photo_circular)
+        photo_refs["circular"] = pcfname
 
     # Save video files separately
     video_refs = []
@@ -222,9 +400,9 @@ def save_finished(
             if vd is not None:
                 vbytes, vname = vd
                 ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-                vpath = finished / f"{report_id}_video_{i}.{ext}"
-                vpath.write_bytes(vbytes)
-                video_refs.append({"filename": vname, "path": str(vpath.name)})
+                vfname = f"{report_id}_video_{i}.{ext}"
+                _write_bytes(username, sub, vfname, vbytes)
+                video_refs.append({"filename": vname, "path": vfname})
             else:
                 video_refs.append(None)
 
@@ -242,7 +420,8 @@ def save_finished(
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
     }
-    (finished / f"{report_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_text(username, sub, f"{report_id}.json",
+                json.dumps(meta, ensure_ascii=False, indent=2))
 
     # Clean up the draft if it exists
     delete_draft(username, report_id)
@@ -252,46 +431,45 @@ def save_finished(
 
 def list_finished(username: str) -> list[dict]:
     """Return all finished reports, sorted by most recently finished."""
-    finished = _finished_dir(username)
+    filenames = _list_filenames(username, "finished")
     results = []
-    for f in finished.glob("*.json"):
-        try:
-            meta = json.loads(f.read_text(encoding="utf-8"))
-            results.append(meta)
-        except Exception:
-            pass
+    for fname in filenames:
+        if fname.endswith(".json"):
+            text = _read_text(username, "finished", fname)
+            if text:
+                try:
+                    results.append(json.loads(text))
+                except Exception:
+                    pass
     results.sort(key=lambda m: m.get("finished_at", 0), reverse=True)
     return results
 
 
 def load_finished_pptx(username: str, report_id: str) -> bytes | None:
     """Return the PPTX bytes for a finished report."""
-    p = _finished_dir(username) / f"{report_id}.pptx"
-    return p.read_bytes() if p.exists() else None
+    return _read_bytes(username, "finished", f"{report_id}.pptx")
 
 
 def load_finished(username: str, report_id: str) -> dict | None:
-    """Load a finished report's full state including PPTX, videos, photos.
-    Returns None if not found.
-    """
-    finished = _finished_dir(username)
-    p = finished / f"{report_id}.json"
-    if not p.exists():
+    """Load a finished report's full state including PPTX, videos, photos."""
+    text = _read_text(username, "finished", f"{report_id}.json")
+    if not text:
         return None
-    meta = json.loads(p.read_text(encoding="utf-8"))
+    meta = json.loads(text)
+    sub = "finished"
 
     # Attach PPTX bytes
-    pptx_path = finished / f"{report_id}.pptx"
-    if pptx_path.exists():
-        meta["pptx_bytes"] = pptx_path.read_bytes()
+    pptx = _read_bytes(username, sub, f"{report_id}.pptx")
+    if pptx:
+        meta["pptx_bytes"] = pptx
 
     # Resolve video refs to bytes
     video_data = []
     for vref in meta.get("video_refs", []) or []:
         if vref is not None:
-            vpath = finished / vref["path"]
-            if vpath.exists():
-                video_data.append((vpath.read_bytes(), vref["filename"]))
+            vbytes = _read_bytes(username, sub, vref["path"])
+            if vbytes:
+                video_data.append((vbytes, vref["filename"]))
             else:
                 video_data.append(None)
         else:
@@ -301,44 +479,37 @@ def load_finished(username: str, report_id: str) -> dict | None:
     # Resolve photo refs
     prefs = meta.get("photo_refs") or {}
     if prefs.get("full"):
-        pfull = finished / prefs["full"]
-        if pfull.exists():
-            meta["photo_full"] = pfull.read_bytes()
+        pfull = _read_bytes(username, sub, prefs["full"])
+        if pfull:
+            meta["photo_full"] = pfull
     if prefs.get("circular"):
-        pcirc = finished / prefs["circular"]
-        if pcirc.exists():
-            meta["photo_circular"] = pcirc.read_bytes()
+        pcirc = _read_bytes(username, sub, prefs["circular"])
+        if pcirc:
+            meta["photo_circular"] = pcirc
 
     return meta
 
 
 def mark_shared(username: str, report_id: str, shared_to: str) -> None:
     """Mark a finished report as shared to another user."""
-    p = _finished_dir(username) / f"{report_id}.json"
-    if not p.exists():
+    text = _read_text(username, "finished", f"{report_id}.json")
+    if not text:
         return
-    meta = json.loads(p.read_text(encoding="utf-8"))
+    meta = json.loads(text)
     shared_list = meta.get("shared_to", [])
     if shared_to not in shared_list:
         shared_list.append(shared_to)
     meta["shared_to"] = shared_list
     meta["shared_at"] = time.time()
-    p.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_text(username, "finished", f"{report_id}.json",
+                json.dumps(meta, ensure_ascii=False, indent=2))
 
 
 def delete_finished(username: str, report_id: str) -> None:
-    finished = _finished_dir(username)
-    for f in finished.glob(f"{report_id}*"):
-        f.unlink(missing_ok=True)
+    _delete_prefix(username, "finished", report_id)
 
 
 # ─── Received (shared) report operations ────────────────────────────────────
-
-def _received_dir(username: str) -> Path:
-    d = _user_dir(username) / "received"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
 
 def share_report(
     from_username: str,
@@ -357,36 +528,35 @@ def share_report(
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
 ) -> str:
-    """Copy a finished report into the recipient's received folder,
-    preserving the full editable state (videos, player data, stats) so the
-    recipient can resume editing it with everything filled in.
-    """
-    received = _received_dir(to_username)
+    """Copy a finished report into the recipient's received folder."""
+    sub = "received"
     share_id = uuid.uuid4().hex[:12]
 
-    (received / f"{share_id}.pptx").write_bytes(pptx_bytes)
+    _write_bytes(to_username, sub, f"{share_id}.pptx", pptx_bytes)
 
-    # Save video files separately (same pattern as drafts)
+    # Save video files
     video_refs = []
     if video_data:
         for i, vd in enumerate(video_data):
             if vd is not None:
                 vbytes, vname = vd
                 ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-                vpath = received / f"{share_id}_video_{i}.{ext}"
-                vpath.write_bytes(vbytes)
-                video_refs.append({"filename": vname, "path": str(vpath.name)})
+                vfname = f"{share_id}_video_{i}.{ext}"
+                _write_bytes(to_username, sub, vfname, vbytes)
+                video_refs.append({"filename": vname, "path": vfname})
             else:
                 video_refs.append(None)
 
     # Save player photos
     photo_refs = {}
     if photo_full:
-        (received / f"{share_id}_photo_full.png").write_bytes(photo_full)
-        photo_refs["full"] = f"{share_id}_photo_full.png"
+        pfname = f"{share_id}_photo_full.png"
+        _write_bytes(to_username, sub, pfname, photo_full)
+        photo_refs["full"] = pfname
     if photo_circular:
-        (received / f"{share_id}_photo_circ.png").write_bytes(photo_circular)
-        photo_refs["circular"] = f"{share_id}_photo_circ.png"
+        pcfname = f"{share_id}_photo_circ.png"
+        _write_bytes(to_username, sub, pcfname, photo_circular)
+        photo_refs["circular"] = pcfname
 
     meta = {
         "report_id": share_id,
@@ -404,48 +574,46 @@ def share_report(
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
     }
-    (received / f"{share_id}.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _write_text(to_username, sub, f"{share_id}.json",
+                json.dumps(meta, ensure_ascii=False, indent=2))
     return share_id
 
 
 def list_received(username: str) -> list[dict]:
     """Return all received reports, sorted by most recently shared."""
-    received = _received_dir(username)
+    filenames = _list_filenames(username, "received")
     results = []
-    for f in received.glob("*.json"):
-        try:
-            meta = json.loads(f.read_text(encoding="utf-8"))
-            results.append(meta)
-        except Exception:
-            pass
+    for fname in filenames:
+        if fname.endswith(".json"):
+            text = _read_text(username, "received", fname)
+            if text:
+                try:
+                    results.append(json.loads(text))
+                except Exception:
+                    pass
     results.sort(key=lambda m: m.get("shared_at", 0), reverse=True)
     return results
 
 
 def load_received_pptx(username: str, report_id: str) -> bytes | None:
-    p = _received_dir(username) / f"{report_id}.pptx"
-    return p.read_bytes() if p.exists() else None
+    return _read_bytes(username, "received", f"{report_id}.pptx")
 
 
 def load_received(username: str, report_id: str) -> dict | None:
-    """Load a received report's full state including video bytes and PPTX.
-    Returns None if not found.
-    """
-    received = _received_dir(username)
-    p = received / f"{report_id}.json"
-    if not p.exists():
+    """Load a received report's full state including video bytes and PPTX."""
+    text = _read_text(username, "received", f"{report_id}.json")
+    if not text:
         return None
-    meta = json.loads(p.read_text(encoding="utf-8"))
+    meta = json.loads(text)
+    sub = "received"
 
     # Resolve video refs to bytes
     video_data = []
     for vref in meta.get("video_refs", []) or []:
         if vref is not None:
-            vpath = received / vref["path"]
-            if vpath.exists():
-                video_data.append((vpath.read_bytes(), vref["filename"]))
+            vbytes = _read_bytes(username, sub, vref["path"])
+            if vbytes:
+                video_data.append((vbytes, vref["filename"]))
             else:
                 video_data.append(None)
         else:
@@ -453,25 +621,23 @@ def load_received(username: str, report_id: str) -> dict | None:
     meta["video_data"] = video_data
 
     # Attach PPTX bytes
-    pptx_path = received / f"{report_id}.pptx"
-    if pptx_path.exists():
-        meta["pptx_bytes"] = pptx_path.read_bytes()
+    pptx = _read_bytes(username, sub, f"{report_id}.pptx")
+    if pptx:
+        meta["pptx_bytes"] = pptx
 
     # Resolve photo refs
     prefs = meta.get("photo_refs") or {}
     if prefs.get("full"):
-        pfull = received / prefs["full"]
-        if pfull.exists():
-            meta["photo_full"] = pfull.read_bytes()
+        pfull = _read_bytes(username, sub, prefs["full"])
+        if pfull:
+            meta["photo_full"] = pfull
     if prefs.get("circular"):
-        pcirc = received / prefs["circular"]
-        if pcirc.exists():
-            meta["photo_circular"] = pcirc.read_bytes()
+        pcirc = _read_bytes(username, sub, prefs["circular"])
+        if pcirc:
+            meta["photo_circular"] = pcirc
 
     return meta
 
 
 def delete_received(username: str, report_id: str) -> None:
-    received = _received_dir(username)
-    for f in received.glob(f"{report_id}*"):
-        f.unlink(missing_ok=True)
+    _delete_prefix(username, "received", report_id)
