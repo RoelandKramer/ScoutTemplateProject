@@ -1390,6 +1390,34 @@ if page == "Dashboard":
         sv = meta.get("star_values") or []
         return len(sv) > 0 and all(v > 0 for v in sv)
 
+    def _generate_draft_pptx(uname: str, report_id: str) -> bytes | None:
+        """Generate a filled PPTX from a draft's stored data on the fly."""
+        draft = storage.load_draft(uname, report_id)
+        if not draft:
+            return None
+        pos = draft.get("position", "")
+        clb = draft.get("club", "FC Den Bosch")
+        lng = draft.get("language", "NL")
+        try:
+            cfg = get_template_config(pos, clb, lng)
+        except KeyError:
+            return None
+        sv = draft.get("star_values", [])
+        cm = draft.get("comments", [])
+        vd = draft.get("video_data", [])
+        pd_ = draft.get("player_data")
+        tm = draft.get("tm_stats")
+        pf = draft.get("photo_full")
+        pc = draft.get("photo_circular")
+        ub = draft.get("upload_bytes")
+        if ub:
+            out = fill_from_bytes(ub, cfg, sv, cm, vd, player_data=pd_,
+                                  tm_stats=tm, player_photo=pf, player_photo_circular=pc)
+        else:
+            out = fill_template(cfg, sv, cm, vd, player_data=pd_,
+                                tm_stats=tm, player_photo=pf, player_photo_circular=pc)
+        return out.getvalue()
+
     def _report_actions(meta: dict, prefix: str, load_pptx_fn, delete_fn, edit_mode: str = "draft"):
         """Render the 3 action buttons (Continue editing | Download | Delete).
 
@@ -1461,7 +1489,7 @@ if page == "Dashboard":
             )
             if "updated_at" in item and "finished_at" not in item:
                 # Pure draft — load from drafts storage
-                _report_actions(item, "draft", lambda u, r: (storage.load_draft(u, r) or {}).get("upload_bytes"), storage.delete_draft, edit_mode="draft")
+                _report_actions(item, "draft", _generate_draft_pptx, storage.delete_draft, edit_mode="draft")
             else:
                 # Incomplete finished report
                 _report_actions(item, "incfin", storage.load_finished_pptx, storage.delete_finished, edit_mode="finished")
