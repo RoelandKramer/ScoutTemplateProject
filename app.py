@@ -942,6 +942,23 @@ _STATS_FIELDS = [
     ]),
 ]
 
+_TM_STAT_KEYS = [dk for _, fields in _STATS_FIELDS for _, dk in fields]
+
+
+def _extract_tm_from_player_data(pdata: dict | None) -> dict | None:
+    """If player_data contains TM stat keys (season_matches, etc.), extract
+    them into a standalone dict suitable for the stats card.  Returns None
+    when no stats are present.
+    """
+    if not pdata:
+        return None
+    extracted = {}
+    for k in _TM_STAT_KEYS:
+        v = pdata.get(k)
+        if v is not None:
+            extracted[k] = v
+    return extracted if any(extracted.get(k) for k in _TM_STAT_KEYS) else None
+
 
 def _render_stats_card(
     stats: dict,
@@ -1641,12 +1658,14 @@ elif page == "New Report":
     with col_save:
         if st.button(f"{t('save_draft', L)}", use_container_width=True):
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+            _draft_pdata = st.session_state.get(NEW_PDATA_KEY)
+            _draft_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_draft_pdata)
             # Generate a PPTX snapshot so the draft can be resumed via Upload & Edit
             with st.spinner(t("building_report", L)):
                 snapshot = fill_template(
                     template_cfg, s, c, v,
-                    player_data=st.session_state.get(NEW_PDATA_KEY),
-                    tm_stats=st.session_state.get(NEW_TM_KEY),
+                    player_data=_draft_pdata,
+                    tm_stats=_draft_tm,
                     player_photo=st.session_state.get("new_player_photo_full"),
                     player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
@@ -1658,8 +1677,8 @@ elif page == "New Report":
                 source="empty",
                 upload_bytes=snapshot_bytes,
                 upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
-                player_data=st.session_state.get(NEW_PDATA_KEY),
-                tm_stats=st.session_state.get(NEW_TM_KEY),
+                player_data=_draft_pdata,
+                tm_stats=_draft_tm,
                 photo_full=st.session_state.get("new_player_photo_full"),
                 photo_circular=st.session_state.get("new_player_photo_circ"),
             )
@@ -1669,22 +1688,26 @@ elif page == "New Report":
     with col_gen:
         if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="empty_gen"):
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+            _gen_pdata = st.session_state.get(NEW_PDATA_KEY)
+            _gen_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_gen_pdata)
             with st.spinner(t("building_report", L)):
                 output = fill_template(
                     template_cfg, s, c, v,
-                    player_data=st.session_state.get(NEW_PDATA_KEY),
-                    tm_stats=st.session_state.get(NEW_TM_KEY),
+                    player_data=_gen_pdata,
+                    tm_stats=_gen_tm,
                     player_photo=st.session_state.get("new_player_photo_full"),
                     player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
             pptx_bytes = output.getvalue()
 
             rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
+            _gen_pdata = st.session_state.get(NEW_PDATA_KEY)
+            _gen_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_gen_pdata)
             storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                   player_name=_current_player_name(NEW_PDATA_KEY),
-                                  player_data=st.session_state.get(NEW_PDATA_KEY),
+                                  player_data=_gen_pdata,
                                   star_values=s, comments=c, video_data=v,
-                                  tm_stats=st.session_state.get(NEW_TM_KEY),
+                                  tm_stats=_gen_tm,
                                   photo_full=st.session_state.get("new_player_photo_full"),
                                   photo_circular=st.session_state.get("new_player_photo_circ"))
             st.session_state.pop("active_report_id", None)
@@ -1714,11 +1737,13 @@ elif page == "New Report":
             with c_send:
                 if st.button(t("send_report", L), type="primary", use_container_width=True, key="empty_share_send"):
                     s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+                    _share_pdata = st.session_state.get(NEW_PDATA_KEY)
+                    _share_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_share_pdata)
                     with st.spinner(t("building_report", L)):
                         output = fill_template(
                             template_cfg, s, c, v,
-                            player_data=st.session_state.get(NEW_PDATA_KEY),
-                            tm_stats=st.session_state.get(NEW_TM_KEY),
+                            player_data=_share_pdata,
+                            tm_stats=_share_tm,
                             player_photo=st.session_state.get("new_player_photo_full"),
                             player_photo_circular=st.session_state.get("new_player_photo_circ"),
                         )
@@ -1737,17 +1762,17 @@ elif page == "New Report":
                         star_values=s,
                         comments=c,
                         video_data=v,
-                        player_data=st.session_state.get(NEW_PDATA_KEY),
-                        tm_stats=st.session_state.get(NEW_TM_KEY),
+                        player_data=_share_pdata,
+                        tm_stats=_share_tm,
                         photo_full=st.session_state.get("new_player_photo_full"),
                         photo_circular=st.session_state.get("new_player_photo_circ"),
                     )
                     # Also save as finished + mark shared
                     storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                           player_name=_current_player_name(NEW_PDATA_KEY),
-                                          player_data=st.session_state.get(NEW_PDATA_KEY),
+                                          player_data=_share_pdata,
                                           star_values=s, comments=c, video_data=v,
-                                          tm_stats=st.session_state.get(NEW_TM_KEY),
+                                          tm_stats=_share_tm,
                                           photo_full=st.session_state.get("new_player_photo_full"),
                                           photo_circular=st.session_state.get("new_player_photo_circ"))
                     storage.mark_shared(username, rid, sel_scout)
@@ -1835,19 +1860,25 @@ elif page == "Upload & Edit":
                 # upload-specific slots, and clear any stale cached card inputs.
                 _clear_player_card_inputs("upload_sci_card")
                 _clear_stats_card_inputs("upload_tm_card")
-                if draft.get("player_data"):
-                    st.session_state[UPLOAD_PDATA_KEY] = draft["player_data"]
+                _draft_pdata = draft.get("player_data")
+                if _draft_pdata:
+                    st.session_state[UPLOAD_PDATA_KEY] = _draft_pdata
                 else:
                     st.session_state.pop(UPLOAD_PDATA_KEY, None)
-                if draft.get("tm_stats"):
-                    st.session_state[UPLOAD_TM_KEY] = draft["tm_stats"]
+                _draft_tm = draft.get("tm_stats") or _extract_tm_from_player_data(_draft_pdata)
+                if _draft_tm:
+                    st.session_state[UPLOAD_TM_KEY] = _draft_tm
                 else:
                     st.session_state.pop(UPLOAD_TM_KEY, None)
-                # Restore player photos
+                # Restore player photos (clear stale ones first)
                 if draft.get("photo_full"):
                     st.session_state["upload_player_photo_full"] = draft["photo_full"]
+                else:
+                    st.session_state.pop("upload_player_photo_full", None)
                 if draft.get("photo_circular"):
                     st.session_state["upload_player_photo_circ"] = draft["photo_circular"]
+                else:
+                    st.session_state.pop("upload_player_photo_circ", None)
                 st.session_state["_loaded_draft"] = _edit_draft_id
 
     # ── Auto-load a received report PPTX when coming from "Continue Editing" ─
@@ -1884,21 +1915,28 @@ elif page == "Upload & Edit":
             # Restore rich player/stats data into upload-specific slots
             _clear_player_card_inputs("upload_sci_card")
             _clear_stats_card_inputs("upload_tm_card")
-            if recv.get("player_data"):
-                st.session_state[UPLOAD_PDATA_KEY] = recv["player_data"]
+            _recv_pdata = recv.get("player_data")
+            if _recv_pdata:
+                st.session_state[UPLOAD_PDATA_KEY] = _recv_pdata
             elif recv.get("player_name"):
                 st.session_state[UPLOAD_PDATA_KEY] = {"name": recv["player_name"]}
             else:
                 st.session_state.pop(UPLOAD_PDATA_KEY, None)
-            if recv.get("tm_stats"):
-                st.session_state[UPLOAD_TM_KEY] = recv["tm_stats"]
+            # TM stats: use stored tm_stats, or extract from player_data
+            _recv_tm = recv.get("tm_stats") or _extract_tm_from_player_data(_recv_pdata)
+            if _recv_tm:
+                st.session_state[UPLOAD_TM_KEY] = _recv_tm
             else:
                 st.session_state.pop(UPLOAD_TM_KEY, None)
-            # Restore player photos
+            # Restore player photos (clear stale ones first)
             if recv.get("photo_full"):
                 st.session_state["upload_player_photo_full"] = recv["photo_full"]
+            else:
+                st.session_state.pop("upload_player_photo_full", None)
             if recv.get("photo_circular"):
                 st.session_state["upload_player_photo_circ"] = recv["photo_circular"]
+            else:
+                st.session_state.pop("upload_player_photo_circ", None)
 
             st.session_state["_loaded_draft"] = f"recv_{_edit_recv_id}"
 
@@ -1936,19 +1974,25 @@ elif page == "Upload & Edit":
             # Restore player/stats data
             _clear_player_card_inputs("upload_sci_card")
             _clear_stats_card_inputs("upload_tm_card")
-            if fin.get("player_data"):
-                st.session_state[UPLOAD_PDATA_KEY] = fin["player_data"]
+            _fin_pdata = fin.get("player_data")
+            if _fin_pdata:
+                st.session_state[UPLOAD_PDATA_KEY] = _fin_pdata
             else:
                 st.session_state.pop(UPLOAD_PDATA_KEY, None)
-            if fin.get("tm_stats"):
-                st.session_state[UPLOAD_TM_KEY] = fin["tm_stats"]
+            _fin_tm = fin.get("tm_stats") or _extract_tm_from_player_data(_fin_pdata)
+            if _fin_tm:
+                st.session_state[UPLOAD_TM_KEY] = _fin_tm
             else:
                 st.session_state.pop(UPLOAD_TM_KEY, None)
-            # Restore photos
+            # Restore photos (clear stale ones first)
             if fin.get("photo_full"):
                 st.session_state["upload_player_photo_full"] = fin["photo_full"]
+            else:
+                st.session_state.pop("upload_player_photo_full", None)
             if fin.get("photo_circular"):
                 st.session_state["upload_player_photo_circ"] = fin["photo_circular"]
+            else:
+                st.session_state.pop("upload_player_photo_circ", None)
 
             st.session_state["_loaded_draft"] = f"fin_{_edit_fin_id}"
 
@@ -2055,12 +2099,14 @@ elif page == "Upload & Edit":
         with col_save:
             if st.button(f"{t('save_draft', L)}", use_container_width=True, key="upload_save"):
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                _save_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
+                _save_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_save_pdata)
                 # Generate updated PPTX snapshot for the draft
                 with st.spinner(t("filling", L)):
                     _snap = fill_from_bytes(
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
-                        player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                        tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                        player_data=_save_pdata,
+                        tm_stats=_save_tm,
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
@@ -2072,8 +2118,8 @@ elif page == "Upload & Edit":
                     source="upload",
                     upload_bytes=_snap_bytes,
                     upload_filename=st.session_state.get("upload_filename"),
-                    player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                    tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                    player_data=_save_pdata,
+                    tm_stats=_save_tm,
                     photo_full=st.session_state.get("upload_player_photo_full"),
                     photo_circular=st.session_state.get("upload_player_photo_circ"),
                 )
@@ -2083,11 +2129,13 @@ elif page == "Upload & Edit":
         with col_gen:
             if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="upload_gen"):
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                _upgen_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
+                _upgen_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upgen_pdata)
                 with st.spinner(t("filling", L)):
                     output = fill_from_bytes(
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
-                        player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                        tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                        player_data=_upgen_pdata,
+                        tm_stats=_upgen_tm,
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
@@ -2099,13 +2147,14 @@ elif page == "Upload & Edit":
                     source="upload",
                     upload_bytes=st.session_state.get("upload_bytes"),
                     upload_filename=st.session_state.get("upload_filename"),
-                    player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                    player_data=_upgen_pdata,
+                    tm_stats=_upgen_tm,
                 )
                 storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                       player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                      player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                                      player_data=_upgen_pdata,
                                       star_values=s, comments=c, video_data=v,
-                                      tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                                      tm_stats=_upgen_tm,
                                       photo_full=st.session_state.get("upload_player_photo_full"),
                                       photo_circular=st.session_state.get("upload_player_photo_circ"))
                 st.session_state.pop("upload_active_report_id", None)
@@ -2135,11 +2184,13 @@ elif page == "Upload & Edit":
                 with c_send:
                     if st.button(t("send_report", L), type="primary", use_container_width=True, key="upload_share_send"):
                         s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                        _upshare_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
+                        _upshare_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upshare_pdata)
                         with st.spinner(t("filling", L)):
                             output = fill_from_bytes(
                                 st.session_state["upload_bytes"], template_cfg, s, c, v,
-                                player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                                player_data=_upshare_pdata,
+                                tm_stats=_upshare_tm,
                                 player_photo=st.session_state.get("upload_player_photo_full"),
                                 player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                             )
@@ -2147,6 +2198,8 @@ elif page == "Upload & Edit":
                         pos = matched_name or "Unknown"
                         rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
                         player = _current_player_name(UPLOAD_PDATA_KEY) or pos
+                        _upshare_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
+                        _upshare_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upshare_pdata)
                         storage.share_report(
                             from_username=username,
                             to_username=sel_scout,
@@ -2159,19 +2212,19 @@ elif page == "Upload & Edit":
                             star_values=s,
                             comments=c,
                             video_data=v,
-                            player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                            tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                            player_data=_upshare_pdata,
+                            tm_stats=_upshare_tm,
                             photo_full=st.session_state.get("upload_player_photo_full"),
                             photo_circular=st.session_state.get("upload_player_photo_circ"),
                         )
                         # Also save as finished + mark shared
                         storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                               player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                              player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                                              player_data=_upshare_pdata,
                                               star_values=s,
                                               comments=c,
                                               video_data=v,
-                                              tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                                              tm_stats=_upshare_tm,
                                               photo_full=st.session_state.get("upload_player_photo_full"),
                                               photo_circular=st.session_state.get("upload_player_photo_circ"))
                         storage.mark_shared(username, rid, sel_scout)
