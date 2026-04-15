@@ -1384,6 +1384,13 @@ _render_header(club, lang)
 if page == "Dashboard":
     st.markdown("---")
 
+    # Show storage backend status (small caption at top)
+    _storage_info = storage.get_backend_info()
+    if "GitHub" in _storage_info:
+        st.caption(f"☁️ {_storage_info}")
+    else:
+        st.caption(f"💾 {_storage_info}")
+
     # ── Filter by player name ───────────────────────────────────────────────
     filter_query = st.text_input(
         f"🔍 {t('filter_by_player', L)}",

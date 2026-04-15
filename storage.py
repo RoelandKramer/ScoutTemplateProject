@@ -15,11 +15,14 @@ commits don't trigger Streamlit Cloud redeployment of the app repo.
 
 import base64
 import json
+import logging
 import time
 import uuid
 from pathlib import Path
 
 import requests as _requests  # already in requirements
+
+log = logging.getLogger(__name__)
 
 # ─── Storage backend ────────────────────────────────────────────────────────
 
@@ -28,6 +31,7 @@ _gh_token = None
 _gh_repo = None          # "owner/repo"
 _gh_branch = "main"
 _gh_prefix = "data"      # root folder inside the repo
+_gh_verified = False      # True once we've confirmed the repo is accessible
 DATA_DIR = Path(__file__).parent / "data"
 
 # Upper size limit for GitHub uploads (100 MB via Contents API;
@@ -37,7 +41,7 @@ _GH_MAX_BYTES = 80_000_000
 
 def _init_backend():
     """Lazy-initialise: GitHub if credentials exist, else local filesystem."""
-    global _backend, _gh_token, _gh_repo, _gh_branch, _gh_prefix
+    global _backend, _gh_token, _gh_repo, _gh_branch, _gh_prefix, _gh_verified
     if _backend is not None:
         return
     try:
@@ -49,9 +53,76 @@ def _init_backend():
             raise ValueError("GitHub credentials not configured")
         _gh_branch = cfg.get("branch", "main")
         _gh_prefix = cfg.get("path_prefix", "data")
+
+        # Verify the connection and ensure the repo/branch is ready
+        _ensure_repo_ready()
+        _gh_verified = True
         _backend = "github"
-    except Exception:
+        log.info("Storage backend: GitHub (%s branch %s)", _gh_repo, _gh_branch)
+    except Exception as exc:
+        log.warning("GitHub storage not available (%s), falling back to local", exc)
         _backend = "local"
+
+
+def _ensure_repo_ready():
+    """Make sure the target branch exists. If the repo is empty, create an
+    initial commit so the Contents API can write to it."""
+    # Check if branch exists
+    r = _requests.get(
+        f"https://api.github.com/repos/{_gh_repo}/branches/{_gh_branch}",
+        headers=_gh_headers(),
+    )
+    if r.status_code == 200:
+        return  # branch exists, good to go
+
+    # Branch doesn't exist. Try to create it from the default branch.
+    r2 = _requests.get(
+        f"https://api.github.com/repos/{_gh_repo}",
+        headers=_gh_headers(),
+    )
+    if r2.status_code != 200:
+        raise ConnectionError(
+            f"Cannot access repo {_gh_repo}: {r2.status_code} {r2.text[:200]}"
+        )
+    repo_info = r2.json()
+    default_branch = repo_info.get("default_branch", "main")
+
+    if repo_info.get("size", 0) == 0:
+        # Repo is completely empty — create initial commit with a README
+        # Using the Contents API to create a file also creates the branch
+        r3 = _requests.put(
+            f"https://api.github.com/repos/{_gh_repo}/contents/README.md",
+            headers=_gh_headers(),
+            json={
+                "message": "Initialize data repository",
+                "content": base64.b64encode(
+                    b"# Scout Report Data\nPersistent storage for scout reports.\n"
+                ).decode("ascii"),
+            },
+        )
+        if r3.status_code not in (200, 201):
+            raise ConnectionError(
+                f"Cannot initialize repo: {r3.status_code} {r3.text[:200]}"
+            )
+        log.info("Initialized empty repo %s with README", _gh_repo)
+        # If our target branch is 'main' and that's the default, we're done
+        if _gh_branch == default_branch:
+            return
+
+    # Create our target branch from the default branch
+    if _gh_branch != default_branch:
+        ref_r = _requests.get(
+            f"https://api.github.com/repos/{_gh_repo}/git/refs/heads/{default_branch}",
+            headers=_gh_headers(),
+        )
+        if ref_r.status_code == 200:
+            sha = ref_r.json()["object"]["sha"]
+            _requests.post(
+                f"https://api.github.com/repos/{_gh_repo}/git/refs",
+                headers=_gh_headers(),
+                json={"ref": f"refs/heads/{_gh_branch}", "sha": sha},
+            )
+            log.info("Created branch %s from %s", _gh_branch, default_branch)
 
 
 # ─── GitHub helpers ─────────────────────────────────────────────────────────
@@ -74,7 +145,11 @@ def _gh_get_file_meta(path: str) -> dict | None:
         headers=_gh_headers(),
         params={"ref": _gh_branch},
     )
-    return r.json() if r.status_code == 200 else None
+    if r.status_code == 200:
+        data = r.json()
+        if isinstance(data, dict):
+            return data
+    return None
 
 
 def _gh_read(path: str) -> bytes | None:
@@ -93,10 +168,11 @@ def _gh_read(path: str) -> bytes | None:
     return None
 
 
-def _gh_write(path: str, data: bytes, message: str = "auto-save") -> bool:
-    """Create or update a file in the repo. Returns True on success."""
+def _gh_write(path: str, data: bytes, message: str = "auto-save") -> None:
+    """Create or update a file in the repo. Raises on failure."""
     if len(data) > _GH_MAX_BYTES:
-        return False  # skip files too large for Contents API
+        log.warning("Skipping %s: %d bytes exceeds GitHub limit", path, len(data))
+        return
     # Need the current SHA if the file already exists (for update)
     meta = _gh_get_file_meta(path)
     body: dict = {
@@ -111,7 +187,13 @@ def _gh_write(path: str, data: bytes, message: str = "auto-save") -> bool:
         headers=_gh_headers(),
         json=body,
     )
-    return r.status_code in (200, 201)
+    if r.status_code not in (200, 201):
+        error_msg = r.text[:300] if r.text else "unknown error"
+        log.error("GitHub write failed for %s: %s %s", path, r.status_code, error_msg)
+        raise IOError(
+            f"Failed to save {path.split('/')[-1]} to GitHub "
+            f"(HTTP {r.status_code}). Check your token permissions."
+        )
 
 
 def _gh_delete_file(path: str, message: str = "auto-delete") -> bool:
@@ -203,6 +285,16 @@ def _delete_prefix(username: str, subfolder: str, prefix: str) -> None:
         if d.exists():
             for f in d.glob(f"{prefix}*"):
                 f.unlink(missing_ok=True)
+
+
+# ─── Diagnostic ─────────────────────────────────────────────────────────────
+
+def get_backend_info() -> str:
+    """Return a short description of the active storage backend (for debugging)."""
+    _init_backend()
+    if _backend == "github":
+        return f"GitHub: {_gh_repo} (branch: {_gh_branch})"
+    return f"Local: {DATA_DIR}"
 
 
 # ─── Draft operations ────────────────────────────────────────────────────────
