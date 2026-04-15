@@ -773,30 +773,61 @@ def get_video_from_slide(slide) -> tuple[bytes, str] | None:
     return None
 
 
+def _remove_movie_shape(slide, shape) -> None:
+    """Remove a Movie shape and clean up its orphaned relationships."""
+    elem = shape._element
+    spTree = slide.shapes._spTree
+
+    # Collect all rIds referenced by this shape element
+    r_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    rIds = set()
+    for node in elem.iter():
+        for key, val in node.attrib.items():
+            if key == f"{{{r_ns}}}embed" or key == f"{{{r_ns}}}link":
+                rIds.add(val)
+
+    # Remove the shape element from the slide tree
+    spTree.remove(elem)
+
+    # Drop the orphaned relationships so PowerPoint won't ask for repair
+    for rId in rIds:
+        if rId in slide.part.rels:
+            try:
+                slide.part.rels.pop(rId)
+            except Exception:
+                pass
+
+
 def embed_video_on_slide(
     prs, slide_idx: int, video_bytes: bytes, video_filename: str
 ) -> bool:
     """Replace the placeholder picture on a detail slide with an embedded video.
 
     If the slide already has an embedded video it is removed first so we do not
-    accumulate duplicate media entries on repeated fills.
+    accumulate duplicate media entries on repeated fills.  The existing Movie's
+    geometry is captured *before* removal so re-fills always succeed even after
+    the original placeholder Picture has been consumed.
     """
     slide = prs.slides[slide_idx]
-    spTree = slide.shapes._spTree
 
-    # Remove any existing Movie shapes
+    # Capture geometry of any existing Movie BEFORE removing it
+    movie_geo = None
     for shape in list(slide.shapes):
         if isinstance(shape, Movie):
-            spTree.remove(shape._element)
+            movie_geo = (shape.left, shape.top, shape.width, shape.height)
+            _remove_movie_shape(slide, shape)
 
     # Find placeholder picture and read its geometry
     placeholder = _find_detail_placeholder(slide)
-    if placeholder is None:
+    if placeholder is not None:
+        left, top = placeholder.left, placeholder.top
+        width, height = placeholder.width, placeholder.height
+        slide.shapes._spTree.remove(placeholder._element)
+    elif movie_geo is not None:
+        # No placeholder (consumed on a previous fill) — reuse Movie's geometry
+        left, top, width, height = movie_geo
+    else:
         return False
-
-    left, top = placeholder.left, placeholder.top
-    width, height = placeholder.width, placeholder.height
-    spTree.remove(placeholder._element)
 
     poster_jpeg = extract_first_frame_jpeg(video_bytes)
     poster_io = io.BytesIO(poster_jpeg) if poster_jpeg else None
@@ -1008,27 +1039,43 @@ def fill_player_photo(
         pic_left = box_left + (box_w - pic_w) // 2
         pic_top = bar_top - pic_h
 
+        # Remove any previously added player photo (re-fill safe)
+        _spTree0 = slide0.shapes._spTree
+        for shape in list(slide0.shapes):
+            if shape.name == "player_photo_welcome":
+                _spTree0.remove(shape._element)
+
         img_stream = io.BytesIO(full_photo)
-        slide0.shapes.add_picture(img_stream, pic_left, pic_top, pic_w, pic_h)
+        pic = slide0.shapes.add_picture(img_stream, pic_left, pic_top, pic_w, pic_h)
+        pic.name = "player_photo_welcome"
 
     # ── Circular crop on rating slide ──────────────────────────────────────
     photo_for_rating = circular_photo or full_photo
     if photo_for_rating:
         rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
-        browse_shape = None
+
+        # Find placement: "Browse" placeholder (first fill) or previously placed photo (re-fill)
+        target_shape = None
         for shape in rating_slide.shapes:
             if shape.name.startswith("Browse"):
-                browse_shape = shape
+                target_shape = shape
                 break
-        if browse_shape is not None:
-            left = browse_shape.left
-            top = browse_shape.top
-            width = browse_shape.width
-            height = browse_shape.height
-            sp = browse_shape._element
+        if target_shape is None:
+            for shape in rating_slide.shapes:
+                if shape.name == "player_photo_rating":
+                    target_shape = shape
+                    break
+
+        if target_shape is not None:
+            left = target_shape.left
+            top = target_shape.top
+            width = target_shape.width
+            height = target_shape.height
+            sp = target_shape._element
             sp.getparent().remove(sp)
             img_stream = io.BytesIO(photo_for_rating)
-            rating_slide.shapes.add_picture(img_stream, left, top, width, height)
+            pic = rating_slide.shapes.add_picture(img_stream, left, top, width, height)
+            pic.name = "player_photo_rating"
 
 def fill_template(
     template_cfg: dict,
