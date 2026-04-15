@@ -35,6 +35,34 @@ def _finished_dir(username: str) -> Path:
     return d
 
 
+# ─── Lazy video helpers ──────────────────────────────────────────────────────
+
+def resolve_video(entry) -> tuple[bytes, str] | None:
+    """Materialise a video entry into (bytes, filename).
+
+    Entries can be:
+      - ("lazy", filepath, filename) — read bytes from disk on demand
+      - (bytes, filename)           — already in memory
+      - None                        — no video
+    """
+    if entry is None:
+        return None
+    if isinstance(entry, tuple) and len(entry) == 3 and entry[0] == "lazy":
+        _, fpath, fname = entry
+        p = Path(fpath)
+        if p.exists():
+            return (p.read_bytes(), fname)
+        return None
+    if isinstance(entry, (tuple, list)) and len(entry) == 2:
+        return (entry[0], entry[1])
+    return None
+
+
+def resolve_all_videos(video_list: list) -> list:
+    """Resolve a full list of video entries to (bytes, filename) | None."""
+    return [resolve_video(v) for v in (video_list or [])]
+
+
 # ─── Draft operations ────────────────────────────────────────────────────────
 
 def save_draft(
@@ -60,11 +88,12 @@ def save_draft(
 
     drafts = _drafts_dir(username)
 
-    # Save video files separately
+    # Resolve and save video files separately
     video_refs = []
     for i, vd in enumerate(video_data):
-        if vd is not None:
-            vbytes, vname = vd
+        resolved = resolve_video(vd)
+        if resolved is not None:
+            vbytes, vname = resolved
             ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
             vpath = drafts / f"{report_id}_video_{i}.{ext}"
             vpath.write_bytes(vbytes)
@@ -119,20 +148,21 @@ def _load_draft_meta(username: str, report_id: str) -> dict:
 
 
 def load_draft(username: str, report_id: str) -> dict | None:
-    """Load a draft including video bytes. Returns None if not found."""
+    """Load a draft with lazy video references. Returns None if not found."""
     meta = _load_draft_meta(username, report_id)
     if not meta:
         return None
 
     drafts = _drafts_dir(username)
 
-    # Resolve video refs to actual bytes
+    # Return lazy path references instead of reading all bytes into memory.
+    # Each entry is ("lazy", str_path, filename) or None.
     video_data = []
     for vref in meta.get("video_refs", []):
         if vref is not None:
             vpath = drafts / vref["path"]
             if vpath.exists():
-                video_data.append((vpath.read_bytes(), vref["filename"]))
+                video_data.append(("lazy", str(vpath), vref["filename"]))
             else:
                 video_data.append(None)
         else:
@@ -215,16 +245,16 @@ def save_finished(
         (finished / f"{report_id}_photo_circ.png").write_bytes(photo_circular)
         photo_refs["circular"] = f"{report_id}_photo_circ.png"
 
-    # Save video files separately
+    # Videos are already embedded inside the PPTX — skip writing them
+    # separately to avoid doubling disk/memory usage.  We still record
+    # filenames in the metadata so the UI can show labels.
     video_refs = []
     if video_data:
         for i, vd in enumerate(video_data):
             if vd is not None:
-                vbytes, vname = vd
-                ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-                vpath = finished / f"{report_id}_video_{i}.{ext}"
-                vpath.write_bytes(vbytes)
-                video_refs.append({"filename": vname, "path": str(vpath.name)})
+                resolved = resolve_video(vd)
+                vname = resolved[1] if resolved else f"video_{i}.mp4"
+                video_refs.append({"filename": vname, "embedded": True})
             else:
                 video_refs.append(None)
 
@@ -271,7 +301,7 @@ def load_finished_pptx(username: str, report_id: str) -> bytes | None:
 
 
 def load_finished(username: str, report_id: str) -> dict | None:
-    """Load a finished report's full state including PPTX, videos, photos.
+    """Load a finished report's full state with lazy video references.
     Returns None if not found.
     """
     finished = _finished_dir(username)
@@ -280,25 +310,33 @@ def load_finished(username: str, report_id: str) -> dict | None:
         return None
     meta = json.loads(p.read_text(encoding="utf-8"))
 
-    # Attach PPTX bytes
+    # Store PPTX *path* instead of reading bytes eagerly — the caller
+    # can read it on demand via load_finished_pptx().
     pptx_path = finished / f"{report_id}.pptx"
     if pptx_path.exists():
         meta["pptx_bytes"] = pptx_path.read_bytes()
 
-    # Resolve video refs to bytes
+    # Return lazy path references for videos that exist on disk.
+    # Newer reports mark videos as "embedded" (inside the PPTX) so there
+    # is no separate file.  Older reports may still have separate files.
     video_data = []
     for vref in meta.get("video_refs", []) or []:
         if vref is not None:
-            vpath = finished / vref["path"]
-            if vpath.exists():
-                video_data.append((vpath.read_bytes(), vref["filename"]))
+            if vref.get("embedded"):
+                video_data.append(None)
+            elif vref.get("path"):
+                vpath = finished / vref["path"]
+                if vpath.exists():
+                    video_data.append(("lazy", str(vpath), vref["filename"]))
+                else:
+                    video_data.append(None)
             else:
                 video_data.append(None)
         else:
             video_data.append(None)
     meta["video_data"] = video_data
 
-    # Resolve photo refs
+    # Resolve photo refs (small files, safe to keep eager)
     prefs = meta.get("photo_refs") or {}
     if prefs.get("full"):
         pfull = finished / prefs["full"]
@@ -366,12 +404,13 @@ def share_report(
 
     (received / f"{share_id}.pptx").write_bytes(pptx_bytes)
 
-    # Save video files separately (same pattern as drafts)
+    # Resolve and save video files for the recipient
     video_refs = []
     if video_data:
         for i, vd in enumerate(video_data):
-            if vd is not None:
-                vbytes, vname = vd
+            resolved = resolve_video(vd)
+            if resolved is not None:
+                vbytes, vname = resolved
                 ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
                 vpath = received / f"{share_id}_video_{i}.{ext}"
                 vpath.write_bytes(vbytes)
@@ -430,7 +469,7 @@ def load_received_pptx(username: str, report_id: str) -> bytes | None:
 
 
 def load_received(username: str, report_id: str) -> dict | None:
-    """Load a received report's full state including video bytes and PPTX.
+    """Load a received report's full state with lazy video references.
     Returns None if not found.
     """
     received = _received_dir(username)
@@ -439,13 +478,13 @@ def load_received(username: str, report_id: str) -> dict | None:
         return None
     meta = json.loads(p.read_text(encoding="utf-8"))
 
-    # Resolve video refs to bytes
+    # Return lazy path references for videos.
     video_data = []
     for vref in meta.get("video_refs", []) or []:
         if vref is not None:
             vpath = received / vref["path"]
             if vpath.exists():
-                video_data.append((vpath.read_bytes(), vref["filename"]))
+                video_data.append(("lazy", str(vpath), vref["filename"]))
             else:
                 video_data.append(None)
         else:
@@ -457,7 +496,7 @@ def load_received(username: str, report_id: str) -> dict | None:
     if pptx_path.exists():
         meta["pptx_bytes"] = pptx_path.read_bytes()
 
-    # Resolve photo refs
+    # Resolve photo refs (small files)
     prefs = meta.get("photo_refs") or {}
     if prefs.get("full"):
         pfull = received / prefs["full"]
