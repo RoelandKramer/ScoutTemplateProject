@@ -1,82 +1,56 @@
-"""Transfermarkt scraping for player season & career statistics."""
+"""Transfermarkt scraping for player season & career statistics.
+
+Uses Playwright with stealth to bypass bot detection on Streamlit Cloud.
+"""
 
 from __future__ import annotations
 
 import re
+import subprocess
 import time
 from dataclasses import dataclass
-from typing import Optional
-from urllib.parse import quote
 
-# Import requests from curl_cffi instead
-from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
 from bs4 import BeautifulSoup
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/131.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Referer": "https://www.transfermarkt.com/",
-    "DNT": "1",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "same-origin",
-    "Sec-Fetch-User": "?1",
-    "Cache-Control": "max-age=0",
-}
 _BASE = "https://www.transfermarkt.com"
 _DELAY = 1.5  # polite delay between requests
-_MAX_RETRIES = 2
 
-
-def _get_session():
-    """Return a persistent session with browser-like TLS fingerprints."""
-    # The 'impersonate' flag is the magic bullet here.
-    # It tells the library to exactly mimic Chrome's network behavior.
-    s = requests.Session(impersonate="chrome")
-    s.headers.update(_HEADERS)
-    return s
-
-_session: requests.Session | None = None
-
-
-def fetch_with_browser(url: str) -> BeautifulSoup:
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        
-        # Apply stealth to hide the fact that this is automated
-        stealth_sync(page)
-        
-        # Go to the site and wait for the network to be idle
-        page.goto(url, wait_until="networkidle")
-        
-        # Extract the fully rendered HTML
-        html = page.content()
-        browser.close()
-        
-        return BeautifulSoup(html, "lxml")
-    
-
-
-    if isinstance(last_exc, TmBlockedError):
-        raise last_exc
-    if last_exc:
-        raise last_exc
-    raise TmBlockedError("Transfermarkt request failed after retries.")
+_BROWSER_READY = False
 
 
 class TmBlockedError(Exception):
-    """Raised when Transfermarkt blocks our requests (403)."""
+    """Raised when Transfermarkt blocks our requests."""
     pass
+
+
+def _ensure_browser() -> None:
+    """Install Playwright Chromium browser binary if not already present.
+
+    On Streamlit Cloud the pip install only gets the Python package;
+    the actual browser binary must be downloaded separately.
+    This is idempotent — fast no-op when already installed.
+    """
+    global _BROWSER_READY
+    if _BROWSER_READY:
+        return
+
+    try:
+        subprocess.run(
+            ["playwright", "install", "chromium"],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        raise TmBlockedError(
+            "Playwright CLI not found. Run: pip install playwright"
+        )
+    except subprocess.TimeoutExpired:
+        raise TmBlockedError("Timed out installing Chromium browser.")
+    except subprocess.CalledProcessError as exc:
+        raise TmBlockedError(f"Failed to install Chromium: {exc.stderr}")
+
+    _BROWSER_READY = True
 
 
 @dataclass
@@ -87,17 +61,71 @@ class TmPlayer:
     tm_id: int
 
 
+# ─── Browser-based fetching ────────────────────────────────────────────────
+
+def _fetch_page(url: str) -> BeautifulSoup:
+    """Fetch a page using a headless Playwright browser with stealth.
+
+    This bypasses Transfermarkt's bot detection (TLS fingerprinting,
+    Cloudflare challenges) which blocks plain requests from cloud servers.
+    """
+    _ensure_browser()
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise TmBlockedError(
+            "Playwright is not installed. Run: pip install playwright && playwright install chromium"
+        )
+
+    try:
+        from playwright_stealth import stealth_sync
+    except ImportError:
+        stealth_sync = None  # proceed without stealth if not available
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 Safari/537.36"
+                ),
+                locale="en-US",
+            )
+            page = context.new_page()
+
+            if stealth_sync is not None:
+                stealth_sync(page)
+
+            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            # Give JS a moment to render dynamic content
+            page.wait_for_timeout(2000)
+
+            html = page.content()
+            browser.close()
+
+            # Check if we got a block page
+            if "Access Denied" in html or "blocked" in html.lower()[:500]:
+                raise TmBlockedError("Transfermarkt blocked the request.")
+
+            return BeautifulSoup(html, "lxml")
+    except TmBlockedError:
+        raise
+    except Exception as exc:
+        raise TmBlockedError(f"Browser fetch failed: {exc}")
+
+
 # ─── Search ─────────────────────────────────────────────────────────────────
 
 def search_player(name: str) -> list[TmPlayer]:
     """Search Transfermarkt for players matching *name*."""
-    url = f"{_BASE}/schnellsuche/ergebnis/schnellsuche"
-    params = {"query": name, "x": 0, "y": 0}
-    resp = _fetch(url, params=params)
-    soup = BeautifulSoup(resp.text, "lxml")
+    query = name.replace(" ", "+")
+    url = f"{_BASE}/schnellsuche/ergebnis/schnellsuche?query={query}&x=0&y=0"
+    soup = _fetch_page(url)
 
     results: list[TmPlayer] = []
-    # Player result rows in search results table
     for table in soup.select("table.items"):
         for row in table.select("tbody tr"):
             link = row.select_one("td.hauptlink a")
@@ -105,16 +133,11 @@ def search_player(name: str) -> list[TmPlayer]:
                 continue
             href = link["href"]
             pname = link.get_text(strip=True)
-            # Extract TM id from URL
             m = re.search(r"/spieler/(\d+)", href)
             if not m:
                 continue
             tm_id = int(m.group(1))
-            # Club name
-            club_td = row.select("td.zentriert")
-            club_el = row.select_one("td:nth-of-type(4) a, td:nth-of-type(5) a, img[alt]")
             club_name = ""
-            # Try to get club from row
             for img in row.select("img"):
                 alt = img.get("alt", "")
                 if alt and alt != pname and "flag" not in (img.get("class") or [""]):
@@ -139,7 +162,6 @@ def _best_match(candidates: list[TmPlayer], target_name: str, target_club: str =
         elif target_lower in name_l or name_l in target_lower:
             s += 5
         else:
-            # Word overlap
             target_words = set(target_lower.split())
             name_words = set(name_l.split())
             overlap = len(target_words & name_words)
@@ -169,69 +191,10 @@ def _parse_int(text: str) -> int:
 
 def _fetch_stats_page(profile_url: str) -> BeautifulSoup:
     """Fetch the player's detailed stats page."""
-    # Convert profile URL to stats URL
-    # /player-name/profil/spieler/12345 -> /player-name/leistungsdatendetails/spieler/12345
     stats_url = profile_url.replace("/profil/spieler/", "/leistungsdatendetails/spieler/")
     full_url = f"{_BASE}{stats_url}"
     time.sleep(_DELAY)
-    resp = _fetch(full_url)
-    return BeautifulSoup(resp.text, "lxml")
-
-
-def _extract_season_stats(soup: BeautifulSoup, target_season: str = "24/25") -> dict[str, int]:
-    """Extract stats for a specific season from the detailed stats page.
-
-    target_season should be in format "24/25" for 2024/2025 season.
-    """
-    stats = {"matches": 0, "minutes": 0, "goals": 0, "assists": 0}
-
-    # Find all competition rows for the target season
-    # The stats page has tables grouped by season
-    for table in soup.select("table.items"):
-        rows = table.select("tbody tr")
-        for row in rows:
-            tds = row.select("td")
-            if len(tds) < 5:
-                continue
-
-            # Check if this row's season matches
-            season_el = row.select_one("td.zentriert a[href*='saison_id']")
-            if not season_el:
-                # Try the first cell
-                first_td = tds[0].get_text(strip=True)
-                if target_season not in first_td:
-                    continue
-            else:
-                if target_season not in season_el.get_text(strip=True):
-                    continue
-
-            # Find the stats columns — look for numeric values
-            # Typical order: competition, appearances, goals, assists, minutes
-            # But layout varies. Parse all numeric cells.
-            appearances = 0
-            goals = 0
-            assists = 0
-            minutes_played = 0
-
-            numeric_tds = [td for td in tds if td.get_text(strip=True).replace(".", "").replace("-", "").replace("'", "").isdigit() or td.get_text(strip=True) == "-"]
-
-            # Try to find specific columns by position
-            for td in tds:
-                text = td.get_text(strip=True)
-                # Minutes often have a ' suffix
-                if "'" in text:
-                    minutes_played += _parse_int(text.replace("'", ""))
-
-            # Use footer/total row approach — look for class or total markers
-            # For now, sum up all competition rows
-
-    # Alternative: use the compact stats boxes on the page
-    # Look for the stats summary section
-    for box in soup.select(".data-header__details, .data-header__info-box"):
-        text = box.get_text(" ", strip=True)
-        # This sometimes contains "X goals" etc.
-
-    return stats
+    return _fetch_page(full_url)
 
 
 def fetch_player_stats(player_name: str, player_club: str = "", target_season_label: str = "2025/2026") -> dict:
@@ -250,7 +213,6 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
         "tm_url": "",
     }
 
-    # Search for the player
     candidates = search_player(player_name)
     if not candidates:
         return result
@@ -261,35 +223,23 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
 
     result["tm_url"] = f"{_BASE}{player.url}"
 
-    # Convert season label "2025/2026" -> "25/26" for matching
     m = re.match(r"(\d{4})/(\d{4})", target_season_label)
     if m:
         season_short = f"{m.group(1)[2:]}/{m.group(2)[2:]}"
     else:
         season_short = "25/26"
 
-    # Fetch the stats page
     try:
         soup = _fetch_stats_page(player.url)
     except Exception:
         return result
 
-    # Parse the detailed stats table
-    # Transfermarkt detailed stats page has rows per competition per season
-    # We need to find all rows for the target season and sum them up
     _parse_detailed_stats(soup, result, season_short)
-
     return result
 
 
 def _parse_detailed_stats(soup: BeautifulSoup, result: dict, season_short: str) -> None:
     """Parse the detailed performance data table on Transfermarkt."""
-
-    # The page contains a responsive table with class "items"
-    # Each row has: season | competition | matchday | squad_number | appearances | goals | assists | ...
-    # There are also total/footer rows
-
-    # Strategy: find all data rows grouped by season, sum per-competition lines
     season_matches = 0
     season_goals = 0
     season_assists = 0
@@ -300,33 +250,20 @@ def _parse_detailed_stats(soup: BeautifulSoup, result: dict, season_short: str) 
     career_assists = 0
     career_minutes = 0
 
-    found_season = False
-
-    # Look for the main stats table
     tables = soup.select("div.responsive-table table.items, table.items")
     if not tables:
         return
 
     for table in tables:
-        # Check for tfoot (totals row)
         tfoot = table.select_one("tfoot")
         if tfoot:
-            # Career totals from the footer
             tds = tfoot.select("td")
-            for i, td in enumerate(tds):
-                text = td.get_text(strip=True)
-                # The footer typically has: label | appearances | goals | assists | ... | minutes
-                if i == 1 or (td.get("class") and "zentriert" in td.get("class", [])):
-                    pass  # Skip non-numeric
-
-            # Parse footer cells more carefully
             numeric_cells = []
             for td in tds:
                 text = td.get_text(strip=True).replace(".", "").replace("'", "").replace("-", "0")
                 if text.isdigit():
                     numeric_cells.append(int(text))
 
-            # Typical order in footer: appearances, goals, assists, yellow, 2nd yellow, red, minutes
             if len(numeric_cells) >= 3:
                 career_matches = numeric_cells[0]
                 career_goals = numeric_cells[1]
@@ -336,11 +273,9 @@ def _parse_detailed_stats(soup: BeautifulSoup, result: dict, season_short: str) 
             elif len(numeric_cells) >= 4:
                 career_minutes = numeric_cells[-1]
 
-        # Parse individual rows for the target season
         rows = table.select("tbody tr:not(.bg_blau_20)")
         current_season = ""
         for row in rows:
-            # Skip separator / header rows
             if "bg_blau_20" in (row.get("class") or []):
                 continue
 
@@ -348,14 +283,11 @@ def _parse_detailed_stats(soup: BeautifulSoup, result: dict, season_short: str) 
             if len(tds) < 4:
                 continue
 
-            # First column often contains the season or is empty (continuation)
             first_text = tds[0].get_text(strip=True)
             if re.match(r"\d{2}/\d{2}", first_text):
                 current_season = first_text
 
             if current_season == season_short:
-                found_season = True
-                # Extract numeric columns
                 nums = []
                 for td in tds[1:]:
                     text = td.get_text(strip=True).replace(".", "").replace("'", "")
@@ -364,7 +296,6 @@ def _parse_detailed_stats(soup: BeautifulSoup, result: dict, season_short: str) 
                     elif text.isdigit():
                         nums.append(int(text))
 
-                # Typically: competition | appearances | goals | assists | ... | minutes
                 if len(nums) >= 3:
                     season_matches += nums[0]
                     season_goals += nums[1]
