@@ -414,6 +414,12 @@ def _apply_theme(club: str) -> None:
         fill: {th['btn_text']} !important;
     }}
 
+    /* File uploader — vertically center label within the upload box */
+    [data-testid="stFileUploader"] section {{
+        display: flex !important;
+        align-items: center !important;
+    }}
+
     /* Text inputs and text areas */
     [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea {{
         border: 1px solid {th['border']} !important;
