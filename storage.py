@@ -31,17 +31,43 @@ _gh_token = None
 _gh_repo = None          # "owner/repo"
 _gh_branch = "main"
 _gh_prefix = "data"      # root folder inside the repo
-_gh_verified = False      # True once we've confirmed the repo is accessible
 DATA_DIR = Path(__file__).parent / "data"
 
 # Upper size limit for GitHub uploads (100 MB via Contents API;
 # we stay at 80 MB to leave room for base64 overhead).
 _GH_MAX_BYTES = 80_000_000
 
+# ─── In-memory cache (survives across Streamlit reruns within one session) ──
+# key → (value, timestamp)
+_cache: dict[str, tuple] = {}
+_CACHE_TTL = 120  # seconds — cache listing/metadata reads for 2 minutes
+
+# SHA cache: path → sha  (avoids an extra GET before every PUT)
+_sha_cache: dict[str, str] = {}
+
+
+def _cache_get(key):
+    if key in _cache:
+        val, ts = _cache[key]
+        if time.time() - ts < _CACHE_TTL:
+            return val
+        del _cache[key]
+    return None
+
+
+def _cache_set(key, val):
+    _cache[key] = (val, time.time())
+
+
+def _cache_invalidate(prefix: str):
+    """Drop all cache entries whose key starts with *prefix*."""
+    for k in [k for k in _cache if k.startswith(prefix)]:
+        del _cache[k]
+
 
 def _init_backend():
     """Lazy-initialise: GitHub if credentials exist, else local filesystem."""
-    global _backend, _gh_token, _gh_repo, _gh_branch, _gh_prefix, _gh_verified
+    global _backend, _gh_token, _gh_repo, _gh_branch, _gh_prefix
     if _backend is not None:
         return
     try:
@@ -56,7 +82,6 @@ def _init_backend():
 
         # Verify the connection and ensure the repo/branch is ready
         _ensure_repo_ready()
-        _gh_verified = True
         _backend = "github"
         log.info("Storage backend: GitHub (%s branch %s)", _gh_repo, _gh_branch)
     except Exception as exc:
@@ -67,15 +92,14 @@ def _init_backend():
 def _ensure_repo_ready():
     """Make sure the target branch exists. If the repo is empty, create an
     initial commit so the Contents API can write to it."""
-    # Check if branch exists
     r = _requests.get(
         f"https://api.github.com/repos/{_gh_repo}/branches/{_gh_branch}",
         headers=_gh_headers(),
     )
     if r.status_code == 200:
-        return  # branch exists, good to go
+        return  # branch exists
 
-    # Branch doesn't exist. Try to create it from the default branch.
+    # Get repo info
     r2 = _requests.get(
         f"https://api.github.com/repos/{_gh_repo}",
         headers=_gh_headers(),
@@ -89,7 +113,6 @@ def _ensure_repo_ready():
 
     if repo_info.get("size", 0) == 0:
         # Repo is completely empty — create initial commit with a README
-        # Using the Contents API to create a file also creates the branch
         r3 = _requests.put(
             f"https://api.github.com/repos/{_gh_repo}/contents/README.md",
             headers=_gh_headers(),
@@ -104,8 +127,6 @@ def _ensure_repo_ready():
             raise ConnectionError(
                 f"Cannot initialize repo: {r3.status_code} {r3.text[:200]}"
             )
-        log.info("Initialized empty repo %s with README", _gh_repo)
-        # If our target branch is 'main' and that's the default, we're done
         if _gh_branch == default_branch:
             return
 
@@ -122,7 +143,6 @@ def _ensure_repo_ready():
                 headers=_gh_headers(),
                 json={"ref": f"refs/heads/{_gh_branch}", "sha": sha},
             )
-            log.info("Created branch %s from %s", _gh_branch, default_branch)
 
 
 # ─── GitHub helpers ─────────────────────────────────────────────────────────
@@ -138,8 +158,10 @@ def _gh_path(username: str, subfolder: str, filename: str) -> str:
     return f"{_gh_prefix}/{username}/{subfolder}/{filename}"
 
 
-def _gh_get_file_meta(path: str) -> dict | None:
-    """GET file metadata (sha, download_url, content). Returns None on 404."""
+def _gh_get_sha(path: str) -> str | None:
+    """Get just the SHA for a file (from cache first, then API)."""
+    if path in _sha_cache:
+        return _sha_cache[path]
     r = _requests.get(
         f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
         headers=_gh_headers(),
@@ -148,80 +170,162 @@ def _gh_get_file_meta(path: str) -> dict | None:
     if r.status_code == 200:
         data = r.json()
         if isinstance(data, dict):
-            return data
+            sha = data.get("sha")
+            if sha:
+                _sha_cache[path] = sha
+            return sha
     return None
 
 
 def _gh_read(path: str) -> bytes | None:
     """Download file bytes from GitHub."""
-    meta = _gh_get_file_meta(path)
-    if meta is None:
+    r = _requests.get(
+        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
+        headers=_gh_headers(),
+        params={"ref": _gh_branch},
+    )
+    if r.status_code != 200:
         return None
+    data = r.json()
+    if not isinstance(data, dict):
+        return None
+    # Cache the SHA for future writes
+    if data.get("sha"):
+        _sha_cache[path] = data["sha"]
     # Files ≤ 1 MB have base64 content inline
-    if meta.get("content"):
-        return base64.b64decode(meta["content"])
+    if data.get("content"):
+        return base64.b64decode(data["content"])
     # Larger files: follow the download URL
-    if meta.get("download_url"):
-        dl = _requests.get(meta["download_url"], headers=_gh_headers())
+    if data.get("download_url"):
+        dl = _requests.get(data["download_url"], headers=_gh_headers())
         if dl.status_code == 200:
             return dl.content
     return None
 
 
 def _gh_write(path: str, data: bytes, message: str = "auto-save") -> None:
-    """Create or update a file in the repo. Raises on failure."""
+    """Create or update a file in the repo. Raises on failure.
+
+    Optimized: tries PUT without SHA first (works for new files),
+    falls back to GET SHA + PUT if the file already exists.
+    """
     if len(data) > _GH_MAX_BYTES:
         log.warning("Skipping %s: %d bytes exceeds GitHub limit", path, len(data))
         return
-    # Need the current SHA if the file already exists (for update)
-    meta = _gh_get_file_meta(path)
-    body: dict = {
+
+    encoded = base64.b64encode(data).decode("ascii")
+
+    # If we have a cached SHA, use it directly (update)
+    cached_sha = _sha_cache.get(path)
+    if cached_sha:
+        body = {
+            "message": message,
+            "content": encoded,
+            "branch": _gh_branch,
+            "sha": cached_sha,
+        }
+        r = _requests.put(
+            f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
+            headers=_gh_headers(),
+            json=body,
+        )
+        if r.status_code in (200, 201):
+            # Update SHA cache with new SHA
+            resp_data = r.json()
+            if resp_data.get("content", {}).get("sha"):
+                _sha_cache[path] = resp_data["content"]["sha"]
+            return
+        if r.status_code == 409:
+            # SHA is stale, clear cache and fall through
+            _sha_cache.pop(path, None)
+        elif r.status_code == 422:
+            # File might not exist anymore, clear cache and fall through
+            _sha_cache.pop(path, None)
+        else:
+            error_msg = r.text[:300] if r.text else "unknown error"
+            raise IOError(f"Failed to save {path.split('/')[-1]} to GitHub (HTTP {r.status_code}): {error_msg}")
+
+    # Try creating as new file (no SHA)
+    body = {
         "message": message,
-        "content": base64.b64encode(data).decode("ascii"),
+        "content": encoded,
         "branch": _gh_branch,
     }
-    if meta and meta.get("sha"):
-        body["sha"] = meta["sha"]
     r = _requests.put(
         f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
         headers=_gh_headers(),
         json=body,
     )
-    if r.status_code not in (200, 201):
-        error_msg = r.text[:300] if r.text else "unknown error"
-        log.error("GitHub write failed for %s: %s %s", path, r.status_code, error_msg)
-        raise IOError(
-            f"Failed to save {path.split('/')[-1]} to GitHub "
-            f"(HTTP {r.status_code}). Check your token permissions."
-        )
+    if r.status_code in (200, 201):
+        resp_data = r.json()
+        if resp_data.get("content", {}).get("sha"):
+            _sha_cache[path] = resp_data["content"]["sha"]
+        return
+
+    if r.status_code == 409 or r.status_code == 422:
+        # File exists — need the SHA to update it
+        sha = _gh_get_sha(path)
+        if sha:
+            body["sha"] = sha
+            r2 = _requests.put(
+                f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
+                headers=_gh_headers(),
+                json=body,
+            )
+            if r2.status_code in (200, 201):
+                resp_data = r2.json()
+                if resp_data.get("content", {}).get("sha"):
+                    _sha_cache[path] = resp_data["content"]["sha"]
+                return
+            error_msg = r2.text[:300] if r2.text else "unknown error"
+            raise IOError(f"Failed to save {path.split('/')[-1]} to GitHub (HTTP {r2.status_code}): {error_msg}")
+
+    error_msg = r.text[:300] if r.text else "unknown error"
+    raise IOError(f"Failed to save {path.split('/')[-1]} to GitHub (HTTP {r.status_code}): {error_msg}")
 
 
 def _gh_delete_file(path: str, message: str = "auto-delete") -> bool:
     """Delete a single file from the repo."""
-    meta = _gh_get_file_meta(path)
-    if not meta or not meta.get("sha"):
+    sha = _sha_cache.get(path) or _gh_get_sha(path)
+    if not sha:
         return False
     r = _requests.delete(
         f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
         headers=_gh_headers(),
-        json={"message": message, "sha": meta["sha"], "branch": _gh_branch},
+        json={"message": message, "sha": sha, "branch": _gh_branch},
     )
+    _sha_cache.pop(path, None)
     return r.status_code == 200
 
 
 def _gh_list_dir(dirpath: str) -> list[str]:
-    """List file names in a GitHub directory. Returns [] on 404."""
+    """List file names in a GitHub directory. Returns [] on 404.
+    Results are cached."""
+    cache_key = f"dir:{dirpath}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     r = _requests.get(
         f"https://api.github.com/repos/{_gh_repo}/contents/{dirpath}",
         headers=_gh_headers(),
         params={"ref": _gh_branch},
     )
     if r.status_code != 200:
+        _cache_set(cache_key, [])
         return []
     items = r.json()
     if not isinstance(items, list):
+        _cache_set(cache_key, [])
         return []
-    return [f["name"] for f in items if f.get("type") == "file"]
+    names = [f["name"] for f in items if f.get("type") == "file"]
+    # Also cache SHAs from the listing (avoids extra GETs on write)
+    for f in items:
+        if f.get("type") == "file" and f.get("sha"):
+            full_path = f"{dirpath}/{f['name']}"
+            _sha_cache[full_path] = f["sha"]
+    _cache_set(cache_key, names)
+    return names
 
 
 # ─── Unified low-level helpers ──────────────────────────────────────────────
@@ -251,8 +355,23 @@ def _read_bytes(username: str, subfolder: str, filename: str) -> bytes | None:
 
 
 def _read_text(username: str, subfolder: str, filename: str) -> str | None:
-    data = _read_bytes(username, subfolder, filename)
-    return data.decode("utf-8") if data else None
+    """Read a text file, with caching for small JSON metadata."""
+    _init_backend()
+    if _backend == "github":
+        cache_key = f"txt:{_gh_prefix}/{username}/{subfolder}/{filename}"
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+        data = _gh_read(_gh_path(username, subfolder, filename))
+        text = data.decode("utf-8") if data else None
+        if text is not None:
+            _cache_set(cache_key, text)
+        return text
+    else:
+        p = DATA_DIR / username / subfolder / filename
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+        return None
 
 
 def _list_filenames(username: str, subfolder: str) -> list[str]:
@@ -280,11 +399,22 @@ def _delete_prefix(username: str, subfolder: str, prefix: str) -> None:
                                     message=f"Delete {username}/{subfolder}/{n}")
                 except Exception:
                     pass
+        # Invalidate caches for this folder
+        _cache_invalidate(f"dir:{dirpath}")
+        _cache_invalidate(f"txt:{dirpath}")
     else:
         d = DATA_DIR / username / subfolder
         if d.exists():
             for f in d.glob(f"{prefix}*"):
                 f.unlink(missing_ok=True)
+
+
+def _invalidate_user_caches(username: str, subfolder: str) -> None:
+    """Invalidate all caches related to a user's subfolder after a write."""
+    if _backend == "github":
+        dirpath = f"{_gh_prefix}/{username}/{subfolder}"
+        _cache_invalidate(f"dir:{dirpath}")
+        _cache_invalidate(f"txt:{dirpath}")
 
 
 # ─── Diagnostic ─────────────────────────────────────────────────────────────
@@ -374,6 +504,7 @@ def save_draft(
 
     _write_text(username, sub, f"{report_id}.json",
                 json.dumps(meta, ensure_ascii=False, indent=2))
+    _invalidate_user_caches(username, sub)
     return report_id
 
 
@@ -515,6 +646,8 @@ def save_finished(
     _write_text(username, sub, f"{report_id}.json",
                 json.dumps(meta, ensure_ascii=False, indent=2))
 
+    _invalidate_user_caches(username, sub)
+
     # Clean up the draft if it exists
     delete_draft(username, report_id)
 
@@ -595,6 +728,7 @@ def mark_shared(username: str, report_id: str, shared_to: str) -> None:
     meta["shared_at"] = time.time()
     _write_text(username, "finished", f"{report_id}.json",
                 json.dumps(meta, ensure_ascii=False, indent=2))
+    _invalidate_user_caches(username, "finished")
 
 
 def delete_finished(username: str, report_id: str) -> None:
@@ -668,6 +802,7 @@ def share_report(
     }
     _write_text(to_username, sub, f"{share_id}.json",
                 json.dumps(meta, ensure_ascii=False, indent=2))
+    _invalidate_user_caches(to_username, sub)
     return share_id
 
 
