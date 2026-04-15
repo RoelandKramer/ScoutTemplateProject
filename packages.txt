@@ -2,9 +2,13 @@ libnss3
 libnspr4
 libgbm1
 libdrm2
-libasound2
+libasound2t64
 libxcomposite1
 libxdamage1
 libxfixes3
 libxrandr2
 libxkbcommon0
+libatk1.0-0t64
+libatk-bridge2.0-0t64
+libcups2t64
+libatspi2.0-0t64

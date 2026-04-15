@@ -1027,8 +1027,10 @@ def _transfermarkt_section(
             st.session_state[state_key] = stats
             if not any(stats.get(k, 0) for k in ["season_matches", "career_matches"]):
                 st.warning(t("tm_not_found", L))
-        except TmBlockedError:
+        except TmBlockedError as e:
             st.warning(t("tm_blocked", L))
+            with st.expander("Error details"):
+                st.code(str(e))
             # Store empty stats so the editable card appears
             _clear_stats_card_inputs(f"{key_prefix}_card")
             st.session_state[state_key] = {
