@@ -1,883 +1,374 @@
-"""Persistent storage for scout report drafts and finished reports.
+"""SciSports API integration for player data retrieval."""
 
-Uses the GitHub Contents API when credentials are configured (for Streamlit Cloud),
-falls back to local filesystem for local development.
+from __future__ import annotations
 
-GitHub structure (inside the configured repo/branch):
-  data/{username}/drafts/{report_id}.json
-  data/{username}/finished/{report_id}.pptx
-  data/{username}/finished/{report_id}.json
-  ...
-
-IMPORTANT: Use a **separate** GitHub repo for data (e.g. ScoutData) so that
-commits don't trigger Streamlit Cloud redeployment of the app repo.
-"""
-
-import base64
 import json
-import logging
-import time
-import uuid
-from pathlib import Path
+import re
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
-import requests as _requests  # already in requirements
+import requests
+import streamlit as st
 
-log = logging.getLogger(__name__)
-
-# ─── Storage backend ────────────────────────────────────────────────────────
-
-_backend = None          # "github" | "local"
-_gh_token = None
-_gh_repo = None          # "owner/repo"
-_gh_branch = "main"
-_gh_prefix = "data"      # root folder inside the repo
-DATA_DIR = Path(__file__).parent / "data"
-
-# Upper size limit for GitHub uploads (100 MB via Contents API;
-# we stay at 80 MB to leave room for base64 overhead).
-_GH_MAX_BYTES = 80_000_000
-
-# ─── In-memory cache (survives across Streamlit reruns within one session) ──
-# key → (value, timestamp)
-_cache: dict[str, tuple] = {}
-_CACHE_TTL = 120  # seconds — cache listing/metadata reads for 2 minutes
-
-# SHA cache: path → sha  (avoids an extra GET before every PUT)
-_sha_cache: dict[str, str] = {}
+API_BASE = "https://api-recruitment.scisports.app/api"
+TOKEN_URL = "https://identity.scisports.app/connect/token"
+SEARCH_LIMIT = 50
+TARGET_SEASON_LABEL = "2025/2026"
+SEASON_RE = re.compile(r"\b(20\d{2})\s*[/\-]\s*(\d{2}|20\d{2})\b")
 
 
-def _cache_get(key):
-    if key in _cache:
-        val, ts = _cache[key]
-        if time.time() - ts < _CACHE_TTL:
-            return val
-        del _cache[key]
-    return None
+POSITION_ABBREV: Dict[str, str] = {
+    "Goalkeeper": "GK",
+    "Right Back": "RB",
+    "Left Back": "LB",
+    "Centre Back": "CB",
+    "Defensive Midfield": "DM",
+    "Centre Midfield": "CM",
+    "Attacking Midfield": "AM",
+    "Right Wing": "RW", "Left Wing": "LW",
+    "Centre Forward": "ST", "Striker": "ST",
+}
 
 
-def _cache_set(key, val):
-    _cache[key] = (val, time.time())
+# Map SciSports positions to our template position names
+SCISPORTS_TO_TEMPLATE: Dict[str, str] = {
+    "Goalkeeper": "Goalkeeper",
+    "RightBack": "Wingback", "RightFullback": "Wingback", "LeftBack": "Wingback",
+    "Right Back": "Wingback", "Left Back": "Wingback",
+    "CentreBack": "Centerback", "Centre back": "Centerback", "Centre Back": "Centerback",
+    "DefensiveMidfield": "Deep Lying Playmaker", "Defensive midfield": "Deep Lying Playmaker", "Defensive Midfield": "Deep Lying Playmaker",
+    "CentreMidfield": "Box-to-Box Midfielder", "Centre midfield": "Box-to-Box Midfielder", "Centre Midfield": "Box-to-Box Midfielder",
+    "AttackingMidfield": "Scoring 10", "Attacking midfield": "Scoring 10", "Attacking Midfield": "Scoring 10",
+    "RightWing": "Dribbling Winger", "Right Wing": "Dribbling Winger",
+    "LeftWing": "Dribbling Winger", "Left Wing": "Dribbling Winger",
+    "CentreForward": "Finisher", "Centre forward": "Finisher", "Centre Forward": "Finisher",
+    "Striker": "Finisher",
+}
 
 
-def _cache_invalidate(prefix: str):
-    """Drop all cache entries whose key starts with *prefix*."""
-    for k in [k for k in _cache if k.startswith(prefix)]:
-        del _cache[k]
+@dataclass(frozen=True)
+class PlayerOption:
+    player_id: int
+    name: str
+    age: Optional[int]
+    position: str
+    club: str
+    league: str
+
+    def label(self) -> str:
+        age_s = "?" if self.age is None else str(self.age)
+        return f"{self.name} — {age_s} — {self.position or '?'} — {self.club or '?'} ({self.league or '?'})"
 
 
-def _init_backend():
-    """Lazy-initialise: GitHub if credentials exist, else local filesystem."""
-    global _backend, _gh_token, _gh_repo, _gh_branch, _gh_prefix
-    if _backend is not None:
-        return
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _as_text(v: Any) -> str:
+    return "" if v is None else str(v)
+
+def _fmt_int(v: Any) -> str:
     try:
-        import streamlit as st
-        cfg = st.secrets["github_storage"]
-        _gh_token = cfg["token"]
-        _gh_repo = cfg["repo"]
-        if not _gh_token or not _gh_repo:
-            raise ValueError("GitHub credentials not configured")
-        _gh_branch = cfg.get("branch", "main")
-        _gh_prefix = cfg.get("path_prefix", "data")
+        return "" if v is None else str(int(v))
+    except Exception:
+        return ""
 
-        # Verify the connection and ensure the repo/branch is ready
-        _ensure_repo_ready()
-        _backend = "github"
-        log.info("Storage backend: GitHub (%s branch %s)", _gh_repo, _gh_branch)
-    except Exception as exc:
-        log.warning("GitHub storage not available (%s), falling back to local", exc)
-        _backend = "local"
-
-
-def _ensure_repo_ready():
-    """Make sure the target branch exists. If the repo is empty, create an
-    initial commit so the Contents API can write to it."""
-    r = _requests.get(
-        f"https://api.github.com/repos/{_gh_repo}/branches/{_gh_branch}",
-        headers=_gh_headers(),
-    )
-    if r.status_code == 200:
-        return  # branch exists
-
-    # Get repo info
-    r2 = _requests.get(
-        f"https://api.github.com/repos/{_gh_repo}",
-        headers=_gh_headers(),
-    )
-    if r2.status_code != 200:
-        raise ConnectionError(
-            f"Cannot access repo {_gh_repo}: {r2.status_code} {r2.text[:200]}"
-        )
-    repo_info = r2.json()
-    default_branch = repo_info.get("default_branch", "main")
-
-    if repo_info.get("size", 0) == 0:
-        # Repo is completely empty — create initial commit with a README
-        r3 = _requests.put(
-            f"https://api.github.com/repos/{_gh_repo}/contents/README.md",
-            headers=_gh_headers(),
-            json={
-                "message": "Initialize data repository",
-                "content": base64.b64encode(
-                    b"# Scout Report Data\nPersistent storage for scout reports.\n"
-                ).decode("ascii"),
-            },
-        )
-        if r3.status_code not in (200, 201):
-            raise ConnectionError(
-                f"Cannot initialize repo: {r3.status_code} {r3.text[:200]}"
-            )
-        if _gh_branch == default_branch:
-            return
-
-    # Create our target branch from the default branch
-    if _gh_branch != default_branch:
-        ref_r = _requests.get(
-            f"https://api.github.com/repos/{_gh_repo}/git/refs/heads/{default_branch}",
-            headers=_gh_headers(),
-        )
-        if ref_r.status_code == 200:
-            sha = ref_r.json()["object"]["sha"]
-            _requests.post(
-                f"https://api.github.com/repos/{_gh_repo}/git/refs",
-                headers=_gh_headers(),
-                json={"ref": f"refs/heads/{_gh_branch}", "sha": sha},
-            )
-
-
-# ─── GitHub helpers ─────────────────────────────────────────────────────────
-
-def _gh_headers():
-    return {
-        "Authorization": f"Bearer {_gh_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-
-
-def _gh_path(username: str, subfolder: str, filename: str) -> str:
-    return f"{_gh_prefix}/{username}/{subfolder}/{filename}"
-
-
-def _gh_get_sha(path: str) -> str | None:
-    """Get just the SHA for a file (from cache first, then API)."""
-    if path in _sha_cache:
-        return _sha_cache[path]
-    r = _requests.get(
-        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
-        headers=_gh_headers(),
-        params={"ref": _gh_branch},
-    )
-    if r.status_code == 200:
-        data = r.json()
-        if isinstance(data, dict):
-            sha = data.get("sha")
-            if sha:
-                _sha_cache[path] = sha
-            return sha
-    return None
-
-
-def _gh_read(path: str) -> bytes | None:
-    """Download file bytes from GitHub."""
-    r = _requests.get(
-        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
-        headers=_gh_headers(),
-        params={"ref": _gh_branch},
-    )
-    if r.status_code != 200:
-        return None
-    data = r.json()
-    if not isinstance(data, dict):
-        return None
-    # Cache the SHA for future writes
-    if data.get("sha"):
-        _sha_cache[path] = data["sha"]
-    # Files ≤ 1 MB have base64 content inline
-    if data.get("content"):
-        return base64.b64decode(data["content"])
-    # Larger files: follow the download URL
-    if data.get("download_url"):
-        dl = _requests.get(data["download_url"], headers=_gh_headers())
-        if dl.status_code == 200:
-            return dl.content
-    return None
-
-
-def _gh_write(path: str, data: bytes, message: str = "auto-save") -> None:
-    """Create or update a file in the repo. Raises on failure.
-
-    Retries up to 3 times for transient errors (5xx, 403 rate-limit, 409
-    conflicts). Optimized: tries PUT without SHA first (works for new files),
-    falls back to GET SHA + PUT if the file already exists.
-    """
-    if len(data) > _GH_MAX_BYTES:
-        log.warning("Skipping %s: %d bytes exceeds GitHub limit", path, len(data))
-        return
-
-    last_error = None
-    for attempt in range(3):
-        if attempt > 0:
-            time.sleep(1.5 * attempt)
-            _sha_cache.pop(path, None)
+def _parse_date(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y")
+    except Exception:
         try:
-            _gh_write_once(path, data, message)
-            return
-        except IOError as exc:
-            last_error = exc
-            err_str = str(exc)
-            if any(f"HTTP {c}" in err_str for c in (403, 409, 500, 502, 503)):
-                log.warning("Retrying %s (attempt %d): %s", path, attempt + 1, exc)
-                continue
-            raise
-    raise last_error  # type: ignore[misc]
-
-
-def _gh_write_once(path: str, data: bytes, message: str) -> None:
-    """Single attempt to create or update a file in the repo."""
-    encoded = base64.b64encode(data).decode("ascii")
-
-    cached_sha = _sha_cache.get(path)
-    if cached_sha:
-        body = {
-            "message": message,
-            "content": encoded,
-            "branch": _gh_branch,
-            "sha": cached_sha,
-        }
-        r = _requests.put(
-            f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
-            headers=_gh_headers(),
-            json=body,
-        )
-        if r.status_code in (200, 201):
-            resp_data = r.json()
-            if resp_data.get("content", {}).get("sha"):
-                _sha_cache[path] = resp_data["content"]["sha"]
-            return
-        if r.status_code in (409, 422):
-            _sha_cache.pop(path, None)
-        else:
-            error_msg = r.text[:300] if r.text else "unknown error"
-            raise IOError(f"Failed to save {path.split('/')[-1]} to GitHub (HTTP {r.status_code}): {error_msg}")
-
-    body = {
-        "message": message,
-        "content": encoded,
-        "branch": _gh_branch,
-    }
-    r = _requests.put(
-        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
-        headers=_gh_headers(),
-        json=body,
-    )
-    if r.status_code in (200, 201):
-        resp_data = r.json()
-        if resp_data.get("content", {}).get("sha"):
-            _sha_cache[path] = resp_data["content"]["sha"]
-        return
-
-    if r.status_code in (409, 422):
-        sha = _gh_get_sha(path)
-        if sha:
-            body["sha"] = sha
-            r2 = _requests.put(
-                f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
-                headers=_gh_headers(),
-                json=body,
-            )
-            if r2.status_code in (200, 201):
-                resp_data = r2.json()
-                if resp_data.get("content", {}).get("sha"):
-                    _sha_cache[path] = resp_data["content"]["sha"]
-                return
-            error_msg = r2.text[:300] if r2.text else "unknown error"
-            raise IOError(f"Failed to save {path.split('/')[-1]} to GitHub (HTTP {r2.status_code}): {error_msg}")
-
-    error_msg = r.text[:300] if r.text else "unknown error"
-    raise IOError(f"Failed to save {path.split('/')[-1]} to GitHub (HTTP {r.status_code}): {error_msg}")
-
-
-def _gh_delete_file(path: str, message: str = "auto-delete") -> bool:
-    """Delete a single file from the repo."""
-    sha = _sha_cache.get(path) or _gh_get_sha(path)
-    if not sha:
-        return False
-    r = _requests.delete(
-        f"https://api.github.com/repos/{_gh_repo}/contents/{path}",
-        headers=_gh_headers(),
-        json={"message": message, "sha": sha, "branch": _gh_branch},
-    )
-    _sha_cache.pop(path, None)
-    return r.status_code == 200
-
-
-def _gh_list_dir(dirpath: str) -> list[str]:
-    """List file names in a GitHub directory. Returns [] on 404.
-    Results are cached."""
-    cache_key = f"dir:{dirpath}"
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-
-    r = _requests.get(
-        f"https://api.github.com/repos/{_gh_repo}/contents/{dirpath}",
-        headers=_gh_headers(),
-        params={"ref": _gh_branch},
-    )
-    if r.status_code != 200:
-        _cache_set(cache_key, [])
-        return []
-    items = r.json()
-    if not isinstance(items, list):
-        _cache_set(cache_key, [])
-        return []
-    names = [f["name"] for f in items if f.get("type") == "file"]
-    # Also cache SHAs from the listing (avoids extra GETs on write)
-    for f in items:
-        if f.get("type") == "file" and f.get("sha"):
-            full_path = f"{dirpath}/{f['name']}"
-            _sha_cache[full_path] = f["sha"]
-    _cache_set(cache_key, names)
-    return names
-
-
-# ─── Unified low-level helpers ──────────────────────────────────────────────
-
-def _write_bytes(username: str, subfolder: str, filename: str, data: bytes) -> None:
-    _init_backend()
-    if _backend == "github":
-        path = _gh_path(username, subfolder, filename)
-        _gh_write(path, data, message=f"Save {username}/{subfolder}/{filename}")
-    else:
-        d = DATA_DIR / username / subfolder
-        d.mkdir(parents=True, exist_ok=True)
-        (d / filename).write_bytes(data)
-
-
-def _write_text(username: str, subfolder: str, filename: str, text: str) -> None:
-    _write_bytes(username, subfolder, filename, text.encode("utf-8"))
-
-
-def _read_bytes(username: str, subfolder: str, filename: str) -> bytes | None:
-    _init_backend()
-    if _backend == "github":
-        return _gh_read(_gh_path(username, subfolder, filename))
-    else:
-        p = DATA_DIR / username / subfolder / filename
-        return p.read_bytes() if p.exists() else None
-
-
-def _read_text(username: str, subfolder: str, filename: str) -> str | None:
-    """Read a text file, with caching for small JSON metadata."""
-    _init_backend()
-    if _backend == "github":
-        cache_key = f"txt:{_gh_prefix}/{username}/{subfolder}/{filename}"
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached
-        data = _gh_read(_gh_path(username, subfolder, filename))
-        text = data.decode("utf-8") if data else None
-        if text is not None:
-            _cache_set(cache_key, text)
-        return text
-    else:
-        p = DATA_DIR / username / subfolder / filename
-        if p.exists():
-            return p.read_text(encoding="utf-8")
-        return None
-
-
-def _list_filenames(username: str, subfolder: str) -> list[str]:
-    """Return all filenames in a user's subfolder."""
-    _init_backend()
-    if _backend == "github":
-        return _gh_list_dir(f"{_gh_prefix}/{username}/{subfolder}")
-    else:
-        d = DATA_DIR / username / subfolder
-        if not d.exists():
-            return []
-        return [f.name for f in d.iterdir() if f.is_file()]
-
-
-def _delete_prefix(username: str, subfolder: str, prefix: str) -> None:
-    """Delete all files whose name starts with *prefix*."""
-    _init_backend()
-    if _backend == "github":
-        dirpath = f"{_gh_prefix}/{username}/{subfolder}"
-        names = _gh_list_dir(dirpath)
-        for n in names:
-            if n.startswith(prefix):
-                try:
-                    _gh_delete_file(f"{dirpath}/{n}",
-                                    message=f"Delete {username}/{subfolder}/{n}")
-                except Exception:
-                    pass
-        # Invalidate caches for this folder
-        _cache_invalidate(f"dir:{dirpath}")
-        _cache_invalidate(f"txt:{dirpath}")
-    else:
-        d = DATA_DIR / username / subfolder
-        if d.exists():
-            for f in d.glob(f"{prefix}*"):
-                f.unlink(missing_ok=True)
-
-
-def _invalidate_user_caches(username: str, subfolder: str) -> None:
-    """Invalidate all caches related to a user's subfolder after a write."""
-    if _backend == "github":
-        dirpath = f"{_gh_prefix}/{username}/{subfolder}"
-        _cache_invalidate(f"dir:{dirpath}")
-        _cache_invalidate(f"txt:{dirpath}")
-
-
-# ─── Diagnostic ─────────────────────────────────────────────────────────────
-
-def get_backend_info() -> str:
-    """Return a short description of the active storage backend (for debugging)."""
-    _init_backend()
-    if _backend == "github":
-        return f"GitHub: {_gh_repo} (branch: {_gh_branch})"
-    return f"Local: {DATA_DIR}"
-
-
-# ─── Draft operations ────────────────────────────────────────────────────────
-
-def save_draft(
-    username: str,
-    report_id: str | None,
-    position: str,
-    club: str,
-    language: str,
-    star_values: list[float],
-    comments: list[str],
-    video_data: list,       # list of (bytes, filename) or None
-    source: str = "empty",  # "empty" or "upload"
-    upload_bytes: bytes | None = None,
-    upload_filename: str | None = None,
-    player_data: dict | None = None,
-    tm_stats: dict | None = None,
-    photo_full: bytes | None = None,
-    photo_circular: bytes | None = None,
-) -> str:
-    """Save or update a draft. Returns the report_id."""
-    if not report_id:
-        report_id = uuid.uuid4().hex[:12]
-
-    sub = "drafts"
-
-    # Save video files separately
-    video_refs = []
-    for i, vd in enumerate(video_data):
-        if vd is not None:
-            vbytes, vname = vd
-            ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-            fname = f"{report_id}_video_{i}.{ext}"
-            _write_bytes(username, sub, fname, vbytes)
-            video_refs.append({"filename": vname, "path": fname})
-        else:
-            video_refs.append(None)
-
-    # Save upload bytes if present
-    upload_ref = None
-    if upload_bytes:
-        ufname = f"{report_id}_upload.pptx"
-        _write_bytes(username, sub, ufname, upload_bytes)
-        upload_ref = {"filename": upload_filename or "upload.pptx", "path": ufname}
-
-    # Save player photos if present
-    photo_refs = {}
-    if photo_full:
-        pfname = f"{report_id}_photo_full.png"
-        _write_bytes(username, sub, pfname, photo_full)
-        photo_refs["full"] = pfname
-    if photo_circular:
-        pcfname = f"{report_id}_photo_circ.png"
-        _write_bytes(username, sub, pcfname, photo_circular)
-        photo_refs["circular"] = pcfname
-
-    # Load existing meta for created_at timestamp
-    existing = _load_draft_meta(username, report_id)
-
-    meta = {
-        "report_id": report_id,
-        "position": position,
-        "club": club,
-        "language": language,
-        "star_values": star_values,
-        "comments": comments,
-        "video_refs": video_refs,
-        "source": source,
-        "upload_ref": upload_ref,
-        "player_data": player_data,
-        "tm_stats": tm_stats,
-        "photo_refs": photo_refs if photo_refs else None,
-        "updated_at": time.time(),
-        "created_at": existing.get("created_at", time.time()),
-    }
-
-    _write_text(username, sub, f"{report_id}.json",
-                json.dumps(meta, ensure_ascii=False, indent=2))
-    _invalidate_user_caches(username, sub)
-    return report_id
-
-
-def _load_draft_meta(username: str, report_id: str) -> dict:
-    text = _read_text(username, "drafts", f"{report_id}.json")
-    if text:
-        try:
-            return json.loads(text)
+            return datetime.strptime(value[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
         except Exception:
-            pass
+            return value
+
+def _fmt_height(cm: Any) -> str:
+    try:
+        if cm is None: return ""
+        m = float(cm) / 100.0
+        return f"{m:.2f} M" if m > 0 else ""
+    except Exception:
+        return ""
+
+def _fmt_money(value: Any) -> str:
+    try:
+        if value is None: return ""
+        v = float(value)
+        if abs(v) >= 1_000_000: return f"€ {v/1_000_000:.2f}M"
+        if abs(v) >= 1_000: return f"€ {v/1_000:.0f}K"
+        return f"€ {v:.0f}"
+    except Exception:
+        return ""
+
+def _first_position(info: dict) -> str:
+    positions = info.get("positions") or []
+    return _as_text(positions[0]) if isinstance(positions, list) and positions else ""
+
+def _position_abbrev(pos: str) -> str:
+    return POSITION_ABBREV.get((pos or "").strip(), pos)
+
+def normalize_season_label(name: str) -> str:
+    if not name: return ""
+    m = SEASON_RE.search(str(name))
+    if not m: return ""
+    y1 = int(m.group(1))
+    y2_raw = m.group(2)
+    y2 = (y1 // 100) * 100 + int(y2_raw) if len(y2_raw) == 2 else int(y2_raw)
+    if y2 < y1: y2 += 100
+    return f"{y1}/{y2}"
+
+def _extract_int(d: dict, *paths: str) -> int:
+    for p in paths:
+        cur = d
+        ok = True
+        for part in p.split("."):
+            if not isinstance(cur, dict) or part not in cur:
+                ok = False; break
+            cur = cur[part]
+        if ok and cur is not None:
+            try: return int(round(float(cur)))
+            except Exception: pass
+    return 0
+
+
+# ─── Auth ────────────────────────────────────────────────────────────────────
+
+def require_secrets() -> Dict[str, str]:
+    """Read SciSports credentials from Streamlit secrets.
+
+    Supports two layouts:
+      1. [scisports] section with keys: username, password, client_id, client_secret, scope
+      2. Flat top-level keys prefixed SCISPORTS_  (legacy)
+    """
+    # Try [scisports] section first
+    sec = st.secrets.get("scisports", None)
+    if sec:
+        required = ["username", "password", "client_id", "client_secret"]
+        if all(sec.get(k) for k in required):
+            return {
+                "username": sec["username"],
+                "password": sec["password"],
+                "client_id": sec["client_id"],
+                "client_secret": sec["client_secret"],
+                "scope": sec.get("scope", "api recruitment"),
+            }
+    # Fallback 1: flat top-level keys (username, password, client_id, client_secret)
+    flat_keys = ["username", "password", "client_id", "client_secret"]
+    if all(st.secrets.get(k) for k in flat_keys):
+        return {
+            "username": st.secrets["username"],
+            "password": st.secrets["password"],
+            "client_id": st.secrets["client_id"],
+            "client_secret": st.secrets["client_secret"],
+            "scope": st.secrets.get("scope", "api recruitment"),
+        }
+    # Fallback 2: SCISPORTS_ prefixed keys (legacy)
+    prefixed = ["SCISPORTS_USERNAME", "SCISPORTS_PASSWORD", "SCISPORTS_CLIENT_ID", "SCISPORTS_CLIENT_SECRET"]
+    if all(st.secrets.get(k) for k in prefixed):
+        return {
+            "username": st.secrets["SCISPORTS_USERNAME"],
+            "password": st.secrets["SCISPORTS_PASSWORD"],
+            "client_id": st.secrets["SCISPORTS_CLIENT_ID"],
+            "client_secret": st.secrets["SCISPORTS_CLIENT_SECRET"],
+            "scope": st.secrets.get("SCISPORTS_SCOPE", "api recruitment"),
+        }
     return {}
 
 
-def load_draft(username: str, report_id: str) -> dict | None:
-    """Load a draft including video bytes. Returns None if not found."""
-    meta = _load_draft_meta(username, report_id)
-    if not meta:
-        return None
-
-    sub = "drafts"
-
-    # Resolve video refs to actual bytes
-    video_data = []
-    for vref in meta.get("video_refs", []):
-        if vref is not None:
-            vbytes = _read_bytes(username, sub, vref["path"])
-            if vbytes:
-                video_data.append((vbytes, vref["filename"]))
-            else:
-                video_data.append(None)
-        else:
-            video_data.append(None)
-    meta["video_data"] = video_data
-
-    # Resolve upload ref
-    uref = meta.get("upload_ref")
-    if uref:
-        ubytes = _read_bytes(username, sub, uref["path"])
-        if ubytes:
-            meta["upload_bytes"] = ubytes
-            meta["upload_filename"] = uref["filename"]
-
-    # Resolve photo refs
-    prefs = meta.get("photo_refs") or {}
-    if prefs.get("full"):
-        pfull = _read_bytes(username, sub, prefs["full"])
-        if pfull:
-            meta["photo_full"] = pfull
-    if prefs.get("circular"):
-        pcirc = _read_bytes(username, sub, prefs["circular"])
-        if pcirc:
-            meta["photo_circular"] = pcirc
-
-    return meta
+def get_token() -> str:
+    creds = require_secrets()
+    if not creds:
+        raise RuntimeError("SciSports secrets not configured")
+    resp = requests.post(TOKEN_URL, data={
+        "grant_type": "password", **creds,
+    }, timeout=30)
+    resp.raise_for_status()
+    token = resp.json().get("access_token")
+    if not token:
+        raise RuntimeError("No access_token in response")
+    return token
 
 
-def list_drafts(username: str) -> list[dict]:
-    """Return all drafts for a user, sorted by most recently updated."""
-    filenames = _list_filenames(username, "drafts")
-    results = []
-    for fname in filenames:
-        if fname.endswith(".json") and "_" not in fname.replace(".json", ""):
-            text = _read_text(username, "drafts", fname)
-            if text:
-                try:
-                    results.append(json.loads(text))
-                except Exception:
-                    pass
-    results.sort(key=lambda m: m.get("updated_at", 0), reverse=True)
-    return results
+def _auth_headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
 
-def delete_draft(username: str, report_id: str) -> None:
-    """Delete a draft and all its associated files."""
-    _delete_prefix(username, "drafts", report_id)
+# ─── API calls ───────────────────────────────────────────────────────────────
+
+def _fetch_all(token: str, path: str, params: dict, page_limit=200, hard_cap=50000) -> list[dict]:
+    s = requests.Session()
+    s.headers.update({"Accept": "application/json"})
+    out, offset = [], int(params.get("offset", 0))
+    limit = min(max(int(params.get("limit", page_limit)), 1), page_limit)
+    while True:
+        p = {**params, "offset": offset, "limit": limit}
+        resp = s.get(f"{API_BASE}{path}", headers=_auth_headers(token), params=p, timeout=30)
+        resp.raise_for_status()
+        payload = resp.json()
+        items = payload.get("items") or []
+        if not isinstance(items, list): break
+        out.extend(it for it in items if isinstance(it, dict))
+        total = payload.get("total")
+        if (isinstance(total, int) and len(out) >= total) or not items or len(out) >= hard_cap:
+            break
+        offset += limit
+    return out
 
 
-# ─── Finished report operations ──────────────────────────────────────────────
+@st.cache_data(show_spinner=False, ttl=60*15)
+def search_players(token: str, query: str) -> tuple[int, list[PlayerOption]]:
+    s = requests.Session()
+    s.headers.update({"Accept": "application/json"})
+    params: dict = {"offset": 0, "limit": SEARCH_LIMIT}
+    if query.strip():
+        params["searchText"] = query.strip()
+    resp = s.get(f"{API_BASE}/v2/players", headers=_auth_headers(token), params=params, timeout=30)
+    resp.raise_for_status()
+    payload = resp.json()
+    total = int(payload.get("total", 0))
+    options = []
+    for it in payload.get("items") or []:
+        info = it.get("info") or {}
+        team = it.get("team") or {}
+        league = it.get("league") or {}
+        pid = info.get("id")
+        if pid is None: continue
+        options.append(PlayerOption(
+            player_id=int(pid),
+            name=_as_text(info.get("name") or info.get("footballName") or ""),
+            age=info.get("age"),
+            position=_position_abbrev(_first_position(info)),
+            club=_as_text(team.get("name") or ""),
+            league=_as_text(league.get("name") or ""),
+        ))
+    return total, options
 
-def save_finished(
-    username: str,
-    report_id: str,
-    position: str,
-    club: str,
-    language: str,
-    pptx_bytes: bytes,
-    player_name: str = "",
-    player_data: dict | None = None,
-    star_values: list[float] | None = None,
-    comments: list[str] | None = None,
-    video_data: list | None = None,
-    tm_stats: dict | None = None,
-    photo_full: bytes | None = None,
-    photo_circular: bytes | None = None,
-) -> str:
-    """Save a finished PPTX + metadata. Returns the report_id."""
-    sub = "finished"
 
-    _write_bytes(username, sub, f"{report_id}.pptx", pptx_bytes)
+def get_player(token: str, player_id: int) -> dict:
+    resp = requests.get(f"{API_BASE}/v2/players/{player_id}", headers=_auth_headers(token), timeout=30)
+    resp.raise_for_status()
+    return resp.json()
 
-    # Save photos
-    photo_refs = {}
-    if photo_full:
-        pfname = f"{report_id}_photo_full.png"
-        _write_bytes(username, sub, pfname, photo_full)
-        photo_refs["full"] = pfname
-    if photo_circular:
-        pcfname = f"{report_id}_photo_circ.png"
-        _write_bytes(username, sub, pcfname, photo_circular)
-        photo_refs["circular"] = pcfname
 
-    # Save video files separately
-    video_refs = []
-    if video_data:
-        for i, vd in enumerate(video_data):
-            if vd is not None:
-                vbytes, vname = vd
-                ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-                vfname = f"{report_id}_video_{i}.{ext}"
-                _write_bytes(username, sub, vfname, vbytes)
-                video_refs.append({"filename": vname, "path": vfname})
-            else:
-                video_refs.append(None)
+def get_transfer_fee(token: str, player_id: int) -> dict | None:
+    resp = requests.get(f"{API_BASE}/v2/metrics/players/transfer-fees",
+        headers=_auth_headers(token),
+        params={"offset": 0, "limit": 1, "playerIds": player_id, "latestTransferFee": "true"},
+        timeout=30)
+    resp.raise_for_status()
+    items = resp.json().get("items") or []
+    return items[0] if items else None
 
-    meta = {
-        "report_id": report_id,
-        "position": position,
-        "club": club,
-        "language": language,
-        "player_name": player_name,
-        "finished_at": time.time(),
-        "player_data": player_data,
-        "star_values": star_values or [],
-        "comments": comments or [],
-        "video_refs": video_refs,
-        "tm_stats": tm_stats,
-        "photo_refs": photo_refs if photo_refs else None,
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def get_seasons(token: str, player_id: int) -> list[dict]:
+    return _fetch_all(token, "/v2/seasons", {"offset": 0, "limit": 200, "playerIds": player_id})
+
+
+def _season_ids_for(seasons: list[dict], label: str) -> list[int]:
+    target = normalize_season_label(label)
+    return sorted({it["id"] for it in seasons if isinstance(it.get("id"), int)
+                   and normalize_season_label(_as_text(it.get("name"))) == target})
+
+
+def _aggregate_stats(items: list[dict]) -> dict[str, int]:
+    if not items:
+        return {"matches": 0, "minutes": 0, "goals": 0, "assists": 0}
+    # Try total row first
+    for it in items:
+        comp = it.get("competition") or it.get("competitionGroup") or it.get("league") or {}
+        name = (_as_text(comp.get("name")) if isinstance(comp, dict) else "").strip().lower()
+        if name in ("total", "overall", "all", "all competitions"):
+            return {
+                "matches": _extract_int(it, "stats.matchesPlayed", "stats.matches"),
+                "minutes": _extract_int(it, "stats.minutesPlayed", "stats.minutes"),
+                "goals": _extract_int(it, "stats.goal", "stats.goals"),
+                "assists": _extract_int(it, "stats.assist", "stats.assists"),
+            }
+    # Sum per competition
+    totals = {"matches": 0, "minutes": 0, "goals": 0, "assists": 0}
+    for it in items:
+        totals["matches"] += _extract_int(it, "stats.matchesPlayed", "stats.matches")
+        totals["minutes"] += _extract_int(it, "stats.minutesPlayed", "stats.minutes")
+        totals["goals"] += _extract_int(it, "stats.goal", "stats.goals")
+        totals["assists"] += _extract_int(it, "stats.assist", "stats.assists")
+    return totals
+
+
+def get_season_stats(token: str, player_id: int) -> dict[str, int]:
+    seasons = get_seasons(token, player_id)
+    sids = _season_ids_for(seasons, TARGET_SEASON_LABEL)
+    items = _fetch_all(token, "/v2/metrics/career-stats/players",
+        {"offset": 0, "limit": 200, "playerIds": player_id, "seasonIds": sids})
+    return _aggregate_stats(items)
+
+
+def get_career_stats(token: str, player_id: int) -> dict[str, int]:
+    items = _fetch_all(token, "/v2/metrics/career-stats/players",
+        {"offset": 0, "limit": 200, "playerIds": player_id})
+    by_season: dict[int, list[dict]] = {}
+    for it in items:
+        sid = it.get("seasonId") or (it.get("season") or {}).get("id")
+        if isinstance(sid, int):
+            by_season.setdefault(sid, []).append(it)
+    totals = {"matches": 0, "minutes": 0, "goals": 0, "assists": 0}
+    for season_items in by_season.values():
+        s = _aggregate_stats(season_items)
+        for k in totals: totals[k] += s[k]
+    return totals
+
+
+# ─── Build player data dict ─────────────────────────────────────────────────
+
+def fetch_player_data(token: str, player_id: int) -> dict[str, str]:
+    """Fetch all player info and return a flat dict of display values."""
+    player = get_player(token, player_id)
+    transfer_fee = get_transfer_fee(token, player_id)
+    season_stats = get_season_stats(token, player_id)
+    career_stats = get_career_stats(token, player_id)
+
+    info = player.get("info") or {}
+    team = player.get("team") or {}
+    league = player.get("league") or {}
+    contract = player.get("contract") or {}
+
+    nats = info.get("nationalities") or []
+    nat_str = ", ".join(str(n.get("name", "")).strip() for n in nats if isinstance(n, dict) and n.get("name"))
+
+    agency = (_as_text(contract.get("agencyName")) or
+              _as_text((contract.get("agency") or {}).get("name") if isinstance(contract.get("agency"), dict) else ""))
+    agent = (_as_text(contract.get("agentName")) or
+             _as_text((contract.get("agent") or {}).get("name") if isinstance(contract.get("agent"), dict) else ""))
+
+    raw_pos = _first_position(info)
+    positions = info.get("positions") or []
+
+    return {
+        "name": _as_text(info.get("footballName") or info.get("name") or ""),
+        "date_of_birth": _parse_date(_as_text(info.get("birthDate"))),
+        "city_of_birth": _as_text(info.get("birthPlace") or ""),
+        "nationality": nat_str,
+        "height": _fmt_height(info.get("height")),
+        "preferred_foot": _as_text(info.get("preferredFoot") or ""),
+        "club": _as_text(team.get("name") or ""),
+        "league": _as_text(league.get("name") or ""),
+        "agency": agency.strip(),
+        "agent": agent.strip(),
+        "position_raw": raw_pos,
+        "position_abbrev": _position_abbrev(raw_pos),
+        "positions": [_as_text(p) for p in positions if p],
+        "template_position": SCISPORTS_TO_TEMPLATE.get(raw_pos, ""),
+        "contract_end": _parse_date(_as_text(contract.get("contractEnd"))),
+        "market_value": _fmt_money(contract.get("marketValue")),
+        "transfer_value": _fmt_money(transfer_fee.get("valueEstimateEur")) if transfer_fee else "",
+        "season_matches": _fmt_int(season_stats.get("matches")),
+        "season_minutes": _fmt_int(season_stats.get("minutes")),
+        "season_goals": _fmt_int(season_stats.get("goals")),
+        "season_assists": _fmt_int(season_stats.get("assists")),
+        "career_matches": _fmt_int(career_stats.get("matches")),
+        "career_minutes": _fmt_int(career_stats.get("minutes")),
+        "career_goals": _fmt_int(career_stats.get("goals")),
+        "career_assists": _fmt_int(career_stats.get("assists")),
     }
-    _write_text(username, sub, f"{report_id}.json",
-                json.dumps(meta, ensure_ascii=False, indent=2))
-
-    _invalidate_user_caches(username, sub)
-
-    # Clean up the draft if it exists
-    delete_draft(username, report_id)
-
-    return report_id
-
-
-def list_finished(username: str) -> list[dict]:
-    """Return all finished reports, sorted by most recently finished."""
-    filenames = _list_filenames(username, "finished")
-    results = []
-    for fname in filenames:
-        if fname.endswith(".json"):
-            text = _read_text(username, "finished", fname)
-            if text:
-                try:
-                    results.append(json.loads(text))
-                except Exception:
-                    pass
-    results.sort(key=lambda m: m.get("finished_at", 0), reverse=True)
-    return results
-
-
-def load_finished_pptx(username: str, report_id: str) -> bytes | None:
-    """Return the PPTX bytes for a finished report."""
-    return _read_bytes(username, "finished", f"{report_id}.pptx")
-
-
-def load_finished(username: str, report_id: str) -> dict | None:
-    """Load a finished report's full state including PPTX, videos, photos."""
-    text = _read_text(username, "finished", f"{report_id}.json")
-    if not text:
-        return None
-    meta = json.loads(text)
-    sub = "finished"
-
-    # Attach PPTX bytes
-    pptx = _read_bytes(username, sub, f"{report_id}.pptx")
-    if pptx:
-        meta["pptx_bytes"] = pptx
-
-    # Resolve video refs to bytes
-    video_data = []
-    for vref in meta.get("video_refs", []) or []:
-        if vref is not None:
-            vbytes = _read_bytes(username, sub, vref["path"])
-            if vbytes:
-                video_data.append((vbytes, vref["filename"]))
-            else:
-                video_data.append(None)
-        else:
-            video_data.append(None)
-    meta["video_data"] = video_data
-
-    # Resolve photo refs
-    prefs = meta.get("photo_refs") or {}
-    if prefs.get("full"):
-        pfull = _read_bytes(username, sub, prefs["full"])
-        if pfull:
-            meta["photo_full"] = pfull
-    if prefs.get("circular"):
-        pcirc = _read_bytes(username, sub, prefs["circular"])
-        if pcirc:
-            meta["photo_circular"] = pcirc
-
-    return meta
-
-
-def mark_shared(username: str, report_id: str, shared_to: str) -> None:
-    """Mark a finished report as shared to another user."""
-    text = _read_text(username, "finished", f"{report_id}.json")
-    if not text:
-        return
-    meta = json.loads(text)
-    shared_list = meta.get("shared_to", [])
-    if shared_to not in shared_list:
-        shared_list.append(shared_to)
-    meta["shared_to"] = shared_list
-    meta["shared_at"] = time.time()
-    _write_text(username, "finished", f"{report_id}.json",
-                json.dumps(meta, ensure_ascii=False, indent=2))
-    _invalidate_user_caches(username, "finished")
-
-
-def delete_finished(username: str, report_id: str) -> None:
-    _delete_prefix(username, "finished", report_id)
-
-
-# ─── Received (shared) report operations ────────────────────────────────────
-
-def share_report(
-    from_username: str,
-    to_username: str,
-    report_id: str,
-    position: str,
-    club: str,
-    language: str,
-    pptx_bytes: bytes,
-    player_name: str = "",
-    star_values: list[float] | None = None,
-    comments: list[str] | None = None,
-    video_data: list | None = None,
-    player_data: dict | None = None,
-    tm_stats: dict | None = None,
-    photo_full: bytes | None = None,
-    photo_circular: bytes | None = None,
-) -> str:
-    """Copy a finished report into the recipient's received folder."""
-    sub = "received"
-    share_id = uuid.uuid4().hex[:12]
-
-    _write_bytes(to_username, sub, f"{share_id}.pptx", pptx_bytes)
-
-    # Save video files
-    video_refs = []
-    if video_data:
-        for i, vd in enumerate(video_data):
-            if vd is not None:
-                vbytes, vname = vd
-                ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-                vfname = f"{share_id}_video_{i}.{ext}"
-                _write_bytes(to_username, sub, vfname, vbytes)
-                video_refs.append({"filename": vname, "path": vfname})
-            else:
-                video_refs.append(None)
-
-    # Save player photos
-    photo_refs = {}
-    if photo_full:
-        pfname = f"{share_id}_photo_full.png"
-        _write_bytes(to_username, sub, pfname, photo_full)
-        photo_refs["full"] = pfname
-    if photo_circular:
-        pcfname = f"{share_id}_photo_circ.png"
-        _write_bytes(to_username, sub, pcfname, photo_circular)
-        photo_refs["circular"] = pcfname
-
-    meta = {
-        "report_id": share_id,
-        "original_id": report_id,
-        "position": position,
-        "club": club,
-        "language": language,
-        "player_name": player_name,
-        "shared_by": from_username,
-        "shared_at": time.time(),
-        "star_values": star_values or [],
-        "comments": comments or [],
-        "video_refs": video_refs,
-        "player_data": player_data,
-        "tm_stats": tm_stats,
-        "photo_refs": photo_refs if photo_refs else None,
-    }
-    _write_text(to_username, sub, f"{share_id}.json",
-                json.dumps(meta, ensure_ascii=False, indent=2))
-    _invalidate_user_caches(to_username, sub)
-    return share_id
-
-
-def list_received(username: str) -> list[dict]:
-    """Return all received reports, sorted by most recently shared."""
-    filenames = _list_filenames(username, "received")
-    results = []
-    for fname in filenames:
-        if fname.endswith(".json"):
-            text = _read_text(username, "received", fname)
-            if text:
-                try:
-                    results.append(json.loads(text))
-                except Exception:
-                    pass
-    results.sort(key=lambda m: m.get("shared_at", 0), reverse=True)
-    return results
-
-
-def load_received_pptx(username: str, report_id: str) -> bytes | None:
-    return _read_bytes(username, "received", f"{report_id}.pptx")
-
-
-def load_received(username: str, report_id: str) -> dict | None:
-    """Load a received report's full state including video bytes and PPTX."""
-    text = _read_text(username, "received", f"{report_id}.json")
-    if not text:
-        return None
-    meta = json.loads(text)
-    sub = "received"
-
-    # Resolve video refs to bytes
-    video_data = []
-    for vref in meta.get("video_refs", []) or []:
-        if vref is not None:
-            vbytes = _read_bytes(username, sub, vref["path"])
-            if vbytes:
-                video_data.append((vbytes, vref["filename"]))
-            else:
-                video_data.append(None)
-        else:
-            video_data.append(None)
-    meta["video_data"] = video_data
-
-    # Attach PPTX bytes
-    pptx = _read_bytes(username, sub, f"{report_id}.pptx")
-    if pptx:
-        meta["pptx_bytes"] = pptx
-
-    # Resolve photo refs
-    prefs = meta.get("photo_refs") or {}
-    if prefs.get("full"):
-        pfull = _read_bytes(username, sub, prefs["full"])
-        if pfull:
-            meta["photo_full"] = pfull
-    if prefs.get("circular"):
-        pcirc = _read_bytes(username, sub, prefs["circular"])
-        if pcirc:
-            meta["photo_circular"] = pcirc
-
-    return meta
-
-
-def delete_received(username: str, report_id: str) -> None:
-    _delete_prefix(username, "received", report_id)

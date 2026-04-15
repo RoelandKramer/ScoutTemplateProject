@@ -23,7 +23,7 @@ st.set_page_config(page_title="Scouting Rapport Pro+", page_icon="", layout="wid
 # (Flag CSS is emitted from _render_flags() — AFTER _apply_theme() — so it
 #  can override the theme's global button styles with higher specificity.)
 
-_VIDEO_PREVIEW_LIMIT = 150 * 1024 * 1024
+_VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024
 
 LOGO_DIR = Path(__file__).parent / "Logo's"
 _LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
@@ -412,12 +412,6 @@ def _apply_theme(club: str) -> None:
     }}
     [data-testid="stExpander"] svg {{
         fill: {th['btn_text']} !important;
-    }}
-
-    /* File uploader — vertically center label within the upload box */
-    [data-testid="stFileUploader"] section {{
-        display: flex !important;
-        align-items: center !important;
     }}
 
     /* Text inputs and text areas */
@@ -1019,7 +1013,7 @@ def _transfermarkt_section(
 
     if st.button(t("fetch_tm_stats", L), type="primary", use_container_width=True, key=f"{key_prefix}_fetch"):
         try:
-            from transfermarkt import fetch_player_stats, TmBlockedError
+            from transfermarkt import fetch_player_stats
             with st.spinner(t("fetching_tm", L)):
                 stats = fetch_player_stats(player_name, player_club)
             # Clear cached stats-card inputs so the new values are shown
@@ -1027,19 +1021,6 @@ def _transfermarkt_section(
             st.session_state[state_key] = stats
             if not any(stats.get(k, 0) for k in ["season_matches", "career_matches"]):
                 st.warning(t("tm_not_found", L))
-        except TmBlockedError as e:
-            st.warning(t("tm_blocked", L))
-            with st.expander("Error details"):
-                st.code(str(e))
-            # Store empty stats so the editable card appears
-            _clear_stats_card_inputs(f"{key_prefix}_card")
-            st.session_state[state_key] = {
-                "season_matches": 0, "season_minutes": 0,
-                "season_goals": 0, "season_assists": 0,
-                "career_matches": 0, "career_minutes": 0,
-                "career_goals": 0, "career_assists": 0,
-                "tm_url": "",
-            }
         except Exception as exc:
             st.error(f"Transfermarkt error: {exc}")
 
@@ -1641,23 +1622,20 @@ elif page == "New Report":
                     player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
             snapshot_bytes = snapshot.getvalue()
-            try:
-                rid = storage.save_draft(
-                    username,
-                    st.session_state.get("active_report_id"),
-                    template_name, club, lang, s, c, v,
-                    source="empty",
-                    upload_bytes=snapshot_bytes,
-                    upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
-                    player_data=st.session_state.get(NEW_PDATA_KEY),
-                    tm_stats=st.session_state.get(NEW_TM_KEY),
-                    photo_full=st.session_state.get("new_player_photo_full"),
-                    photo_circular=st.session_state.get("new_player_photo_circ"),
-                )
-                st.session_state["active_report_id"] = rid
-                st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
-            except OSError as e:
-                st.error(f"Could not save draft to cloud storage. Please try again. ({e})")
+            rid = storage.save_draft(
+                username,
+                st.session_state.get("active_report_id"),
+                template_name, club, lang, s, c, v,
+                source="empty",
+                upload_bytes=snapshot_bytes,
+                upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
+                player_data=st.session_state.get(NEW_PDATA_KEY),
+                tm_stats=st.session_state.get(NEW_TM_KEY),
+                photo_full=st.session_state.get("new_player_photo_full"),
+                photo_circular=st.session_state.get("new_player_photo_circ"),
+            )
+            st.session_state["active_report_id"] = rid
+            st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
     with col_gen:
         if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="empty_gen"):
@@ -1673,17 +1651,14 @@ elif page == "New Report":
             pptx_bytes = output.getvalue()
 
             rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
-            try:
-                storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
-                                      player_name=_current_player_name(NEW_PDATA_KEY),
-                                      player_data=st.session_state.get(NEW_PDATA_KEY),
-                                      star_values=s, comments=c, video_data=v,
-                                      tm_stats=st.session_state.get(NEW_TM_KEY),
-                                      photo_full=st.session_state.get("new_player_photo_full"),
-                                      photo_circular=st.session_state.get("new_player_photo_circ"))
-                st.session_state.pop("active_report_id", None)
-            except OSError as e:
-                st.warning(f"Report generated but could not be saved to cloud storage. You can still download it below. ({e})")
+            storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
+                                  player_name=_current_player_name(NEW_PDATA_KEY),
+                                  player_data=st.session_state.get(NEW_PDATA_KEY),
+                                  star_values=s, comments=c, video_data=v,
+                                  tm_stats=st.session_state.get(NEW_TM_KEY),
+                                  photo_full=st.session_state.get("new_player_photo_full"),
+                                  photo_circular=st.session_state.get("new_player_photo_circ"))
+            st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))
             st.download_button(
@@ -1721,37 +1696,34 @@ elif page == "New Report":
                     pptx_bytes = output.getvalue()
                     rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
                     player = _current_player_name(NEW_PDATA_KEY) or template_name
-                    try:
-                        storage.share_report(
-                            from_username=username,
-                            to_username=sel_scout,
-                            report_id=rid,
-                            position=template_name,
-                            club=club,
-                            language=lang,
-                            pptx_bytes=pptx_bytes,
-                            player_name=_current_player_name(NEW_PDATA_KEY),
-                            star_values=s,
-                            comments=c,
-                            video_data=v,
-                            player_data=st.session_state.get(NEW_PDATA_KEY),
-                            tm_stats=st.session_state.get(NEW_TM_KEY),
-                            photo_full=st.session_state.get("new_player_photo_full"),
-                            photo_circular=st.session_state.get("new_player_photo_circ"),
-                        )
-                        storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
-                                              player_name=_current_player_name(NEW_PDATA_KEY),
-                                              player_data=st.session_state.get(NEW_PDATA_KEY),
-                                              star_values=s, comments=c, video_data=v,
-                                              tm_stats=st.session_state.get(NEW_TM_KEY),
-                                              photo_full=st.session_state.get("new_player_photo_full"),
-                                              photo_circular=st.session_state.get("new_player_photo_circ"))
-                        storage.mark_shared(username, rid, sel_scout)
-                    except OSError as e:
-                        st.error(f"Could not share report to cloud storage. Please try again. ({e})")
-                        st.session_state.pop("_share_pending", None)
-                        st.stop()
+                    storage.share_report(
+                        from_username=username,
+                        to_username=sel_scout,
+                        report_id=rid,
+                        position=template_name,
+                        club=club,
+                        language=lang,
+                        pptx_bytes=pptx_bytes,
+                        player_name=_current_player_name(NEW_PDATA_KEY),
+                        star_values=s,
+                        comments=c,
+                        video_data=v,
+                        player_data=st.session_state.get(NEW_PDATA_KEY),
+                        tm_stats=st.session_state.get(NEW_TM_KEY),
+                        photo_full=st.session_state.get("new_player_photo_full"),
+                        photo_circular=st.session_state.get("new_player_photo_circ"),
+                    )
+                    # Also save as finished + mark shared
+                    storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
+                                          player_name=_current_player_name(NEW_PDATA_KEY),
+                                          player_data=st.session_state.get(NEW_PDATA_KEY),
+                                          star_values=s, comments=c, video_data=v,
+                                          tm_stats=st.session_state.get(NEW_TM_KEY),
+                                          photo_full=st.session_state.get("new_player_photo_full"),
+                                          photo_circular=st.session_state.get("new_player_photo_circ"))
+                    storage.mark_shared(username, rid, sel_scout)
                     st.session_state.pop("_share_pending", None)
+                    # Auto-send notification emails (receiver gets platform link)
                     try:
                         from email_utils import send_share_emails
                         sender_email = all_users.get(username, {}).get("email", "")
@@ -2035,23 +2007,20 @@ elif page == "Upload & Edit":
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
                 _snap_bytes = _snap.getvalue()
-                try:
-                    rid = storage.save_draft(
-                        username,
-                        st.session_state.get("upload_active_report_id"),
-                        matched_name or "Unknown", detected_club, detected_lang, s, c, v,
-                        source="upload",
-                        upload_bytes=_snap_bytes,
-                        upload_filename=st.session_state.get("upload_filename"),
-                        player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                        tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                        photo_full=st.session_state.get("upload_player_photo_full"),
-                        photo_circular=st.session_state.get("upload_player_photo_circ"),
-                    )
-                    st.session_state["upload_active_report_id"] = rid
-                    st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
-                except OSError as e:
-                    st.error(f"Could not save draft to cloud storage. Please try again. ({e})")
+                rid = storage.save_draft(
+                    username,
+                    st.session_state.get("upload_active_report_id"),
+                    matched_name or "Unknown", detected_club, detected_lang, s, c, v,
+                    source="upload",
+                    upload_bytes=_snap_bytes,
+                    upload_filename=st.session_state.get("upload_filename"),
+                    player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                    tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                    photo_full=st.session_state.get("upload_player_photo_full"),
+                    photo_circular=st.session_state.get("upload_player_photo_circ"),
+                )
+                st.session_state["upload_active_report_id"] = rid
+                st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
         with col_gen:
             if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="upload_gen"):
@@ -2067,24 +2036,21 @@ elif page == "Upload & Edit":
                 pptx_bytes = output.getvalue()
                 pos = matched_name or "Unknown"
 
-                try:
-                    rid = st.session_state.get("upload_active_report_id") or storage.save_draft(
-                        username, None, pos, detected_club, detected_lang, s, c, v,
-                        source="upload",
-                        upload_bytes=st.session_state.get("upload_bytes"),
-                        upload_filename=st.session_state.get("upload_filename"),
-                        player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                    )
-                    storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
-                                          player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                          player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                          star_values=s, comments=c, video_data=v,
-                                          tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                                          photo_full=st.session_state.get("upload_player_photo_full"),
-                                          photo_circular=st.session_state.get("upload_player_photo_circ"))
-                    st.session_state.pop("upload_active_report_id", None)
-                except OSError as e:
-                    st.warning(f"Report generated but could not be saved to cloud storage. You can still download it below. ({e})")
+                rid = st.session_state.get("upload_active_report_id") or storage.save_draft(
+                    username, None, pos, detected_club, detected_lang, s, c, v,
+                    source="upload",
+                    upload_bytes=st.session_state.get("upload_bytes"),
+                    upload_filename=st.session_state.get("upload_filename"),
+                    player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                )
+                storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
+                                      player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                      player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                                      star_values=s, comments=c, video_data=v,
+                                      tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                                      photo_full=st.session_state.get("upload_player_photo_full"),
+                                      photo_circular=st.session_state.get("upload_player_photo_circ"))
+                st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))
                 st.download_button(
@@ -2123,39 +2089,36 @@ elif page == "Upload & Edit":
                         pos = matched_name or "Unknown"
                         rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
                         player = _current_player_name(UPLOAD_PDATA_KEY) or pos
-                        try:
-                            storage.share_report(
-                                from_username=username,
-                                to_username=sel_scout,
-                                report_id=rid,
-                                position=pos,
-                                club=detected_club,
-                                language=detected_lang,
-                                pptx_bytes=pptx_bytes,
-                                player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                star_values=s,
-                                comments=c,
-                                video_data=v,
-                                player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                                photo_full=st.session_state.get("upload_player_photo_full"),
-                                photo_circular=st.session_state.get("upload_player_photo_circ"),
-                            )
-                            storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
-                                                  player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                                  player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                                  star_values=s,
-                                                  comments=c,
-                                                  video_data=v,
-                                                  tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                                                  photo_full=st.session_state.get("upload_player_photo_full"),
-                                                  photo_circular=st.session_state.get("upload_player_photo_circ"))
-                            storage.mark_shared(username, rid, sel_scout)
-                        except OSError as e:
-                            st.error(f"Could not share report to cloud storage. Please try again. ({e})")
-                            st.session_state.pop("_share_pending", None)
-                            st.stop()
+                        storage.share_report(
+                            from_username=username,
+                            to_username=sel_scout,
+                            report_id=rid,
+                            position=pos,
+                            club=detected_club,
+                            language=detected_lang,
+                            pptx_bytes=pptx_bytes,
+                            player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                            star_values=s,
+                            comments=c,
+                            video_data=v,
+                            player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                            tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                            photo_full=st.session_state.get("upload_player_photo_full"),
+                            photo_circular=st.session_state.get("upload_player_photo_circ"),
+                        )
+                        # Also save as finished + mark shared
+                        storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
+                                              player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                              player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                                              star_values=s,
+                                              comments=c,
+                                              video_data=v,
+                                              tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                                              photo_full=st.session_state.get("upload_player_photo_full"),
+                                              photo_circular=st.session_state.get("upload_player_photo_circ"))
+                        storage.mark_shared(username, rid, sel_scout)
                         st.session_state.pop("_share_pending", None)
+                        # Auto-send notification emails (receiver gets platform link)
                         try:
                             from email_utils import send_share_emails
                             sender_email = all_users.get(username, {}).get("email", "")
