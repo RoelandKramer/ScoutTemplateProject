@@ -1603,6 +1603,8 @@ elif page == "New Report":
         st.session_state["empty_prev_key"] = reset_key
         st.session_state.pop("active_report_id", None)
         st.session_state.pop("_loaded_draft", None)
+        st.session_state.pop("_generated_pptx", None)
+        st.session_state.pop("_generated_fname", None)
 
     st.markdown("---")
     st.subheader(t("rate_each_competency", L))
@@ -1674,19 +1676,26 @@ elif page == "New Report":
                 except Exception as exc:
                     st.warning(f"Report generated but could not be saved. ({exc})")
 
+                st.session_state["_generated_pptx"] = pptx_bytes
+                st.session_state["_generated_fname"] = _pptx_filename(template_name, NEW_PDATA_KEY)
                 st.success(t("report_ready", L))
-                st.download_button(
-                    f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                    file_name=_pptx_filename(template_name, NEW_PDATA_KEY),
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    use_container_width=True,
-                )
             except Exception as exc:
                 st.error(f"Could not generate PowerPoint. ({exc})")
 
     with col_share:
         if st.button(f"{t('share', L)}", use_container_width=True, key="empty_share"):
             st.session_state["_share_pending"] = "empty"
+
+    # ── Persistent download button (survives reruns) ────────────────────────
+    if st.session_state.get("_generated_pptx"):
+        st.download_button(
+            f"📥  {t('download_pptx', L)}",
+            data=st.session_state["_generated_pptx"],
+            file_name=st.session_state.get("_generated_fname", "report.pptx"),
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            use_container_width=True,
+            key="empty_download_persist",
+        )
 
     # ── Share dialog ────────────────────────────────────────────────────────
     if st.session_state.get("_share_pending") == "empty":
@@ -1796,11 +1805,14 @@ elif page == "Upload & Edit":
             st.session_state["upload_filename"]     = fname
             st.session_state["upload_check_result"] = check_result
             st.session_state["upload_active_report_id"] = _edit_draft_id
-            for i, val in enumerate(check_result.get("current_star_values", [])):
+            draft_stars = draft.get("star_values") or check_result.get("current_star_values", [])
+            draft_comments = draft.get("comments") or check_result.get("current_comments", [])
+            draft_videos = draft.get("video_data") or check_result.get("current_videos", [])
+            for i, val in enumerate(draft_stars):
                 st.session_state[f"upload_{i}"] = float(val)
-            for i, cmt in enumerate(check_result.get("current_comments", [])):
+            for i, cmt in enumerate(draft_comments):
                 st.session_state[f"upload_{i}_comment"] = cmt or ""
-            for i, vid in enumerate(draft.get("video_data") or check_result.get("current_videos", [])):
+            for i, vid in enumerate(draft_videos):
                 st.session_state[f"upload_{i}_video"] = vid
             _clear_player_card_inputs("upload_sci_card")
             _clear_stats_card_inputs("upload_tm_card")
@@ -1935,6 +1947,8 @@ elif page == "Upload & Edit":
             st.session_state["upload_file_key"]     = file_key
             st.session_state["upload_bytes"]        = file_bytes
             st.session_state["upload_filename"]     = uploaded.name
+            st.session_state.pop("_generated_pptx_upload", None)
+            st.session_state.pop("_generated_fname_upload", None)
             st.session_state["upload_check_result"] = check_result
             for i, val in enumerate(check_result.get("current_star_values", [])):
                 st.session_state[f"upload_{i}"] = float(val)
@@ -2079,19 +2093,26 @@ elif page == "Upload & Edit":
                 except Exception as exc:
                     st.warning(f"Report generated but could not be saved. ({exc})")
 
+                st.session_state["_generated_pptx_upload"] = pptx_bytes
+                st.session_state["_generated_fname_upload"] = _pptx_filename(pos, UPLOAD_PDATA_KEY)
                 st.success(t("done", L))
-                st.download_button(
-                    f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                    file_name=_pptx_filename(pos, UPLOAD_PDATA_KEY),
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    use_container_width=True,
-                )
               except Exception as exc:
                 st.error(f"Could not generate PowerPoint. ({exc})")
 
         with col_share:
             if st.button(f"{t('share', L)}", use_container_width=True, key="upload_share"):
                 st.session_state["_share_pending"] = "upload"
+
+        # ── Persistent download button (survives reruns) ──────────────────
+        if st.session_state.get("_generated_pptx_upload"):
+            st.download_button(
+                f"📥  {t('download_pptx', L)}",
+                data=st.session_state["_generated_pptx_upload"],
+                file_name=st.session_state.get("_generated_fname_upload", "report.pptx"),
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                use_container_width=True,
+                key="upload_download_persist",
+            )
 
         # ── Share dialog ────────────────────────────────────────────────────
         if st.session_state.get("_share_pending") == "upload":
