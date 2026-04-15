@@ -1,6 +1,7 @@
 [server]
 maxUploadSize = 500
 maxMessageSize = 500
+enableStaticServing = true
 
 [theme]
 primaryColor        = "#1a3370"

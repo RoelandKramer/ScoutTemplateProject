@@ -56,6 +56,38 @@ def _get_upload_bytes() -> bytes | None:
     return None
 
 
+_STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR.mkdir(exist_ok=True)
+
+# Clean old downloads from static folder on startup (keep disk usage low)
+for _old in _STATIC_DIR.glob("*.pptx"):
+    try:
+        if _old.stat().st_mtime < time.time() - 3600:
+            _old.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _serve_download(pptx_bytes: bytes, filename: str) -> None:
+    """Save PPTX to the static folder and render an HTTP download link.
+
+    This bypasses Streamlit's WebSocket, making large-file downloads
+    reliable and avoiding memory issues.
+    """
+    safe_name = filename.replace(" ", "_")
+    dest = _STATIC_DIR / safe_name
+    dest.write_bytes(pptx_bytes)
+    href = f"app/static/{safe_name}"
+    st.markdown(
+        f'<a href="{href}" download="{filename}" '
+        f'style="display:inline-block;width:100%;padding:0.6rem 1rem;'
+        f'background:#1a3370;color:white;text-align:center;'
+        f'border-radius:0.5rem;text-decoration:none;font-weight:600;">'
+        f'📥  Download PowerPoint</a>',
+        unsafe_allow_html=True,
+    )
+
+
 LOGO_DIR = Path(__file__).parent / "Logo's"
 _LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
 _LOGO_PV  = LOGO_DIR / "FC_Pro_Vercelli_1892.svg.png"
@@ -1461,16 +1493,12 @@ if page == "Dashboard":
             if st.session_state.get(_prep_key):
                 pptx_bytes = load_pptx_fn(username, rid)
                 if pptx_bytes:
-                    st.download_button(
-                        f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                        file_name=_build_pptx_fname(
-                            meta.get("position", ""),
-                            meta.get("player_name", ""),
-                        ),
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        key=f"dl_{prefix}_{rid}", use_container_width=True,
+                    _fname = _build_pptx_fname(
+                        meta.get("position", ""),
+                        meta.get("player_name", ""),
                     )
-                    del pptx_bytes
+                    _serve_download(pptx_bytes, _fname)
+                    del pptx_bytes; gc.collect()
                 else:
                     st.caption("File not available.")
                     st.session_state.pop(_prep_key, None)
@@ -1644,8 +1672,7 @@ elif page == "New Report":
         st.session_state["empty_prev_key"] = reset_key
         st.session_state.pop("active_report_id", None)
         st.session_state.pop("_loaded_draft", None)
-        st.session_state.pop("_generated_dl_path", None)
-        st.session_state.pop("_generated_fname", None)
+        st.session_state.pop("_generated_dl_fname", None)
 
     st.markdown("---")
     st.subheader(t("rate_each_competency", L))
@@ -1717,12 +1744,10 @@ elif page == "New Report":
                 except Exception as exc:
                     st.warning(f"Report generated but could not be saved. ({exc})")
 
-                _dl_path = Path("data") / username / "_download.pptx"
-                _dl_path.parent.mkdir(parents=True, exist_ok=True)
-                _dl_path.write_bytes(pptx_bytes)
+                _gen_fname = _pptx_filename(template_name, NEW_PDATA_KEY)
+                _serve_download(pptx_bytes, _gen_fname)
                 del pptx_bytes, output; gc.collect()
-                st.session_state["_generated_dl_path"] = str(_dl_path)
-                st.session_state["_generated_fname"] = _pptx_filename(template_name, NEW_PDATA_KEY)
+                st.session_state["_generated_dl_fname"] = _gen_fname
                 st.success(t("report_ready", L))
             except Exception as exc:
                 st.error(f"Could not generate PowerPoint. ({exc})")
@@ -1731,25 +1756,18 @@ elif page == "New Report":
         if st.button(f"{t('share', L)}", use_container_width=True, key="empty_share"):
             st.session_state["_share_pending"] = "empty"
 
-    # ── Persistent download button (reads from disk only on-demand) ─
-    _dl_path = st.session_state.get("_generated_dl_path")
-    if _dl_path and Path(_dl_path).exists():
-        _dl_col, _clr_col = st.columns([3, 1])
-        with _dl_col:
-            st.download_button(
-                f"📥  {t('download_pptx', L)}",
-                data=Path(_dl_path).read_bytes(),
-                file_name=st.session_state.get("_generated_fname", "report.pptx"),
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                use_container_width=True,
-                key="empty_download_persist",
-            )
-        with _clr_col:
-            if st.button("✖", key="empty_clear_dl", help="Remove download from memory"):
-                st.session_state.pop("_generated_dl_path", None)
-                st.session_state.pop("_generated_fname", None)
-                gc.collect()
-                st.rerun()
+    # ── Persistent download link (served as static file — no WebSocket) ─
+    _dl_fname = st.session_state.get("_generated_dl_fname")
+    if _dl_fname and (_STATIC_DIR / _dl_fname.replace(" ", "_")).exists():
+        safe = _dl_fname.replace(" ", "_")
+        st.markdown(
+            f'<a href="app/static/{safe}" download="{_dl_fname}" '
+            f'style="display:inline-block;width:100%;padding:0.6rem 1rem;'
+            f'background:#1a3370;color:white;text-align:center;'
+            f'border-radius:0.5rem;text-decoration:none;font-weight:600;">'
+            f'📥  {t("download_pptx", L)}</a>',
+            unsafe_allow_html=True,
+        )
 
     # ── Share dialog ────────────────────────────────────────────────────────
     if st.session_state.get("_share_pending") == "empty":
@@ -2025,8 +2043,7 @@ elif page == "Upload & Edit":
             st.session_state["upload_file_key"]     = file_key
             st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(file_bytes, f"manual_{file_key[:20]}")
             st.session_state["upload_filename"]     = uploaded.name
-            st.session_state.pop("_generated_dl_path_upload", None)
-            st.session_state.pop("_generated_fname_upload", None)
+            st.session_state.pop("_generated_dl_fname_upload", None)
             st.session_state["upload_check_result"] = check_result
             for i, val in enumerate(check_result.get("current_star_values", [])):
                 st.session_state[f"upload_{i}"] = float(val)
@@ -2070,23 +2087,22 @@ elif page == "Upload & Edit":
             f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
-        # ── Player info section for Upload & Edit (read-only, no search) ─────
+        # ── SciSports player search (Upload & Edit) ────────────────────
         st.markdown("---")
-        upload_player_data = st.session_state.get(UPLOAD_PDATA_KEY)
-        if upload_player_data:
-            _render_player_card(
-                upload_player_data, editable=True,
-                key_prefix="upload_sci_card", state_key=UPLOAD_PDATA_KEY,
+        upload_player_data = _scisports_section(
+            key_prefix="upload_sci",
+            state_key=UPLOAD_PDATA_KEY,
+            tm_state_key=UPLOAD_TM_KEY,
+        )
+
+        # ── Transfermarkt stats (Upload & Edit) ──────────────────────
+        _up_pname = (upload_player_data or {}).get("name", "")
+        _up_pclub = (upload_player_data or {}).get("club", "")
+        if _up_pname:
+            _transfermarkt_section(
+                _up_pname, _up_pclub,
+                key_prefix="upload_tm", state_key=UPLOAD_TM_KEY,
             )
-            _up_pname = upload_player_data.get("name", "")
-            _up_pclub = upload_player_data.get("club", "")
-            if _up_pname:
-                tm_stats = st.session_state.get(UPLOAD_TM_KEY)
-                if tm_stats:
-                    _render_stats_card(
-                        tm_stats, _up_pname, editable=True,
-                        key_prefix="upload_tm_card", state_key=UPLOAD_TM_KEY,
-                    )
 
         # ── Player photo ──────────────────────────────────────────────
         _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
@@ -2175,12 +2191,10 @@ elif page == "Upload & Edit":
                 except Exception as exc:
                     st.warning(f"Report generated but could not be saved. ({exc})")
 
-                _dl_path_u = Path("data") / username / "_download_upload.pptx"
-                _dl_path_u.parent.mkdir(parents=True, exist_ok=True)
-                _dl_path_u.write_bytes(pptx_bytes)
+                _gen_fname_u = _pptx_filename(pos, UPLOAD_PDATA_KEY)
+                _serve_download(pptx_bytes, _gen_fname_u)
                 del pptx_bytes; gc.collect()
-                st.session_state["_generated_dl_path_upload"] = str(_dl_path_u)
-                st.session_state["_generated_fname_upload"] = _pptx_filename(pos, UPLOAD_PDATA_KEY)
+                st.session_state["_generated_dl_fname_upload"] = _gen_fname_u
                 st.success(t("done", L))
               except Exception as exc:
                 st.error(f"Could not generate PowerPoint. ({exc})")
@@ -2189,16 +2203,17 @@ elif page == "Upload & Edit":
             if st.button(f"{t('share', L)}", use_container_width=True, key="upload_share"):
                 st.session_state["_share_pending"] = "upload"
 
-        # ── Persistent download button (reads from disk to avoid memory bloat)
-        _dl_path_u = st.session_state.get("_generated_dl_path_upload")
-        if _dl_path_u and Path(_dl_path_u).exists():
-            st.download_button(
-                f"📥  {t('download_pptx', L)}",
-                data=Path(_dl_path_u).read_bytes(),
-                file_name=st.session_state.get("_generated_fname_upload", "report.pptx"),
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                use_container_width=True,
-                key="upload_download_persist",
+        # ── Persistent download link (served as static file — no WebSocket) ─
+        _dl_fname_u = st.session_state.get("_generated_dl_fname_upload")
+        if _dl_fname_u and (_STATIC_DIR / _dl_fname_u.replace(" ", "_")).exists():
+            _safe_u = _dl_fname_u.replace(" ", "_")
+            st.markdown(
+                f'<a href="app/static/{_safe_u}" download="{_dl_fname_u}" '
+                f'style="display:inline-block;width:100%;padding:0.6rem 1rem;'
+                f'background:#1a3370;color:white;text-align:center;'
+                f'border-radius:0.5rem;text-decoration:none;font-weight:600;">'
+                f'📥  {t("download_pptx", L)}</a>',
+                unsafe_allow_html=True,
             )
 
         # ── Share dialog ────────────────────────────────────────────────────
