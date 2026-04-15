@@ -1180,6 +1180,7 @@ def _scisports_section(
     key_prefix: str = "sci",
     state_key: str = "player_data",
     tm_state_key: str = "tm_stats",
+    tm_card_key_prefix: str = "new_tm_card",
 ) -> dict | None:
     """Render SciSports player search/select UI.
     Reads from / writes to `state_key` in session_state.
@@ -1247,7 +1248,7 @@ def _scisports_section(
                     _clear_player_card_inputs(f"{key_prefix}_card")
                     # A different player means the previously fetched TM stats
                     # are no longer relevant.
-                    _clear_stats_card_inputs(f"new_tm_card")
+                    _clear_stats_card_inputs(tm_card_key_prefix)
                     st.session_state.pop(tm_state_key, None)
                     st.session_state[state_key] = pdata
                 except Exception as exc:
@@ -1792,40 +1793,62 @@ elif page == "Upload & Edit":
     _edit_draft_id = st.session_state.pop("edit_draft_id", None)
     if _edit_draft_id and st.session_state.get("_loaded_draft") != _edit_draft_id:
         draft = storage.load_draft(username, _edit_draft_id)
-        if draft and draft.get("upload_bytes"):
-            file_bytes = draft["upload_bytes"]
-            with st.spinner(t("checking", L)):
-                check_result = check_template_compatibility(io.BytesIO(file_bytes))
-            fname = draft.get("upload_filename") or f"Draft_{draft.get('position','report')}.pptx"
-            st.session_state["upload_file_key"]     = f"draft_{_edit_draft_id}"
-            st.session_state["upload_bytes"]        = file_bytes
-            st.session_state["upload_filename"]     = fname
-            st.session_state["upload_check_result"] = check_result
-            st.session_state["upload_active_report_id"] = _edit_draft_id
-            for i, val in enumerate(check_result.get("current_star_values", [])):
-                st.session_state[f"upload_{i}"] = float(val)
-            for i, cmt in enumerate(check_result.get("current_comments", [])):
-                st.session_state[f"upload_{i}_comment"] = cmt or ""
-            for i, vid in enumerate(check_result.get("current_videos", [])):
-                st.session_state[f"upload_{i}_video"] = vid
-            # Restore player data & tm_stats from draft into the
-            # upload-specific slots, and clear any stale cached card inputs.
-            _clear_player_card_inputs("upload_sci_card")
-            _clear_stats_card_inputs("upload_tm_card")
-            if draft.get("player_data"):
-                st.session_state[UPLOAD_PDATA_KEY] = draft["player_data"]
-            else:
-                st.session_state.pop(UPLOAD_PDATA_KEY, None)
-            if draft.get("tm_stats"):
-                st.session_state[UPLOAD_TM_KEY] = draft["tm_stats"]
-            else:
-                st.session_state.pop(UPLOAD_TM_KEY, None)
-            # Restore player photos
-            if draft.get("photo_full"):
-                st.session_state["upload_player_photo_full"] = draft["photo_full"]
-            if draft.get("photo_circular"):
-                st.session_state["upload_player_photo_circ"] = draft["photo_circular"]
-            st.session_state["_loaded_draft"] = _edit_draft_id
+        if draft:
+            file_bytes = draft.get("upload_bytes")
+            # Old drafts (source="empty") may lack upload_bytes — generate on the fly
+            if not file_bytes:
+                try:
+                    _cfg = get_template_config(
+                        draft.get("position", ""), draft.get("club", "FC Den Bosch"),
+                        draft.get("language", "NL"))
+                    _snap = fill_template(
+                        _cfg, draft.get("star_values", []),
+                        draft.get("comments", []), draft.get("video_data", []),
+                        player_data=draft.get("player_data"),
+                        tm_stats=draft.get("tm_stats"),
+                        player_photo=draft.get("photo_full"),
+                        player_photo_circular=draft.get("photo_circular"),
+                    )
+                    file_bytes = _snap.getvalue()
+                except Exception:
+                    file_bytes = None
+            if file_bytes:
+                with st.spinner(t("checking", L)):
+                    check_result = check_template_compatibility(io.BytesIO(file_bytes))
+                fname = draft.get("upload_filename") or f"Draft_{draft.get('position','report')}.pptx"
+                st.session_state["upload_file_key"]     = f"draft_{_edit_draft_id}"
+                st.session_state["upload_bytes"]        = file_bytes
+                st.session_state["upload_filename"]     = fname
+                st.session_state["upload_check_result"] = check_result
+                st.session_state["upload_active_report_id"] = _edit_draft_id
+                # Prefer metadata values over PPTX-parsed values
+                draft_stars = draft.get("star_values") or check_result.get("current_star_values", [])
+                draft_comments = draft.get("comments") or check_result.get("current_comments", [])
+                draft_videos = draft.get("video_data") or check_result.get("current_videos", [])
+                for i, val in enumerate(draft_stars):
+                    st.session_state[f"upload_{i}"] = float(val)
+                for i, cmt in enumerate(draft_comments):
+                    st.session_state[f"upload_{i}_comment"] = cmt or ""
+                for i, vid in enumerate(draft_videos):
+                    st.session_state[f"upload_{i}_video"] = vid
+                # Restore player data & tm_stats from draft into the
+                # upload-specific slots, and clear any stale cached card inputs.
+                _clear_player_card_inputs("upload_sci_card")
+                _clear_stats_card_inputs("upload_tm_card")
+                if draft.get("player_data"):
+                    st.session_state[UPLOAD_PDATA_KEY] = draft["player_data"]
+                else:
+                    st.session_state.pop(UPLOAD_PDATA_KEY, None)
+                if draft.get("tm_stats"):
+                    st.session_state[UPLOAD_TM_KEY] = draft["tm_stats"]
+                else:
+                    st.session_state.pop(UPLOAD_TM_KEY, None)
+                # Restore player photos
+                if draft.get("photo_full"):
+                    st.session_state["upload_player_photo_full"] = draft["photo_full"]
+                if draft.get("photo_circular"):
+                    st.session_state["upload_player_photo_circ"] = draft["photo_circular"]
+                st.session_state["_loaded_draft"] = _edit_draft_id
 
     # ── Auto-load a received report PPTX when coming from "Continue Editing" ─
     _edit_recv_id = st.session_state.pop("edit_received_id", None)
@@ -1985,23 +2008,31 @@ elif page == "Upload & Edit":
             f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
-        # ── Player info section for Upload & Edit (read-only, no search) ─────
+        # ── SciSports player search (always available) ─────────────────────
         st.markdown("---")
-        upload_player_data = st.session_state.get(UPLOAD_PDATA_KEY)
-        if upload_player_data:
-            _render_player_card(
-                upload_player_data, editable=True,
-                key_prefix="upload_sci_card", state_key=UPLOAD_PDATA_KEY,
+        upload_player_data = _scisports_section(
+            key_prefix="upload_sci",
+            state_key=UPLOAD_PDATA_KEY,
+            tm_state_key=UPLOAD_TM_KEY,
+            tm_card_key_prefix="upload_tm_card",
+        )
+
+        # ── Transfermarkt stats ─────────────────────────────────────────
+        _up_pname = (upload_player_data or {}).get("name", "")
+        _up_pclub = (upload_player_data or {}).get("club", "")
+        if _up_pname:
+            _transfermarkt_section(
+                _up_pname, _up_pclub,
+                key_prefix="upload_tm", state_key=UPLOAD_TM_KEY,
             )
-            _up_pname = upload_player_data.get("name", "")
-            _up_pclub = upload_player_data.get("club", "")
-            if _up_pname:
-                tm_stats = st.session_state.get(UPLOAD_TM_KEY)
-                if tm_stats:
-                    _render_stats_card(
-                        tm_stats, _up_pname, editable=True,
-                        key_prefix="upload_tm_card", state_key=UPLOAD_TM_KEY,
-                    )
+        else:
+            # No player name yet — still show editable stats card if loaded from draft/finished
+            _existing_tm = st.session_state.get(UPLOAD_TM_KEY)
+            if _existing_tm:
+                _render_stats_card(
+                    _existing_tm, "", editable=True,
+                    key_prefix="upload_tm_card", state_key=UPLOAD_TM_KEY,
+                )
 
         # ── Player photo ──────────────────────────────────────────────
         _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
