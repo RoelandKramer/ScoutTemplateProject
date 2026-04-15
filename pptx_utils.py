@@ -779,32 +779,24 @@ def embed_video_on_slide(
     """Replace the placeholder picture on a detail slide with an embedded video.
 
     If the slide already has an embedded video it is removed first so we do not
-    accumulate duplicate media entries on repeated fills.  On re-generation the
-    original placeholder picture is gone (it was replaced by the Movie shape in
-    the first fill), so we capture the existing Movie's geometry before removing
-    it and use that as fallback.
+    accumulate duplicate media entries on repeated fills.
     """
     slide = prs.slides[slide_idx]
     spTree = slide.shapes._spTree
 
-    # Capture geometry of any existing Movie BEFORE removing it — on a
-    # re-fill the original placeholder picture no longer exists.
-    movie_geo = None
+    # Remove any existing Movie shapes
     for shape in list(slide.shapes):
         if isinstance(shape, Movie):
-            movie_geo = (shape.left, shape.top, shape.width, shape.height)
             spTree.remove(shape._element)
 
     # Find placeholder picture and read its geometry
     placeholder = _find_detail_placeholder(slide)
-    if placeholder is not None:
-        left, top = placeholder.left, placeholder.top
-        width, height = placeholder.width, placeholder.height
-        spTree.remove(placeholder._element)
-    elif movie_geo is not None:
-        left, top, width, height = movie_geo
-    else:
+    if placeholder is None:
         return False
+
+    left, top = placeholder.left, placeholder.top
+    width, height = placeholder.width, placeholder.height
+    spTree.remove(placeholder._element)
 
     poster_jpeg = extract_first_frame_jpeg(video_bytes)
     poster_io = io.BytesIO(poster_jpeg) if poster_jpeg else None
@@ -1016,42 +1008,27 @@ def fill_player_photo(
         pic_left = box_left + (box_w - pic_w) // 2
         pic_top = bar_top - pic_h
 
-        # Remove any previously added player photo (re-fill safe)
-        _spTree0 = slide0.shapes._spTree
-        for shape in list(slide0.shapes):
-            if shape.name.startswith("player_photo_"):
-                _spTree0.remove(shape._element)
-
         img_stream = io.BytesIO(full_photo)
-        pic = slide0.shapes.add_picture(img_stream, pic_left, pic_top, pic_w, pic_h)
-        pic.name = "player_photo_welcome"
+        slide0.shapes.add_picture(img_stream, pic_left, pic_top, pic_w, pic_h)
 
     # ── Circular crop on rating slide ──────────────────────────────────────
     photo_for_rating = circular_photo or full_photo
     if photo_for_rating:
         rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
-
-        # Find placement: Browse placeholder (first fill) or previously placed photo (re-fill)
         browse_shape = None
-        prev_photo = None
         for shape in rating_slide.shapes:
             if shape.name.startswith("Browse"):
                 browse_shape = shape
                 break
-            if shape.name == "player_photo_rating":
-                prev_photo = shape
-
-        target = browse_shape or prev_photo
-        if target is not None:
-            left = target.left
-            top = target.top
-            width = target.width
-            height = target.height
-            sp = target._element
+        if browse_shape is not None:
+            left = browse_shape.left
+            top = browse_shape.top
+            width = browse_shape.width
+            height = browse_shape.height
+            sp = browse_shape._element
             sp.getparent().remove(sp)
             img_stream = io.BytesIO(photo_for_rating)
-            pic = rating_slide.shapes.add_picture(img_stream, left, top, width, height)
-            pic.name = "player_photo_rating"
+            rating_slide.shapes.add_picture(img_stream, left, top, width, height)
 
 def fill_template(
     template_cfg: dict,
@@ -1079,7 +1056,7 @@ def fill_template(
 
 
 def fill_from_bytes(
-    file_bytes_or_path,
+    file_bytes: bytes,
     template_cfg: dict,
     star_values: list,
     comments: list[str] | None = None,
@@ -1089,15 +1066,8 @@ def fill_from_bytes(
     player_photo: bytes | None = None,
     player_photo_circular: bytes | None = None,
 ) -> io.BytesIO:
-    """Fill an uploaded PPTX and return the result as BytesIO.
-
-    *file_bytes_or_path* can be raw ``bytes`` or a ``str``/``Path`` file path.
-    """
-    from pathlib import Path as _P
-    if isinstance(file_bytes_or_path, (str, _P)):
-        prs = Presentation(str(file_bytes_or_path))
-    else:
-        prs = Presentation(io.BytesIO(file_bytes_or_path))
+    """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
+    prs = Presentation(io.BytesIO(file_bytes))
     if player_data:
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:

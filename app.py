@@ -23,69 +23,7 @@ st.set_page_config(page_title="Scouting Rapport Pro+", page_icon="", layout="wid
 # (Flag CSS is emitted from _render_flags() — AFTER _apply_theme() — so it
 #  can override the theme's global button styles with higher specificity.)
 
-import gc
-
-_VIDEO_PREVIEW_LIMIT = 150 * 1024 * 1024
-_UPLOAD_DIR = Path(__file__).parent / "data" / "_uploads"
-_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def _save_upload_to_disk(pptx_bytes: bytes, label: str = "upload") -> str:
-    """Write PPTX bytes to a temp file and return the path (string).
-
-    This keeps the big blob OFF session_state, saving hundreds of MB of RAM.
-    """
-    p = _UPLOAD_DIR / f"{label}.pptx"
-    p.write_bytes(pptx_bytes)
-    return str(p)
-
-
-def _get_upload_path() -> str | None:
-    """Return the on-disk path for the current upload, or None."""
-    p = st.session_state.get("_upload_pptx_path")
-    if p and Path(p).exists():
-        return p
-    return None
-
-
-def _get_upload_bytes() -> bytes | None:
-    """Read the current upload PPTX from disk (only when actually needed)."""
-    p = _get_upload_path()
-    if p:
-        return Path(p).read_bytes()
-    return None
-
-
-_DL_DIR = Path(__file__).parent / "data" / "_downloads"
-_DL_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def _stage_download(pptx_bytes: bytes, filename: str, slot: str = "main") -> None:
-    """Save generated PPTX to disk for later download.
-
-    Only writes the file — the download button is rendered separately
-    (outside the Generate button block) so it persists across reruns.
-    """
-    dest = _DL_DIR / f"{slot}.pptx"
-    dest.write_bytes(pptx_bytes)
-    st.session_state[f"_dl_ready_{slot}"] = str(dest)
-    st.session_state[f"_dl_fname_{slot}"] = filename
-
-
-def _render_download_btn(slot: str = "main", key: str = "dl_persist") -> None:
-    """Render a download button if a staged file exists for *slot*."""
-    path_str = st.session_state.get(f"_dl_ready_{slot}")
-    fname = st.session_state.get(f"_dl_fname_{slot}", "report.pptx")
-    if path_str and Path(path_str).exists():
-        st.download_button(
-            f"📥  Download PowerPoint",
-            data=Path(path_str).read_bytes(),
-            file_name=fname,
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            use_container_width=True,
-            key=key,
-        )
-
+_VIDEO_PREVIEW_LIMIT = 50 * 1024 * 1024
 
 LOGO_DIR = Path(__file__).parent / "Logo's"
 _LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
@@ -786,23 +724,13 @@ def competency_sections(
 
             current_video = st.session_state[video_key]
             if current_video is not None:
-                if isinstance(current_video, tuple) and len(current_video) == 3 and current_video[0] == "lazy":
-                    _, _vpath, vname = current_video
-                    _p = Path(_vpath)
-                    size_mb = _p.stat().st_size / (1024 * 1024) if _p.exists() else 0
-                    st.caption(f"Video: **{vname}** ({size_mb:.1f} MB)")
-                    if _p.exists() and _p.stat().st_size <= _VIDEO_PREVIEW_LIMIT:
-                        st.video(_p.read_bytes())
-                    else:
-                        st.info(t("too_large_preview", L, mb=size_mb))
+                vbytes, vname = current_video
+                size_mb = len(vbytes) / (1024 * 1024)
+                st.caption(f"Video: **{vname}** ({size_mb:.1f} MB)")
+                if len(vbytes) <= _VIDEO_PREVIEW_LIMIT:
+                    st.video(vbytes)
                 else:
-                    vbytes, vname = current_video
-                    size_mb = len(vbytes) / (1024 * 1024)
-                    st.caption(f"Video: **{vname}** ({size_mb:.1f} MB)")
-                    if len(vbytes) <= _VIDEO_PREVIEW_LIMIT:
-                        st.video(vbytes)
-                    else:
-                        st.info(t("too_large_preview", L, mb=size_mb))
+                    st.info(t("too_large_preview", L, mb=size_mb))
 
             st.markdown(f"**{t('rating', L)}:**")
             val = star_selector(var, key=f"{key_prefix}_{i}", default=defaults_stars[i] if i < len(defaults_stars) else 0.0)
@@ -903,8 +831,7 @@ def _collect_editor_state(key_prefix: str, n_vars: int):
     for i in range(n_vars):
         stars.append(st.session_state.get(f"{key_prefix}_{i}", 0.0))
         comments.append(st.session_state.get(f"{key_prefix}_{i}_comment", ""))
-        vid = st.session_state.get(f"{key_prefix}_{i}_video")
-        videos.append(storage.resolve_video(vid))
+        videos.append(st.session_state.get(f"{key_prefix}_{i}_video"))
     return stars, comments, videos
 
 
@@ -1185,18 +1112,21 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
             circ_crop_size = min(cw, ch) / zoom
             max_offset_x = max(0, int((cw - circ_crop_size) / 2))
             max_offset_y = max(0, int((ch - circ_crop_size) / 2))
+            # Clamp existing slider values when zoom changes
             ox_key = f"{state_key}_ox"
             oy_key = f"{state_key}_oy"
-            _clamped_ox = max(-max_offset_x, min(max_offset_x, st.session_state.get(ox_key, 0)))
-            _clamped_oy = max(-max_offset_y, min(max_offset_y, st.session_state.get(oy_key, 0)))
+            if ox_key in st.session_state:
+                st.session_state[ox_key] = max(-max_offset_x, min(max_offset_x, st.session_state[ox_key]))
+            if oy_key in st.session_state:
+                st.session_state[oy_key] = max(-max_offset_y, min(max_offset_y, st.session_state[oy_key]))
 
             offset_x = st.slider(
-                t("horizontal_pos", L), min_value=-max_offset_x, max_value=max_offset_x,
-                value=_clamped_ox, key=ox_key,
+                t("horizontal_pos", L), min_value=-max_offset_x, max_value=max_offset_x, value=0,
+                key=ox_key,
             ) if max_offset_x > 0 else 0
             offset_y = st.slider(
-                t("vertical_pos", L), min_value=-max_offset_y, max_value=max_offset_y,
-                value=_clamped_oy, key=oy_key,
+                t("vertical_pos", L), min_value=-max_offset_y, max_value=max_offset_y, value=0,
+                key=oy_key,
             ) if max_offset_y > 0 else 0
 
             ccx = cw / 2 + offset_x
@@ -1359,6 +1289,17 @@ if _pending_draft_id and st.session_state.get("_loaded_draft") != _pending_draft
         st.session_state["club_select"] = _pending_draft.get("club", "FC Den Bosch")
         st.session_state["lang_select"] = _pending_draft.get("language", "NL")
 
+# Same pre-load for "Continue Editing" on a received report
+_pending_recv_id = st.session_state.get("edit_received_id")
+if _pending_recv_id and st.session_state.get("_loaded_draft") != f"recv_{_pending_recv_id}":
+    _recv_meta = next(
+        (m for m in storage.list_received(username) if m.get("report_id") == _pending_recv_id),
+        None,
+    )
+    if _recv_meta:
+        st.session_state["club_select"] = _recv_meta.get("club", "FC Den Bosch")
+        st.session_state["lang_select"] = _recv_meta.get("language", "NL")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1454,14 +1395,17 @@ if page == "Dashboard":
 
         edit_mode:
           "draft"    – pure draft, load via edit_draft_id
-          "finished" – finished report, re-load PPTX into upload editor
+          "finished" – finished/shared report, re-load PPTX into upload editor
+          "received" – received report, load via edit_received_id
         """
         rid = meta["report_id"]
         c1, c2, c3 = st.columns([2, 2, 1])
         with c1:
             btn_key = f"cont_{prefix}_{rid}"
             if st.button(t("continue_editing", L), key=btn_key, type="primary", use_container_width=True):
-                if edit_mode == "finished":
+                if edit_mode == "received":
+                    st.session_state["edit_received_id"] = rid
+                elif edit_mode == "finished":
                     st.session_state["edit_finished_id"] = rid
                     st.session_state["_edit_finished_meta"] = meta
                     # Defer club/lang change to before widget render (next rerun)
@@ -1474,64 +1418,36 @@ if page == "Dashboard":
                 st.session_state.pop("_loaded_draft", None)
                 st.rerun()
         with c2:
-            _prep_key = f"_dl_prep_{prefix}_{rid}"
-            if st.session_state.get(_prep_key):
-                pptx_bytes = load_pptx_fn(username, rid)
-                if pptx_bytes:
-                    _fname = _build_pptx_fname(
+            pptx_bytes = load_pptx_fn(username, rid)
+            if pptx_bytes:
+                st.download_button(
+                    f"📥  {t('download_pptx', L)}", data=pptx_bytes,
+                    file_name=_build_pptx_fname(
                         meta.get("position", ""),
                         meta.get("player_name", ""),
-                    )
-                    st.download_button(
-                        f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                        file_name=_fname,
-                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                        key=f"dl_{prefix}_{rid}", use_container_width=True,
-                    )
-                    del pptx_bytes
-                else:
-                    st.caption("File not available.")
-                    st.session_state.pop(_prep_key, None)
-            else:
-                if st.button(f"📥  {t('download_pptx', L)}", key=f"prep_{prefix}_{rid}", use_container_width=True):
-                    st.session_state[_prep_key] = True
-                    st.rerun()
+                    ),
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    key=f"dl_{prefix}_{rid}", use_container_width=True,
+                )
         with c3:
             if st.button(t("delete", L), key=f"del_{prefix}_{rid}", use_container_width=True):
                 delete_fn(username, rid)
                 st.rerun()
 
-    # ── Collect all reports and deduplicate ──────────────────────────────────
+    # ── Collect all finished reports and split into categories ──────────────
     all_finished = [f for f in storage.list_finished(username) if _matches_filter(f)]
-    drafts = [d for d in storage.list_drafts(username) if _matches_filter(d)]
+    shared_finished = [f for f in all_finished if f.get("shared_to")]
+    truly_finished = [f for f in all_finished if not f.get("shared_to") and _all_stars_assigned(f)]
+    incomplete_finished = [f for f in all_finished if not f.get("shared_to") and not _all_stars_assigned(f)]
 
-    # Deduplicate: if the same report_id exists as both draft and finished,
-    # keep only the newest version.
-    seen_ids: set[str] = set()
-    unfinished_items: list[dict] = []
-    finished_items: list[dict] = []
-
-    # Finished reports that have all stars → Finished
-    # Finished reports without all stars → Unfinished
-    for f in all_finished:
-        rid = f["report_id"]
-        seen_ids.add(rid)
-        if _all_stars_assigned(f):
-            finished_items.append(f)
-        else:
-            unfinished_items.append(f)
-
-    # Drafts that aren't already represented in finished → Unfinished
-    for d in drafts:
-        if d["report_id"] not in seen_ids:
-            unfinished_items.append(d)
-
-    # ── Unfinished Reports: drafts + generated reports without all stars ──
+    # ── In Progress: drafts + finished reports without all stars ───────────
     st.subheader(f"📝  {t('in_progress', L)}")
-    if not unfinished_items:
+    drafts = [d for d in storage.list_drafts(username) if _matches_filter(d)]
+    in_progress = drafts + incomplete_finished
+    if not in_progress:
         st.caption(t("no_drafts", L))
     else:
-        for item in unfinished_items:
+        for item in in_progress:
             rid = item["report_id"]
             title = _report_title(item)
             ts_key = "updated_at" if "updated_at" in item else "finished_at"
@@ -1544,30 +1460,72 @@ if page == "Dashboard":
                 unsafe_allow_html=True,
             )
             if "updated_at" in item and "finished_at" not in item:
+                # Pure draft — load from drafts storage
                 _report_actions(item, "draft", lambda u, r: (storage.load_draft(u, r) or {}).get("upload_bytes"), storage.delete_draft, edit_mode="draft")
             else:
+                # Incomplete finished report
                 _report_actions(item, "incfin", storage.load_finished_pptx, storage.delete_finished, edit_mode="finished")
 
     st.markdown("---")
 
-    # ── Finished Reports: generated with all stars assigned ───────────────
+    # ── Finished Reports: all stars assigned, not shared ───────────────────
     st.subheader(f"✅  {t('finished_reports', L)}")
-    if not finished_items:
+    if not truly_finished:
         st.caption(t("no_finished", L))
     else:
-        for f in finished_items:
+        for f in truly_finished:
             rid = f["report_id"]
             title = _report_title(f)
-            shared_to = f.get("shared_to", [])
-            shared_info = f" · {t('shared_with', L)}: {', '.join(shared_to)}" if shared_to else ""
             st.markdown(
                 f"""<div class="report-card">
                 <h4>{title}</h4>
-                <div class="meta">{f['club']} ({f['language']}) · {t('finished_at', L)}: {_ts_str(f['finished_at'])}{shared_info}</div>
+                <div class="meta">{f['club']} ({f['language']}) · {t('finished_at', L)}: {_ts_str(f['finished_at'])}</div>
                 </div>""",
                 unsafe_allow_html=True,
             )
             _report_actions(f, "fin", storage.load_finished_pptx, storage.delete_finished, edit_mode="finished")
+
+    st.markdown("---")
+
+    # ── Shared Reports: finished reports that were shared ──────────────────
+    st.subheader(f"📤  {t('shared_reports', L)}")
+    if not shared_finished:
+        st.caption(t("no_shared", L))
+    else:
+        for f in shared_finished:
+            rid = f["report_id"]
+            title = _report_title(f)
+            shared_to_list = ", ".join(f.get("shared_to", []))
+            st.markdown(
+                f"""<div class="report-card">
+                <h4>{title}</h4>
+                <div class="meta">{f['club']} ({f['language']}) · {t('shared_with', L)}: {shared_to_list} · {_ts_str(f.get('shared_at', f['finished_at']))}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            _report_actions(f, "shared", storage.load_finished_pptx, storage.delete_finished, edit_mode="finished")
+
+    st.markdown("---")
+
+    # ── Received Reports ──────────────────────────────────────────────────
+    st.subheader(f"📨  {t('received_reports', L)}")
+    received = [r for r in storage.list_received(username) if _matches_filter(r)]
+    if not received:
+        st.caption(t("no_received", L))
+    else:
+        for r in received:
+            rid = r["report_id"]
+            title = _report_title(r)
+            shared_by = r.get("shared_by", "?")
+            shared_at = _ts_str(r.get("shared_at", 0))
+            st.markdown(
+                f"""<div class="report-card">
+                <h4>{title}</h4>
+                <div class="meta">{r.get('club','')} ({r.get('language','')}) · {t('shared_by', L)}: {shared_by} · {shared_at}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            _report_actions(r, "recv", storage.load_received_pptx, storage.delete_received, edit_mode="received")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1637,8 +1595,6 @@ elif page == "New Report":
         st.session_state["empty_prev_key"] = reset_key
         st.session_state.pop("active_report_id", None)
         st.session_state.pop("_loaded_draft", None)
-        st.session_state.pop("_dl_ready_new", None)
-        st.session_state.pop("_dl_fname_new", None)
 
     st.markdown("---")
     st.subheader(t("rate_each_competency", L))
@@ -1655,74 +1611,66 @@ elif page == "New Report":
     col_save, col_gen, col_share = st.columns(3)
     with col_save:
         if st.button(f"{t('save_draft', L)}", use_container_width=True):
-            try:
-                s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
-                with st.spinner(t("building_report", L)):
-                    snapshot = fill_template(
-                        template_cfg, s, c, v,
-                        player_data=st.session_state.get(NEW_PDATA_KEY),
-                        tm_stats=st.session_state.get(NEW_TM_KEY),
-                        player_photo=st.session_state.get("new_player_photo_full"),
-                        player_photo_circular=st.session_state.get("new_player_photo_circ"),
-                    )
-                snapshot_bytes = snapshot.getvalue()
-                rid = storage.save_draft(
-                    username,
-                    st.session_state.get("active_report_id"),
-                    template_name, club, lang, s, c, v,
-                    source="empty",
-                    upload_bytes=snapshot_bytes,
-                    upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
+            s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+            # Generate a PPTX snapshot so the draft can be resumed via Upload & Edit
+            with st.spinner(t("building_report", L)):
+                snapshot = fill_template(
+                    template_cfg, s, c, v,
                     player_data=st.session_state.get(NEW_PDATA_KEY),
                     tm_stats=st.session_state.get(NEW_TM_KEY),
-                    photo_full=st.session_state.get("new_player_photo_full"),
-                    photo_circular=st.session_state.get("new_player_photo_circ"),
+                    player_photo=st.session_state.get("new_player_photo_full"),
+                    player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
-                st.session_state["active_report_id"] = rid
-                st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
-            except Exception as exc:
-                st.error(f"Could not save draft. Please try again. ({exc})")
+            snapshot_bytes = snapshot.getvalue()
+            rid = storage.save_draft(
+                username,
+                st.session_state.get("active_report_id"),
+                template_name, club, lang, s, c, v,
+                source="empty",
+                upload_bytes=snapshot_bytes,
+                upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
+                player_data=st.session_state.get(NEW_PDATA_KEY),
+                tm_stats=st.session_state.get(NEW_TM_KEY),
+                photo_full=st.session_state.get("new_player_photo_full"),
+                photo_circular=st.session_state.get("new_player_photo_circ"),
+            )
+            st.session_state["active_report_id"] = rid
+            st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
     with col_gen:
         if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="empty_gen"):
-            try:
-                s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
-                with st.spinner(t("building_report", L)):
-                    output = fill_template(
-                        template_cfg, s, c, v,
-                        player_data=st.session_state.get(NEW_PDATA_KEY),
-                        tm_stats=st.session_state.get(NEW_TM_KEY),
-                        player_photo=st.session_state.get("new_player_photo_full"),
-                        player_photo_circular=st.session_state.get("new_player_photo_circ"),
-                    )
-                pptx_bytes = output.getvalue()
+            s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+            with st.spinner(t("building_report", L)):
+                output = fill_template(
+                    template_cfg, s, c, v,
+                    player_data=st.session_state.get(NEW_PDATA_KEY),
+                    tm_stats=st.session_state.get(NEW_TM_KEY),
+                    player_photo=st.session_state.get("new_player_photo_full"),
+                    player_photo_circular=st.session_state.get("new_player_photo_circ"),
+                )
+            pptx_bytes = output.getvalue()
 
-                rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
-                try:
-                    storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
-                                          player_name=_current_player_name(NEW_PDATA_KEY),
-                                          player_data=st.session_state.get(NEW_PDATA_KEY),
-                                          star_values=s, comments=c, video_data=v,
-                                          tm_stats=st.session_state.get(NEW_TM_KEY),
-                                          photo_full=st.session_state.get("new_player_photo_full"),
-                                          photo_circular=st.session_state.get("new_player_photo_circ"))
-                    st.session_state.pop("active_report_id", None)
-                except Exception as exc:
-                    st.warning(f"Report generated but could not be saved. ({exc})")
+            rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
+            storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
+                                  player_name=_current_player_name(NEW_PDATA_KEY),
+                                  player_data=st.session_state.get(NEW_PDATA_KEY),
+                                  star_values=s, comments=c, video_data=v,
+                                  tm_stats=st.session_state.get(NEW_TM_KEY),
+                                  photo_full=st.session_state.get("new_player_photo_full"),
+                                  photo_circular=st.session_state.get("new_player_photo_circ"))
+            st.session_state.pop("active_report_id", None)
 
-                _gen_fname = _pptx_filename(template_name, NEW_PDATA_KEY)
-                _stage_download(pptx_bytes, _gen_fname, slot="new")
-                del pptx_bytes, output; gc.collect()
-                st.success(t("report_ready", L))
-            except Exception as exc:
-                st.error(f"Could not generate PowerPoint. ({exc})")
+            st.success(t("report_ready", L))
+            st.download_button(
+                f"📥  {t('download_pptx', L)}", data=pptx_bytes,
+                file_name=_pptx_filename(template_name, NEW_PDATA_KEY),
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                use_container_width=True,
+            )
 
     with col_share:
         if st.button(f"{t('share', L)}", use_container_width=True, key="empty_share"):
             st.session_state["_share_pending"] = "empty"
-
-    # ── Download button (persists after Generate, reads from disk) ────
-    _render_download_btn(slot="new", key="empty_download_persist")
 
     # ── Share dialog ────────────────────────────────────────────────────────
     if st.session_state.get("_share_pending") == "empty":
@@ -1736,7 +1684,6 @@ elif page == "New Report":
             c_send, c_cancel = st.columns(2)
             with c_send:
                 if st.button(t("send_report", L), type="primary", use_container_width=True, key="empty_share_send"):
-                  try:
                     s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
                     with st.spinner(t("building_report", L)):
                         output = fill_template(
@@ -1749,9 +1696,24 @@ elif page == "New Report":
                     pptx_bytes = output.getvalue()
                     rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
                     player = _current_player_name(NEW_PDATA_KEY) or template_name
-                    pptx_fname = _build_pptx_fname(template_name, player)
-
-                    # Save as finished for the sender
+                    storage.share_report(
+                        from_username=username,
+                        to_username=sel_scout,
+                        report_id=rid,
+                        position=template_name,
+                        club=club,
+                        language=lang,
+                        pptx_bytes=pptx_bytes,
+                        player_name=_current_player_name(NEW_PDATA_KEY),
+                        star_values=s,
+                        comments=c,
+                        video_data=v,
+                        player_data=st.session_state.get(NEW_PDATA_KEY),
+                        tm_stats=st.session_state.get(NEW_TM_KEY),
+                        photo_full=st.session_state.get("new_player_photo_full"),
+                        photo_circular=st.session_state.get("new_player_photo_circ"),
+                    )
+                    # Also save as finished + mark shared
                     storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                           player_name=_current_player_name(NEW_PDATA_KEY),
                                           player_data=st.session_state.get(NEW_PDATA_KEY),
@@ -1760,30 +1722,25 @@ elif page == "New Report":
                                           photo_full=st.session_state.get("new_player_photo_full"),
                                           photo_circular=st.session_state.get("new_player_photo_circ"))
                     storage.mark_shared(username, rid, sel_scout)
-
-                    # Email the PPTX to the selected scout
+                    st.session_state.pop("_share_pending", None)
+                    # Auto-send notification emails (receiver gets platform link)
                     try:
-                        from email_utils import send_share_email
+                        from email_utils import send_share_emails
+                        sender_email = all_users.get(username, {}).get("email", "")
                         receiver_email = all_users.get(sel_scout, {}).get("email", "")
-                        ok, err = send_share_email(
+                        mail_results = send_share_emails(
                             sender_name=username,
+                            sender_email=sender_email,
                             receiver_name=sel_scout,
                             receiver_email=receiver_email,
                             player_name=player,
-                            pptx_bytes=pptx_bytes,
-                            pptx_filename=pptx_fname,
                         )
-                        if not ok and err and "no " not in err:
-                            st.warning(f"Email not sent: {err}")
+                        for side, (ok, err) in mail_results.items():
+                            if not ok and err and "no " not in err:
+                                st.warning(f"Email to {side} not sent: {err}")
                     except Exception as exc:
                         st.warning(f"Email sending failed: {exc}")
-
-                    del pptx_bytes, output; gc.collect()
-                    st.session_state.pop("_share_pending", None)
                     st.success(t("report_shared", L).format(name=sel_scout))
-                  except Exception as exc:
-                    st.error(f"Could not share report. ({exc})")
-                    st.session_state.pop("_share_pending", None)
             with c_cancel:
                 if st.button("Cancel", use_container_width=True, key="empty_share_cancel"):
                     st.session_state.pop("_share_pending", None)
@@ -1806,36 +1763,25 @@ elif page == "Upload & Edit":
     # ── Auto-load a draft PPTX when coming from "Continue Editing" ───────────
     _edit_draft_id = st.session_state.pop("edit_draft_id", None)
     if _edit_draft_id and st.session_state.get("_loaded_draft") != _edit_draft_id:
-      try:
         draft = storage.load_draft(username, _edit_draft_id)
         if draft and draft.get("upload_bytes"):
             file_bytes = draft["upload_bytes"]
             with st.spinner(t("checking", L)):
                 check_result = check_template_compatibility(io.BytesIO(file_bytes))
-            check_result["compatible"] = True
-            check_result["issues"] = []
             fname = draft.get("upload_filename") or f"Draft_{draft.get('position','report')}.pptx"
             st.session_state["upload_file_key"]     = f"draft_{_edit_draft_id}"
-            st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(file_bytes, f"draft_{_edit_draft_id}")
+            st.session_state["upload_bytes"]        = file_bytes
             st.session_state["upload_filename"]     = fname
             st.session_state["upload_check_result"] = check_result
             st.session_state["upload_active_report_id"] = _edit_draft_id
-            draft_stars = draft.get("star_values") or check_result.get("current_star_values", [])
-            draft_comments = draft.get("comments") or check_result.get("current_comments", [])
-            _stored_vids = draft.get("video_data") or []
-            _pptx_vids = check_result.get("current_videos") or []
-            _n_vids = max(len(_stored_vids), len(_pptx_vids))
-            draft_videos = [
-                (_stored_vids[i] if i < len(_stored_vids) and _stored_vids[i] else None)
-                or (_pptx_vids[i] if i < len(_pptx_vids) and _pptx_vids[i] else None)
-                for i in range(_n_vids)
-            ]
-            for i, val in enumerate(draft_stars):
+            for i, val in enumerate(check_result.get("current_star_values", [])):
                 st.session_state[f"upload_{i}"] = float(val)
-            for i, cmt in enumerate(draft_comments):
+            for i, cmt in enumerate(check_result.get("current_comments", [])):
                 st.session_state[f"upload_{i}_comment"] = cmt or ""
-            for i, vid in enumerate(draft_videos):
+            for i, vid in enumerate(check_result.get("current_videos", [])):
                 st.session_state[f"upload_{i}_video"] = vid
+            # Restore player data & tm_stats from draft into the
+            # upload-specific slots, and clear any stale cached card inputs.
             _clear_player_card_inputs("upload_sci_card")
             _clear_stats_card_inputs("upload_tm_card")
             if draft.get("player_data"):
@@ -1846,47 +1792,88 @@ elif page == "Upload & Edit":
                 st.session_state[UPLOAD_TM_KEY] = draft["tm_stats"]
             else:
                 st.session_state.pop(UPLOAD_TM_KEY, None)
+            # Restore player photos
             if draft.get("photo_full"):
                 st.session_state["upload_player_photo_full"] = draft["photo_full"]
             if draft.get("photo_circular"):
                 st.session_state["upload_player_photo_circ"] = draft["photo_circular"]
             st.session_state["_loaded_draft"] = _edit_draft_id
-            del draft, file_bytes; gc.collect()
-      except Exception as exc:
-        st.error(f"Could not load draft for editing. ({exc})")
+
+    # ── Auto-load a received report PPTX when coming from "Continue Editing" ─
+    _edit_recv_id = st.session_state.pop("edit_received_id", None)
+    if _edit_recv_id and st.session_state.get("_loaded_draft") != f"recv_{_edit_recv_id}":
+        recv = storage.load_received(username, _edit_recv_id)
+        if recv and recv.get("pptx_bytes"):
+            recv_bytes = recv["pptx_bytes"]
+            with st.spinner(t("checking", L)):
+                check_result = check_template_compatibility(io.BytesIO(recv_bytes))
+            fname = f"Received_{recv.get('player_name', 'report')}.pptx"
+            st.session_state["upload_file_key"]     = f"recv_{_edit_recv_id}"
+            st.session_state["upload_bytes"]        = recv_bytes
+            st.session_state["upload_filename"]     = fname
+            st.session_state["upload_check_result"] = check_result
+            # No active_report_id — treat this as a fresh editing session so
+            # Save Draft creates a new draft owned by the current user.
+            st.session_state.pop("upload_active_report_id", None)
+
+            # Prefer the rich state stored in the share meta (stars, comments,
+            # videos) over what's parsed out of the PPTX — the meta has the
+            # ORIGINAL uploaded videos, which the PPTX strips.
+            recv_stars = recv.get("star_values") or check_result.get("current_star_values", [])
+            recv_comments = recv.get("comments") or check_result.get("current_comments", [])
+            recv_videos = recv.get("video_data") or check_result.get("current_videos", [])
+
+            for i, val in enumerate(recv_stars):
+                st.session_state[f"upload_{i}"] = float(val)
+            for i, cmt in enumerate(recv_comments):
+                st.session_state[f"upload_{i}_comment"] = cmt or ""
+            for i, vid in enumerate(recv_videos):
+                st.session_state[f"upload_{i}_video"] = vid
+
+            # Restore rich player/stats data into upload-specific slots
+            _clear_player_card_inputs("upload_sci_card")
+            _clear_stats_card_inputs("upload_tm_card")
+            if recv.get("player_data"):
+                st.session_state[UPLOAD_PDATA_KEY] = recv["player_data"]
+            elif recv.get("player_name"):
+                st.session_state[UPLOAD_PDATA_KEY] = {"name": recv["player_name"]}
+            else:
+                st.session_state.pop(UPLOAD_PDATA_KEY, None)
+            if recv.get("tm_stats"):
+                st.session_state[UPLOAD_TM_KEY] = recv["tm_stats"]
+            else:
+                st.session_state.pop(UPLOAD_TM_KEY, None)
+            # Restore player photos
+            if recv.get("photo_full"):
+                st.session_state["upload_player_photo_full"] = recv["photo_full"]
+            if recv.get("photo_circular"):
+                st.session_state["upload_player_photo_circ"] = recv["photo_circular"]
+
+            st.session_state["_loaded_draft"] = f"recv_{_edit_recv_id}"
 
     # ── Auto-load a finished report when coming from "Continue Editing" ──────
     _edit_fin_id = st.session_state.pop("edit_finished_id", None)
     _edit_fin_meta = st.session_state.pop("_edit_finished_meta", None)
     if _edit_fin_id and st.session_state.get("_loaded_draft") != f"fin_{_edit_fin_id}":
-      try:
         fin = storage.load_finished(username, _edit_fin_id)
         if fin and fin.get("pptx_bytes"):
             fin_bytes = fin["pptx_bytes"]
             with st.spinner(t("checking", L)):
                 check_result = check_template_compatibility(io.BytesIO(fin_bytes))
-            check_result["compatible"] = True
-            check_result["issues"] = []
             fname = _build_pptx_fname(
                 fin.get("position", ""),
                 fin.get("player_name", ""),
             )
             st.session_state["upload_file_key"]     = f"finished_{_edit_fin_id}"
-            st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(fin_bytes, f"fin_{_edit_fin_id}")
+            st.session_state["upload_bytes"]        = fin_bytes
             st.session_state["upload_filename"]     = fname
             st.session_state["upload_check_result"] = check_result
             st.session_state["upload_active_report_id"] = _edit_fin_id
 
+            # Prefer the rich state stored in meta over PPTX-parsed values
             fin_stars = fin.get("star_values") or check_result.get("current_star_values", [])
             fin_comments = fin.get("comments") or check_result.get("current_comments", [])
-            _stored_vids = fin.get("video_data") or []
-            _pptx_vids = check_result.get("current_videos") or []
-            n_vids = max(len(_stored_vids), len(_pptx_vids))
-            fin_videos = [
-                (_stored_vids[i] if i < len(_stored_vids) and _stored_vids[i] else None)
-                or (_pptx_vids[i] if i < len(_pptx_vids) and _pptx_vids[i] else None)
-                for i in range(n_vids)
-            ]
+            fin_videos = fin.get("video_data") or check_result.get("current_videos", [])
 
             for i, val in enumerate(fin_stars):
                 st.session_state[f"upload_{i}"] = float(val)
@@ -1895,6 +1882,7 @@ elif page == "Upload & Edit":
             for i, vid in enumerate(fin_videos):
                 st.session_state[f"upload_{i}_video"] = vid
 
+            # Restore player/stats data
             _clear_player_card_inputs("upload_sci_card")
             _clear_stats_card_inputs("upload_tm_card")
             if fin.get("player_data"):
@@ -1905,15 +1893,13 @@ elif page == "Upload & Edit":
                 st.session_state[UPLOAD_TM_KEY] = fin["tm_stats"]
             else:
                 st.session_state.pop(UPLOAD_TM_KEY, None)
+            # Restore photos
             if fin.get("photo_full"):
                 st.session_state["upload_player_photo_full"] = fin["photo_full"]
             if fin.get("photo_circular"):
                 st.session_state["upload_player_photo_circ"] = fin["photo_circular"]
 
             st.session_state["_loaded_draft"] = f"fin_{_edit_fin_id}"
-            del fin, fin_bytes; gc.collect()
-      except Exception as exc:
-        st.error(f"Could not load report for editing. ({exc})")
 
     st.caption(t("upload_caption", L))
 
@@ -1926,10 +1912,8 @@ elif page == "Upload & Edit":
             with st.spinner(t("checking", L)):
                 check_result = check_template_compatibility(io.BytesIO(file_bytes))
             st.session_state["upload_file_key"]     = file_key
-            st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(file_bytes, f"manual_{file_key[:20]}")
+            st.session_state["upload_bytes"]        = file_bytes
             st.session_state["upload_filename"]     = uploaded.name
-            st.session_state.pop("_dl_ready_upload", None)
-            st.session_state.pop("_dl_fname_upload", None)
             st.session_state["upload_check_result"] = check_result
             for i, val in enumerate(check_result.get("current_star_values", [])):
                 st.session_state[f"upload_{i}"] = float(val)
@@ -1973,22 +1957,23 @@ elif page == "Upload & Edit":
             f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
-        # ── SciSports player search (Upload & Edit) ────────────────────
+        # ── Player info section for Upload & Edit (read-only, no search) ─────
         st.markdown("---")
-        upload_player_data = _scisports_section(
-            key_prefix="upload_sci",
-            state_key=UPLOAD_PDATA_KEY,
-            tm_state_key=UPLOAD_TM_KEY,
-        )
-
-        # ── Transfermarkt stats (Upload & Edit) ──────────────────────
-        _up_pname = (upload_player_data or {}).get("name", "")
-        _up_pclub = (upload_player_data or {}).get("club", "")
-        if _up_pname:
-            _transfermarkt_section(
-                _up_pname, _up_pclub,
-                key_prefix="upload_tm", state_key=UPLOAD_TM_KEY,
+        upload_player_data = st.session_state.get(UPLOAD_PDATA_KEY)
+        if upload_player_data:
+            _render_player_card(
+                upload_player_data, editable=True,
+                key_prefix="upload_sci_card", state_key=UPLOAD_PDATA_KEY,
             )
+            _up_pname = upload_player_data.get("name", "")
+            _up_pclub = upload_player_data.get("club", "")
+            if _up_pname:
+                tm_stats = st.session_state.get(UPLOAD_TM_KEY)
+                if tm_stats:
+                    _render_stats_card(
+                        tm_stats, _up_pname, editable=True,
+                        key_prefix="upload_tm_card", state_key=UPLOAD_TM_KEY,
+                    )
 
         # ── Player photo ──────────────────────────────────────────────
         _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
@@ -2011,19 +1996,17 @@ elif page == "Upload & Edit":
         col_save, col_gen, col_share = st.columns(3)
         with col_save:
             if st.button(f"{t('save_draft', L)}", use_container_width=True, key="upload_save"):
-              try:
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
-                _upath = _get_upload_path()
+                # Generate updated PPTX snapshot for the draft
                 with st.spinner(t("filling", L)):
                     _snap = fill_from_bytes(
-                        _upath, template_cfg, s, c, v,
+                        st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
                 _snap_bytes = _snap.getvalue()
-                del _snap; gc.collect()
                 rid = storage.save_draft(
                     username,
                     st.session_state.get("upload_active_report_id"),
@@ -2038,58 +2021,48 @@ elif page == "Upload & Edit":
                 )
                 st.session_state["upload_active_report_id"] = rid
                 st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
-              except Exception as exc:
-                st.error(f"Could not save draft. Please try again. ({exc})")
 
         with col_gen:
             if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="upload_gen"):
-              try:
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
-                _upath = _get_upload_path()
                 with st.spinner(t("filling", L)):
                     output = fill_from_bytes(
-                        _upath, template_cfg, s, c, v,
+                        st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
                 pptx_bytes = output.getvalue()
-                del output; gc.collect()
                 pos = matched_name or "Unknown"
 
                 rid = st.session_state.get("upload_active_report_id") or storage.save_draft(
                     username, None, pos, detected_club, detected_lang, s, c, v,
                     source="upload",
-                    upload_bytes=_get_upload_bytes(),
+                    upload_bytes=st.session_state.get("upload_bytes"),
                     upload_filename=st.session_state.get("upload_filename"),
                     player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                 )
-                try:
-                    storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
-                                          player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                          player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                          star_values=s, comments=c, video_data=v,
-                                          tm_stats=st.session_state.get(UPLOAD_TM_KEY),
-                                          photo_full=st.session_state.get("upload_player_photo_full"),
-                                          photo_circular=st.session_state.get("upload_player_photo_circ"))
-                    st.session_state.pop("upload_active_report_id", None)
-                except Exception as exc:
-                    st.warning(f"Report generated but could not be saved. ({exc})")
+                storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
+                                      player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                      player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                                      star_values=s, comments=c, video_data=v,
+                                      tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                                      photo_full=st.session_state.get("upload_player_photo_full"),
+                                      photo_circular=st.session_state.get("upload_player_photo_circ"))
+                st.session_state.pop("upload_active_report_id", None)
 
-                _gen_fname_u = _pptx_filename(pos, UPLOAD_PDATA_KEY)
-                _stage_download(pptx_bytes, _gen_fname_u, slot="upload")
-                del pptx_bytes; gc.collect()
                 st.success(t("done", L))
-              except Exception as exc:
-                st.error(f"Could not generate PowerPoint. ({exc})")
+                st.download_button(
+                    f"📥  {t('download_pptx', L)}", data=pptx_bytes,
+                    file_name=_pptx_filename(pos, UPLOAD_PDATA_KEY),
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    use_container_width=True,
+                )
 
         with col_share:
             if st.button(f"{t('share', L)}", use_container_width=True, key="upload_share"):
                 st.session_state["_share_pending"] = "upload"
-
-        # ── Download button (persists after Generate, reads from disk) ─
-        _render_download_btn(slot="upload", key="upload_download_persist")
 
         # ── Share dialog ────────────────────────────────────────────────────
         if st.session_state.get("_share_pending") == "upload":
@@ -2103,59 +2076,66 @@ elif page == "Upload & Edit":
                 c_send, c_cancel = st.columns(2)
                 with c_send:
                     if st.button(t("send_report", L), type="primary", use_container_width=True, key="upload_share_send"):
-                      try:
                         s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
-                        pos = matched_name or "Unknown"
-                        rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
-                        player = _current_player_name(UPLOAD_PDATA_KEY) or pos
-                        pptx_fname = _build_pptx_fname(pos, player)
-
-                        # Always generate fresh PPTX with current state
-                        _upath = _get_upload_path()
                         with st.spinner(t("filling", L)):
                             output = fill_from_bytes(
-                                _upath, template_cfg, s, c, v,
+                                st.session_state["upload_bytes"], template_cfg, s, c, v,
                                 player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                                 tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                                 player_photo=st.session_state.get("upload_player_photo_full"),
                                 player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                             )
                         pptx_bytes = output.getvalue()
-                        del output; gc.collect()
-
-                        # Save as finished for the sender
+                        pos = matched_name or "Unknown"
+                        rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
+                        player = _current_player_name(UPLOAD_PDATA_KEY) or pos
+                        storage.share_report(
+                            from_username=username,
+                            to_username=sel_scout,
+                            report_id=rid,
+                            position=pos,
+                            club=detected_club,
+                            language=detected_lang,
+                            pptx_bytes=pptx_bytes,
+                            player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                            star_values=s,
+                            comments=c,
+                            video_data=v,
+                            player_data=st.session_state.get(UPLOAD_PDATA_KEY),
+                            tm_stats=st.session_state.get(UPLOAD_TM_KEY),
+                            photo_full=st.session_state.get("upload_player_photo_full"),
+                            photo_circular=st.session_state.get("upload_player_photo_circ"),
+                        )
+                        # Also save as finished + mark shared
                         storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                               player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                               player_data=st.session_state.get(UPLOAD_PDATA_KEY),
-                                              star_values=s, comments=c, video_data=v,
+                                              star_values=s,
+                                              comments=c,
+                                              video_data=v,
                                               tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                                               photo_full=st.session_state.get("upload_player_photo_full"),
                                               photo_circular=st.session_state.get("upload_player_photo_circ"))
                         storage.mark_shared(username, rid, sel_scout)
-
-                        # Email the PPTX to the selected scout
+                        st.session_state.pop("_share_pending", None)
+                        # Auto-send notification emails (receiver gets platform link)
                         try:
-                            from email_utils import send_share_email
+                            from email_utils import send_share_emails
+                            sender_email = all_users.get(username, {}).get("email", "")
                             receiver_email = all_users.get(sel_scout, {}).get("email", "")
-                            ok, err = send_share_email(
+                            mail_results = send_share_emails(
                                 sender_name=username,
+                                sender_email=sender_email,
                                 receiver_name=sel_scout,
                                 receiver_email=receiver_email,
                                 player_name=player,
-                                pptx_bytes=pptx_bytes,
-                                pptx_filename=pptx_fname,
                             )
-                            if not ok and err and "no " not in err:
-                                st.warning(f"Email not sent: {err}")
+                            for side, (ok, err) in mail_results.items():
+                                if not ok and err and "no " not in err:
+                                    st.warning(f"Email to {side} not sent: {err}")
                         except Exception as exc:
                             st.warning(f"Email sending failed: {exc}")
-
-                        del pptx_bytes; gc.collect()
-                        st.session_state.pop("_share_pending", None)
                         st.success(t("report_shared", L).format(name=sel_scout))
-                      except Exception as exc:
-                        st.error(f"Could not share report. ({exc})")
-                        st.session_state.pop("_share_pending", None)
                 with c_cancel:
                     if st.button("Cancel", use_container_width=True, key="upload_share_cancel"):
                         st.session_state.pop("_share_pending", None)
