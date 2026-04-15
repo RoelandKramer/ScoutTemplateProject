@@ -85,7 +85,15 @@ def _fetch_page(url: str) -> BeautifulSoup:
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                ],
+            )
             context = browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -93,22 +101,46 @@ def _fetch_page(url: str) -> BeautifulSoup:
                     "Chrome/131.0.0.0 Safari/537.36"
                 ),
                 locale="en-US",
+                viewport={"width": 1920, "height": 1080},
+                java_script_enabled=True,
+            )
+            # Remove the webdriver flag that bots are detected by
+            context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
             page = context.new_page()
 
             if stealth_sync is not None:
                 stealth_sync(page)
 
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            # Give JS a moment to render dynamic content
-            page.wait_for_timeout(2000)
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            # Wait for JS rendering + Cloudflare challenge resolution
+            page.wait_for_timeout(3000)
 
             html = page.content()
+            title = page.title()
             browser.close()
 
-            # Check if we got a block page
-            if "Access Denied" in html or "blocked" in html.lower()[:500]:
-                raise TmBlockedError("Transfermarkt blocked the request.")
+            # Check for explicit block pages (Cloudflare, WAF)
+            block_signals = [
+                "<title>Access Denied</title>",
+                "<title>403 Forbidden</title>",
+                "<title>Just a moment...</title>",  # Cloudflare challenge
+                "Attention Required! | Cloudflare",
+            ]
+            html_lower = html.lower()
+            for signal in block_signals:
+                if signal.lower() in html_lower:
+                    raise TmBlockedError(
+                        f"Transfermarkt blocked the request (page title: {title!r})."
+                    )
+
+            # If we got a nearly empty page, something went wrong
+            if len(html) < 1000:
+                raise TmBlockedError(
+                    f"Page too small ({len(html)} bytes), likely blocked. "
+                    f"Title: {title!r}"
+                )
 
             return BeautifulSoup(html, "lxml")
     except TmBlockedError:
