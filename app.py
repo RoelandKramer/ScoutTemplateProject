@@ -1861,7 +1861,14 @@ elif page == "Upload & Edit":
             st.session_state["upload_active_report_id"] = _edit_draft_id
             draft_stars = draft.get("star_values") or check_result.get("current_star_values", [])
             draft_comments = draft.get("comments") or check_result.get("current_comments", [])
-            draft_videos = draft.get("video_data") or check_result.get("current_videos", [])
+            _stored_vids = draft.get("video_data") or []
+            _pptx_vids = check_result.get("current_videos") or []
+            _n_vids = max(len(_stored_vids), len(_pptx_vids))
+            draft_videos = [
+                (_stored_vids[i] if i < len(_stored_vids) and _stored_vids[i] else None)
+                or (_pptx_vids[i] if i < len(_pptx_vids) and _pptx_vids[i] else None)
+                for i in range(_n_vids)
+            ]
             for i, val in enumerate(draft_stars):
                 st.session_state[f"upload_{i}"] = float(val)
             for i, cmt in enumerate(draft_comments):
@@ -1907,7 +1914,14 @@ elif page == "Upload & Edit":
 
             recv_stars = recv.get("star_values") or check_result.get("current_star_values", [])
             recv_comments = recv.get("comments") or check_result.get("current_comments", [])
-            recv_videos = recv.get("video_data") or check_result.get("current_videos", [])
+            _stored_vids = recv.get("video_data") or []
+            _pptx_vids = check_result.get("current_videos") or []
+            _n_vids = max(len(_stored_vids), len(_pptx_vids))
+            recv_videos = [
+                (_stored_vids[i] if i < len(_stored_vids) and _stored_vids[i] else None)
+                or (_pptx_vids[i] if i < len(_pptx_vids) and _pptx_vids[i] else None)
+                for i in range(_n_vids)
+            ]
 
             for i, val in enumerate(recv_stars):
                 st.session_state[f"upload_{i}"] = float(val)
@@ -1962,7 +1976,14 @@ elif page == "Upload & Edit":
 
             fin_stars = fin.get("star_values") or check_result.get("current_star_values", [])
             fin_comments = fin.get("comments") or check_result.get("current_comments", [])
-            fin_videos = fin.get("video_data") or check_result.get("current_videos", [])
+            _stored_vids = fin.get("video_data") or []
+            _pptx_vids = check_result.get("current_videos") or []
+            n_vids = max(len(_stored_vids), len(_pptx_vids))
+            fin_videos = [
+                (_stored_vids[i] if i < len(_stored_vids) and _stored_vids[i] else None)
+                or (_pptx_vids[i] if i < len(_pptx_vids) and _pptx_vids[i] else None)
+                for i in range(n_vids)
+            ]
 
             for i, val in enumerate(fin_stars):
                 st.session_state[f"upload_{i}"] = float(val)
