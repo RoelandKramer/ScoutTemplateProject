@@ -1029,6 +1029,15 @@ def _transfermarkt_section(
                 st.warning(t("tm_not_found", L))
         except TmBlockedError:
             st.warning(t("tm_blocked", L))
+            # Store empty stats so the editable card appears
+            _clear_stats_card_inputs(f"{key_prefix}_card")
+            st.session_state[state_key] = {
+                "season_matches": 0, "season_minutes": 0,
+                "season_goals": 0, "season_assists": 0,
+                "career_matches": 0, "career_minutes": 0,
+                "career_goals": 0, "career_assists": 0,
+                "tm_url": "",
+            }
         except Exception as exc:
             st.error(f"Transfermarkt error: {exc}")
 
