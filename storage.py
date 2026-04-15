@@ -310,10 +310,9 @@ def load_finished(username: str, report_id: str) -> dict | None:
         return None
     meta = json.loads(p.read_text(encoding="utf-8"))
 
-    # Store PPTX *path* instead of reading bytes eagerly — the caller
-    # can read it on demand via load_finished_pptx().
     pptx_path = finished / f"{report_id}.pptx"
     if pptx_path.exists():
+        meta["pptx_path"] = str(pptx_path)
         meta["pptx_bytes"] = pptx_path.read_bytes()
 
     # Return lazy path references for videos that exist on disk.

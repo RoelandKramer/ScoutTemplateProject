@@ -23,7 +23,38 @@ st.set_page_config(page_title="Scouting Rapport Pro+", page_icon="", layout="wid
 # (Flag CSS is emitted from _render_flags() — AFTER _apply_theme() — so it
 #  can override the theme's global button styles with higher specificity.)
 
+import gc
+
 _VIDEO_PREVIEW_LIMIT = 150 * 1024 * 1024
+_UPLOAD_DIR = Path(__file__).parent / "data" / "_uploads"
+_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _save_upload_to_disk(pptx_bytes: bytes, label: str = "upload") -> str:
+    """Write PPTX bytes to a temp file and return the path (string).
+
+    This keeps the big blob OFF session_state, saving hundreds of MB of RAM.
+    """
+    p = _UPLOAD_DIR / f"{label}.pptx"
+    p.write_bytes(pptx_bytes)
+    return str(p)
+
+
+def _get_upload_path() -> str | None:
+    """Return the on-disk path for the current upload, or None."""
+    p = st.session_state.get("_upload_pptx_path")
+    if p and Path(p).exists():
+        return p
+    return None
+
+
+def _get_upload_bytes() -> bytes | None:
+    """Read the current upload PPTX from disk (only when actually needed)."""
+    p = _get_upload_path()
+    if p:
+        return Path(p).read_bytes()
+    return None
+
 
 LOGO_DIR = Path(__file__).parent / "Logo's"
 _LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
@@ -1426,17 +1457,27 @@ if page == "Dashboard":
                 st.session_state.pop("_loaded_draft", None)
                 st.rerun()
         with c2:
-            pptx_bytes = load_pptx_fn(username, rid)
-            if pptx_bytes:
-                st.download_button(
-                    f"📥  {t('download_pptx', L)}", data=pptx_bytes,
-                    file_name=_build_pptx_fname(
-                        meta.get("position", ""),
-                        meta.get("player_name", ""),
-                    ),
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    key=f"dl_{prefix}_{rid}", use_container_width=True,
-                )
+            _prep_key = f"_dl_ready_{prefix}_{rid}"
+            if st.session_state.get(_prep_key):
+                pptx_bytes = load_pptx_fn(username, rid)
+                if pptx_bytes:
+                    st.download_button(
+                        f"📥  {t('download_pptx', L)}", data=pptx_bytes,
+                        file_name=_build_pptx_fname(
+                            meta.get("position", ""),
+                            meta.get("player_name", ""),
+                        ),
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        key=f"dl_{prefix}_{rid}", use_container_width=True,
+                    )
+                    del pptx_bytes
+                else:
+                    st.caption("File not available.")
+                    st.session_state.pop(_prep_key, None)
+            else:
+                if st.button(f"📥  {t('download_pptx', L)}", key=f"prep_{prefix}_{rid}", use_container_width=True):
+                    st.session_state[_prep_key] = True
+                    st.rerun()
         with c3:
             if st.button(t("delete", L), key=f"del_{prefix}_{rid}", use_container_width=True):
                 delete_fn(username, rid)
@@ -1603,7 +1644,7 @@ elif page == "New Report":
         st.session_state["empty_prev_key"] = reset_key
         st.session_state.pop("active_report_id", None)
         st.session_state.pop("_loaded_draft", None)
-        st.session_state.pop("_generated_pptx", None)
+        st.session_state.pop("_generated_dl_path", None)
         st.session_state.pop("_generated_fname", None)
 
     st.markdown("---")
@@ -1676,7 +1717,11 @@ elif page == "New Report":
                 except Exception as exc:
                     st.warning(f"Report generated but could not be saved. ({exc})")
 
-                st.session_state["_generated_pptx"] = pptx_bytes
+                _dl_path = Path("data") / username / "_download.pptx"
+                _dl_path.parent.mkdir(parents=True, exist_ok=True)
+                _dl_path.write_bytes(pptx_bytes)
+                del pptx_bytes, output; gc.collect()
+                st.session_state["_generated_dl_path"] = str(_dl_path)
                 st.session_state["_generated_fname"] = _pptx_filename(template_name, NEW_PDATA_KEY)
                 st.success(t("report_ready", L))
             except Exception as exc:
@@ -1686,16 +1731,25 @@ elif page == "New Report":
         if st.button(f"{t('share', L)}", use_container_width=True, key="empty_share"):
             st.session_state["_share_pending"] = "empty"
 
-    # ── Persistent download button (survives reruns) ────────────────────────
-    if st.session_state.get("_generated_pptx"):
-        st.download_button(
-            f"📥  {t('download_pptx', L)}",
-            data=st.session_state["_generated_pptx"],
-            file_name=st.session_state.get("_generated_fname", "report.pptx"),
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            use_container_width=True,
-            key="empty_download_persist",
-        )
+    # ── Persistent download button (reads from disk only on-demand) ─
+    _dl_path = st.session_state.get("_generated_dl_path")
+    if _dl_path and Path(_dl_path).exists():
+        _dl_col, _clr_col = st.columns([3, 1])
+        with _dl_col:
+            st.download_button(
+                f"📥  {t('download_pptx', L)}",
+                data=Path(_dl_path).read_bytes(),
+                file_name=st.session_state.get("_generated_fname", "report.pptx"),
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                use_container_width=True,
+                key="empty_download_persist",
+            )
+        with _clr_col:
+            if st.button("✖", key="empty_clear_dl", help="Remove download from memory"):
+                st.session_state.pop("_generated_dl_path", None)
+                st.session_state.pop("_generated_fname", None)
+                gc.collect()
+                st.rerun()
 
     # ── Share dialog ────────────────────────────────────────────────────────
     if st.session_state.get("_share_pending") == "empty":
@@ -1746,9 +1800,9 @@ elif page == "New Report":
                                           tm_stats=st.session_state.get(NEW_TM_KEY),
                                           photo_full=st.session_state.get("new_player_photo_full"),
                                           photo_circular=st.session_state.get("new_player_photo_circ"))
+                    del pptx_bytes, output; gc.collect()
                     storage.mark_shared(username, rid, sel_scout)
                     st.session_state.pop("_share_pending", None)
-                    # Auto-send notification emails (receiver gets platform link)
                     try:
                         from email_utils import send_share_emails
                         sender_email = all_users.get(username, {}).get("email", "")
@@ -1801,7 +1855,7 @@ elif page == "Upload & Edit":
             check_result["issues"] = []
             fname = draft.get("upload_filename") or f"Draft_{draft.get('position','report')}.pptx"
             st.session_state["upload_file_key"]     = f"draft_{_edit_draft_id}"
-            st.session_state["upload_bytes"]        = file_bytes
+            st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(file_bytes, f"draft_{_edit_draft_id}")
             st.session_state["upload_filename"]     = fname
             st.session_state["upload_check_result"] = check_result
             st.session_state["upload_active_report_id"] = _edit_draft_id
@@ -1829,6 +1883,7 @@ elif page == "Upload & Edit":
             if draft.get("photo_circular"):
                 st.session_state["upload_player_photo_circ"] = draft["photo_circular"]
             st.session_state["_loaded_draft"] = _edit_draft_id
+            del draft, file_bytes; gc.collect()
       except Exception as exc:
         st.error(f"Could not load draft for editing. ({exc})")
 
@@ -1845,7 +1900,7 @@ elif page == "Upload & Edit":
             check_result["issues"] = []
             fname = f"Received_{recv.get('player_name', 'report')}.pptx"
             st.session_state["upload_file_key"]     = f"recv_{_edit_recv_id}"
-            st.session_state["upload_bytes"]        = recv_bytes
+            st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(recv_bytes, f"recv_{_edit_recv_id}")
             st.session_state["upload_filename"]     = fname
             st.session_state["upload_check_result"] = check_result
             st.session_state.pop("upload_active_report_id", None)
@@ -1879,6 +1934,7 @@ elif page == "Upload & Edit":
                 st.session_state["upload_player_photo_circ"] = recv["photo_circular"]
 
             st.session_state["_loaded_draft"] = f"recv_{_edit_recv_id}"
+            del recv, recv_bytes; gc.collect()
       except Exception as exc:
         st.error(f"Could not load received report for editing. ({exc})")
 
@@ -1899,7 +1955,7 @@ elif page == "Upload & Edit":
                 fin.get("player_name", ""),
             )
             st.session_state["upload_file_key"]     = f"finished_{_edit_fin_id}"
-            st.session_state["upload_bytes"]        = fin_bytes
+            st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(fin_bytes, f"fin_{_edit_fin_id}")
             st.session_state["upload_filename"]     = fname
             st.session_state["upload_check_result"] = check_result
             st.session_state["upload_active_report_id"] = _edit_fin_id
@@ -1931,6 +1987,7 @@ elif page == "Upload & Edit":
                 st.session_state["upload_player_photo_circ"] = fin["photo_circular"]
 
             st.session_state["_loaded_draft"] = f"fin_{_edit_fin_id}"
+            del fin, fin_bytes; gc.collect()
       except Exception as exc:
         st.error(f"Could not load report for editing. ({exc})")
 
@@ -1945,9 +2002,9 @@ elif page == "Upload & Edit":
             with st.spinner(t("checking", L)):
                 check_result = check_template_compatibility(io.BytesIO(file_bytes))
             st.session_state["upload_file_key"]     = file_key
-            st.session_state["upload_bytes"]        = file_bytes
+            st.session_state["_upload_pptx_path"]   = _save_upload_to_disk(file_bytes, f"manual_{file_key[:20]}")
             st.session_state["upload_filename"]     = uploaded.name
-            st.session_state.pop("_generated_pptx_upload", None)
+            st.session_state.pop("_generated_dl_path_upload", None)
             st.session_state.pop("_generated_fname_upload", None)
             st.session_state["upload_check_result"] = check_result
             for i, val in enumerate(check_result.get("current_star_values", [])):
@@ -2033,15 +2090,17 @@ elif page == "Upload & Edit":
             if st.button(f"{t('save_draft', L)}", use_container_width=True, key="upload_save"):
               try:
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                _upath = _get_upload_path()
                 with st.spinner(t("filling", L)):
                     _snap = fill_from_bytes(
-                        st.session_state["upload_bytes"], template_cfg, s, c, v,
+                        _upath, template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
                 _snap_bytes = _snap.getvalue()
+                del _snap; gc.collect()
                 rid = storage.save_draft(
                     username,
                     st.session_state.get("upload_active_report_id"),
@@ -2063,21 +2122,23 @@ elif page == "Upload & Edit":
             if st.button(f"{t('generate_pptx', L)}", type="primary", use_container_width=True, key="upload_gen"):
               try:
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                _upath = _get_upload_path()
                 with st.spinner(t("filling", L)):
                     output = fill_from_bytes(
-                        st.session_state["upload_bytes"], template_cfg, s, c, v,
+                        _upath, template_cfg, s, c, v,
                         player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                         tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
                 pptx_bytes = output.getvalue()
+                del output; gc.collect()
                 pos = matched_name or "Unknown"
 
                 rid = st.session_state.get("upload_active_report_id") or storage.save_draft(
                     username, None, pos, detected_club, detected_lang, s, c, v,
                     source="upload",
-                    upload_bytes=st.session_state.get("upload_bytes"),
+                    upload_bytes=_get_upload_bytes(),
                     upload_filename=st.session_state.get("upload_filename"),
                     player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                 )
@@ -2093,7 +2154,11 @@ elif page == "Upload & Edit":
                 except Exception as exc:
                     st.warning(f"Report generated but could not be saved. ({exc})")
 
-                st.session_state["_generated_pptx_upload"] = pptx_bytes
+                _dl_path_u = Path("data") / username / "_download_upload.pptx"
+                _dl_path_u.parent.mkdir(parents=True, exist_ok=True)
+                _dl_path_u.write_bytes(pptx_bytes)
+                del pptx_bytes; gc.collect()
+                st.session_state["_generated_dl_path_upload"] = str(_dl_path_u)
                 st.session_state["_generated_fname_upload"] = _pptx_filename(pos, UPLOAD_PDATA_KEY)
                 st.success(t("done", L))
               except Exception as exc:
@@ -2103,11 +2168,12 @@ elif page == "Upload & Edit":
             if st.button(f"{t('share', L)}", use_container_width=True, key="upload_share"):
                 st.session_state["_share_pending"] = "upload"
 
-        # ── Persistent download button (survives reruns) ──────────────────
-        if st.session_state.get("_generated_pptx_upload"):
+        # ── Persistent download button (reads from disk to avoid memory bloat)
+        _dl_path_u = st.session_state.get("_generated_dl_path_upload")
+        if _dl_path_u and Path(_dl_path_u).exists():
             st.download_button(
                 f"📥  {t('download_pptx', L)}",
-                data=st.session_state["_generated_pptx_upload"],
+                data=Path(_dl_path_u).read_bytes(),
                 file_name=st.session_state.get("_generated_fname_upload", "report.pptx"),
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True,
@@ -2135,15 +2201,17 @@ elif page == "Upload & Edit":
                         if existing_pptx:
                             pptx_bytes = existing_pptx
                         else:
+                            _upath = _get_upload_path()
                             with st.spinner(t("filling", L)):
                                 output = fill_from_bytes(
-                                    st.session_state["upload_bytes"], template_cfg, s, c, v,
+                                    _upath, template_cfg, s, c, v,
                                     player_data=st.session_state.get(UPLOAD_PDATA_KEY),
                                     tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                                     player_photo=st.session_state.get("upload_player_photo_full"),
                                     player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                                 )
                             pptx_bytes = output.getvalue()
+                            del output; gc.collect()
                         storage.share_report(
                             from_username=username,
                             to_username=sel_scout,
@@ -2170,6 +2238,7 @@ elif page == "Upload & Edit":
                                               tm_stats=st.session_state.get(UPLOAD_TM_KEY),
                                               photo_full=st.session_state.get("upload_player_photo_full"),
                                               photo_circular=st.session_state.get("upload_player_photo_circ"))
+                        del pptx_bytes; gc.collect()
                         storage.mark_shared(username, rid, sel_scout)
                         st.session_state.pop("_share_pending", None)
                         try:

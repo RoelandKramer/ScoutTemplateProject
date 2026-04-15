@@ -1056,7 +1056,7 @@ def fill_template(
 
 
 def fill_from_bytes(
-    file_bytes: bytes,
+    file_bytes_or_path,
     template_cfg: dict,
     star_values: list,
     comments: list[str] | None = None,
@@ -1066,8 +1066,15 @@ def fill_from_bytes(
     player_photo: bytes | None = None,
     player_photo_circular: bytes | None = None,
 ) -> io.BytesIO:
-    """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
-    prs = Presentation(io.BytesIO(file_bytes))
+    """Fill an uploaded PPTX and return the result as BytesIO.
+
+    *file_bytes_or_path* can be raw ``bytes`` or a ``str``/``Path`` file path.
+    """
+    from pathlib import Path as _P
+    if isinstance(file_bytes_or_path, (str, _P)):
+        prs = Presentation(str(file_bytes_or_path))
+    else:
+        prs = Presentation(io.BytesIO(file_bytes_or_path))
     if player_data:
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:
