@@ -245,16 +245,18 @@ def save_finished(
         (finished / f"{report_id}_photo_circ.png").write_bytes(photo_circular)
         photo_refs["circular"] = f"{report_id}_photo_circ.png"
 
-    # Videos are already embedded inside the PPTX — skip writing them
-    # separately to avoid doubling disk/memory usage.  We still record
-    # filenames in the metadata so the UI can show labels.
+    # Save video files alongside the PPTX so they can be loaded back
+    # for preview when the user opens the report for editing.
     video_refs = []
     if video_data:
         for i, vd in enumerate(video_data):
-            if vd is not None:
-                resolved = resolve_video(vd)
-                vname = resolved[1] if resolved else f"video_{i}.mp4"
-                video_refs.append({"filename": vname, "embedded": True})
+            resolved = resolve_video(vd)
+            if resolved is not None:
+                vbytes, vname = resolved
+                ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
+                vpath = finished / f"{report_id}_video_{i}.{ext}"
+                vpath.write_bytes(vbytes)
+                video_refs.append({"filename": vname, "path": str(vpath.name)})
             else:
                 video_refs.append(None)
 
