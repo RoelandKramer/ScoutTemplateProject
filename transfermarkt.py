@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import quote
 
-import requests
+# Import requests from curl_cffi instead
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 
 _HEADERS = {
@@ -35,12 +36,13 @@ _DELAY = 1.5  # polite delay between requests
 _MAX_RETRIES = 2
 
 
-def _get_session() -> requests.Session:
-    """Return a persistent session with browser-like headers and cookies."""
-    s = requests.Session()
+def _get_session():
+    """Return a persistent session with browser-like TLS fingerprints."""
+    # The 'impersonate' flag is the magic bullet here.
+    # It tells the library to exactly mimic Chrome's network behavior.
+    s = requests.Session(impersonate="chrome")
     s.headers.update(_HEADERS)
     return s
-
 
 _session: requests.Session | None = None
 
