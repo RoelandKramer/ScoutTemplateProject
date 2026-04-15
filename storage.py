@@ -206,16 +206,36 @@ def _gh_read(path: str) -> bytes | None:
 def _gh_write(path: str, data: bytes, message: str = "auto-save") -> None:
     """Create or update a file in the repo. Raises on failure.
 
-    Optimized: tries PUT without SHA first (works for new files),
+    Retries up to 3 times for transient errors (5xx, 403 rate-limit, 409
+    conflicts). Optimized: tries PUT without SHA first (works for new files),
     falls back to GET SHA + PUT if the file already exists.
     """
     if len(data) > _GH_MAX_BYTES:
         log.warning("Skipping %s: %d bytes exceeds GitHub limit", path, len(data))
         return
 
+    last_error = None
+    for attempt in range(3):
+        if attempt > 0:
+            time.sleep(1.5 * attempt)
+            _sha_cache.pop(path, None)
+        try:
+            _gh_write_once(path, data, message)
+            return
+        except IOError as exc:
+            last_error = exc
+            err_str = str(exc)
+            if any(f"HTTP {c}" in err_str for c in (403, 409, 500, 502, 503)):
+                log.warning("Retrying %s (attempt %d): %s", path, attempt + 1, exc)
+                continue
+            raise
+    raise last_error  # type: ignore[misc]
+
+
+def _gh_write_once(path: str, data: bytes, message: str) -> None:
+    """Single attempt to create or update a file in the repo."""
     encoded = base64.b64encode(data).decode("ascii")
 
-    # If we have a cached SHA, use it directly (update)
     cached_sha = _sha_cache.get(path)
     if cached_sha:
         body = {
@@ -230,22 +250,16 @@ def _gh_write(path: str, data: bytes, message: str = "auto-save") -> None:
             json=body,
         )
         if r.status_code in (200, 201):
-            # Update SHA cache with new SHA
             resp_data = r.json()
             if resp_data.get("content", {}).get("sha"):
                 _sha_cache[path] = resp_data["content"]["sha"]
             return
-        if r.status_code == 409:
-            # SHA is stale, clear cache and fall through
-            _sha_cache.pop(path, None)
-        elif r.status_code == 422:
-            # File might not exist anymore, clear cache and fall through
+        if r.status_code in (409, 422):
             _sha_cache.pop(path, None)
         else:
             error_msg = r.text[:300] if r.text else "unknown error"
             raise IOError(f"Failed to save {path.split('/')[-1]} to GitHub (HTTP {r.status_code}): {error_msg}")
 
-    # Try creating as new file (no SHA)
     body = {
         "message": message,
         "content": encoded,
@@ -262,8 +276,7 @@ def _gh_write(path: str, data: bytes, message: str = "auto-save") -> None:
             _sha_cache[path] = resp_data["content"]["sha"]
         return
 
-    if r.status_code == 409 or r.status_code == 422:
-        # File exists — need the SHA to update it
+    if r.status_code in (409, 422):
         sha = _gh_get_sha(path)
         if sha:
             body["sha"] = sha
