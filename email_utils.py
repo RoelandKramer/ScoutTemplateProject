@@ -13,6 +13,8 @@ Reads SMTP credentials from st.secrets:
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 import streamlit as st
 
@@ -35,7 +37,13 @@ def _get_smtp_config() -> dict | None:
     }
 
 
-def _send(to_addr: str, subject: str, body: str) -> tuple[bool, str | None]:
+def _send(
+    to_addr: str,
+    subject: str,
+    body: str,
+    attachment: bytes | None = None,
+    attachment_filename: str | None = None,
+) -> tuple[bool, str | None]:
     cfg = _get_smtp_config()
     if not cfg or not cfg["username"] or not cfg["password"]:
         return False, "SMTP credentials not configured in secrets"
@@ -48,8 +56,18 @@ def _send(to_addr: str, subject: str, body: str) -> tuple[bool, str | None]:
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
+    if attachment and attachment_filename:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(attachment)
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f'attachment; filename="{attachment_filename}"',
+        )
+        msg.attach(part)
+
     try:
-        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=15) as server:
+        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as server:
             server.starttls()
             server.login(cfg["username"], cfg["password"])
             server.sendmail(cfg["from_addr"], [to_addr], msg.as_string())
@@ -58,46 +76,33 @@ def _send(to_addr: str, subject: str, body: str) -> tuple[bool, str | None]:
         return False, str(exc)
 
 
-def send_share_emails(
+def send_share_email(
     sender_name: str,
-    sender_email: str,
     receiver_name: str,
     receiver_email: str,
     player_name: str,
-) -> dict:
-    """Send the two share notifications.
+    pptx_bytes: bytes,
+    pptx_filename: str,
+) -> tuple[bool, str | None]:
+    """Email the generated PowerPoint to the receiver.
 
-    Returns a dict like {"receiver": (ok, err), "sender": (ok, err)}.
-    Missing email addresses silently skip that side.
+    Returns (ok, error_message).
     """
-    results: dict = {}
     safe_player = player_name or "—"
 
-    # 1. Email to the RECEIVER — with platform link
-    if receiver_email:
-        subject = f"New scout report received: {safe_player}"
-        body = (
-            f"Hi {receiver_name},\n\n"
-            f"A new scouting report for player {safe_player} has just been "
-            f"shared with you on the Scouting Rapport Pro+ platform.\n\n"
-            f"View it here: {PLATFORM_URL}\n\n"
-            f"Best regards,\n{sender_name}"
-        )
-        results["receiver"] = _send(receiver_email, subject, body)
-    else:
-        results["receiver"] = (False, "no receiver email")
+    if not receiver_email:
+        return False, "no receiver email"
 
-    # 2. Email to the SENDER — confirmation, no link
-    if sender_email:
-        subject = f"Report of {safe_player} successfully shared"
-        body = (
-            f"Hi {sender_name},\n\n"
-            f"Your scouting report for {safe_player} has been successfully "
-            f"shared with scout {receiver_name}.\n\n"
-            f"Best regards,\nScouting Rapport Pro+"
-        )
-        results["sender"] = _send(sender_email, subject, body)
-    else:
-        results["sender"] = (False, "no sender email")
-
-    return results
+    subject = f"Scout report: {safe_player}"
+    body = (
+        f"Hi {receiver_name},\n\n"
+        f"A scouting report for player {safe_player} has been "
+        f"shared with you by {sender_name}.\n\n"
+        f"The PowerPoint is attached to this email.\n\n"
+        f"Best regards,\nScouting Rapport Pro+"
+    )
+    return _send(
+        receiver_email, subject, body,
+        attachment=pptx_bytes,
+        attachment_filename=pptx_filename,
+    )
