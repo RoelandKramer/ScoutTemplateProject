@@ -31,7 +31,72 @@ _HEADERS = {
     "Cache-Control": "max-age=0",
 }
 _BASE = "https://www.transfermarkt.com"
-_DELAY = 1.2  # polite delay between requests
+_DELAY = 1.5  # polite delay between requests
+_MAX_RETRIES = 2
+
+
+def _get_session() -> requests.Session:
+    """Return a persistent session with browser-like headers and cookies."""
+    s = requests.Session()
+    s.headers.update(_HEADERS)
+    return s
+
+
+_session: requests.Session | None = None
+
+
+def _fetch(url: str, params: dict | None = None) -> requests.Response:
+    """Fetch a URL with retry logic and session cookies.
+
+    Raises TmBlockedError on persistent 403 so callers can show a friendly message.
+    """
+    global _session
+    if _session is None:
+        _session = _get_session()
+        # Warm up session with a visit to the homepage (sets cookies)
+        try:
+            _session.get(_BASE, timeout=10)
+            time.sleep(0.5)
+        except Exception:
+            pass
+
+    last_exc = None
+    for attempt in range(_MAX_RETRIES + 1):
+        if attempt > 0:
+            time.sleep(_DELAY * (attempt + 1))
+        try:
+            resp = _session.get(url, params=params, timeout=15)
+            if resp.status_code == 200:
+                return resp
+            if resp.status_code == 403:
+                # Reset session and retry (get fresh cookies)
+                _session = _get_session()
+                try:
+                    _session.get(_BASE, timeout=10)
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+                last_exc = TmBlockedError(
+                    "Transfermarkt is blocking requests from this server. "
+                    "Stats must be entered manually."
+                )
+                continue
+            resp.raise_for_status()
+        except TmBlockedError:
+            last_exc = last_exc  # keep it
+        except Exception as e:
+            last_exc = e
+
+    if isinstance(last_exc, TmBlockedError):
+        raise last_exc
+    if last_exc:
+        raise last_exc
+    raise TmBlockedError("Transfermarkt request failed after retries.")
+
+
+class TmBlockedError(Exception):
+    """Raised when Transfermarkt blocks our requests (403)."""
+    pass
 
 
 @dataclass
@@ -48,8 +113,7 @@ def search_player(name: str) -> list[TmPlayer]:
     """Search Transfermarkt for players matching *name*."""
     url = f"{_BASE}/schnellsuche/ergebnis/schnellsuche"
     params = {"query": name, "x": 0, "y": 0}
-    resp = requests.get(url, headers=_HEADERS, params=params, timeout=15)
-    resp.raise_for_status()
+    resp = _fetch(url, params=params)
     soup = BeautifulSoup(resp.text, "lxml")
 
     results: list[TmPlayer] = []
@@ -130,8 +194,7 @@ def _fetch_stats_page(profile_url: str) -> BeautifulSoup:
     stats_url = profile_url.replace("/profil/spieler/", "/leistungsdatendetails/spieler/")
     full_url = f"{_BASE}{stats_url}"
     time.sleep(_DELAY)
-    resp = requests.get(full_url, headers=_HEADERS, timeout=15)
-    resp.raise_for_status()
+    resp = _fetch(full_url)
     return BeautifulSoup(resp.text, "lxml")
 
 

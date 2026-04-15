@@ -1019,7 +1019,7 @@ def _transfermarkt_section(
 
     if st.button(t("fetch_tm_stats", L), type="primary", use_container_width=True, key=f"{key_prefix}_fetch"):
         try:
-            from transfermarkt import fetch_player_stats
+            from transfermarkt import fetch_player_stats, TmBlockedError
             with st.spinner(t("fetching_tm", L)):
                 stats = fetch_player_stats(player_name, player_club)
             # Clear cached stats-card inputs so the new values are shown
@@ -1027,6 +1027,8 @@ def _transfermarkt_section(
             st.session_state[state_key] = stats
             if not any(stats.get(k, 0) for k in ["season_matches", "career_matches"]):
                 st.warning(t("tm_not_found", L))
+        except TmBlockedError:
+            st.warning(t("tm_blocked", L))
         except Exception as exc:
             st.error(f"Transfermarkt error: {exc}")
 
