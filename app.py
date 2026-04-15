@@ -2008,25 +2008,24 @@ elif page == "Upload & Edit":
             f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
-        # ── SciSports player search (always available) ─────────────────────
+        # ── Player info (editable card, no search — player already selected) ──
         st.markdown("---")
-        upload_player_data = _scisports_section(
-            key_prefix="upload_sci",
-            state_key=UPLOAD_PDATA_KEY,
-            tm_state_key=UPLOAD_TM_KEY,
-            tm_card_key_prefix="upload_tm_card",
-        )
+        upload_player_data = st.session_state.get(UPLOAD_PDATA_KEY)
+        if upload_player_data:
+            _render_player_card(
+                upload_player_data, editable=True,
+                key_prefix="upload_sci_card", state_key=UPLOAD_PDATA_KEY,
+            )
 
-        # ── Transfermarkt stats ─────────────────────────────────────────
+        # ── Transfermarkt stats (always visible — fetch or edit) ─────────
         _up_pname = (upload_player_data or {}).get("name", "")
         _up_pclub = (upload_player_data or {}).get("club", "")
-        if _up_pname:
-            _transfermarkt_section(
-                _up_pname, _up_pclub,
-                key_prefix="upload_tm", state_key=UPLOAD_TM_KEY,
-            )
-        else:
-            # No player name yet — still show editable stats card if loaded from draft/finished
+        _transfermarkt_section(
+            _up_pname, _up_pclub,
+            key_prefix="upload_tm", state_key=UPLOAD_TM_KEY,
+        )
+        # Show editable stats card even without a player name
+        if not _up_pname:
             _existing_tm = st.session_state.get(UPLOAD_TM_KEY)
             if _existing_tm:
                 _render_stats_card(
