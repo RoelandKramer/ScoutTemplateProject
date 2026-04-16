@@ -1033,6 +1033,10 @@ def _transfermarkt_section(
             from transfermarkt import fetch_player_stats
             with st.spinner(t("fetching_tm", L)):
                 stats = fetch_player_stats(player_name, player_club)
+            # Extract the portrait image for display-only (not stored)
+            tm_img = stats.pop("tm_image", None)
+            if tm_img:
+                st.session_state[f"{key_prefix}_tm_image"] = tm_img
             # Clear cached stats-card inputs so the new values are shown
             _clear_stats_card_inputs(f"{key_prefix}_card")
             st.session_state[state_key] = stats
@@ -1041,8 +1045,15 @@ def _transfermarkt_section(
         except Exception as exc:
             st.error(f"Transfermarkt error: {exc}")
 
+    # Show the Transfermarkt portrait image if available (display-only)
+    _tm_img = st.session_state.get(f"{key_prefix}_tm_image")
+    if _tm_img:
+        st.image(_tm_img, width=120, caption=f"Transfermarkt: {player_name}")
+
     stats = st.session_state.get(state_key)
     if stats:
+        # Strip tm_image if it leaked in from an older fetch
+        stats.pop("tm_image", None)
         _render_stats_card(
             stats, player_name,
             editable=True, key_prefix=f"{key_prefix}_card", state_key=state_key,

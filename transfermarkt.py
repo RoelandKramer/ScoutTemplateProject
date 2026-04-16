@@ -98,6 +98,48 @@ def _best_match(candidates: list[TmPlayer], target_name: str, target_club: str =
     return ranked[0] if len(ranked) == 1 else None
 
 
+# ─── Player image ──────────────────────────────────────────────────────────
+
+def _fetch_player_image(profile_url: str) -> bytes | None:
+    """Fetch the player's portrait image from their Transfermarkt profile.
+
+    Returns raw image bytes or None on failure.  The image is only used for
+    visual confirmation in the UI — it is NOT stored or shared.
+    """
+    full_url = f"{_BASE}{profile_url}"
+    time.sleep(_DELAY)
+    try:
+        resp = requests.get(full_url, headers=_HEADERS, timeout=15)
+        resp.raise_for_status()
+    except Exception:
+        return None
+
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    # The player photo sits in the header area — look for the main portrait.
+    # Transfermarkt uses <img class="data-header__profile-image"> or similar.
+    for selector in [
+        "img.data-header__profile-image",
+        "header img[src*='portrait']",
+        "header img[src*='/header/']",
+        "div.data-header__profile-container img",
+        "img[data-src*='portrait']",
+    ]:
+        img_tag = soup.select_one(selector)
+        if img_tag:
+            img_url = img_tag.get("src") or img_tag.get("data-src") or ""
+            if img_url and "default.jpg" not in img_url and img_url.startswith("http"):
+                try:
+                    img_resp = requests.get(img_url, headers=_HEADERS, timeout=15)
+                    img_resp.raise_for_status()
+                    if img_resp.headers.get("content-type", "").startswith("image"):
+                        return img_resp.content
+                except Exception:
+                    pass
+
+    return None
+
+
 # ─── Stats extraction ───────────────────────────────────────────────────────
 
 def _parse_int(text: str) -> int:
@@ -185,7 +227,8 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
     Returns a dict with keys:
         season_matches, season_minutes, season_goals, season_assists,
         career_matches, career_minutes, career_goals, career_assists,
-        tm_url (the Transfermarkt profile URL)
+        tm_url (the Transfermarkt profile URL),
+        tm_image (raw image bytes of player portrait, or None)
     """
     result = {
         "season_matches": 0, "season_minutes": 0,
@@ -193,6 +236,7 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
         "career_matches": 0, "career_minutes": 0,
         "career_goals": 0, "career_assists": 0,
         "tm_url": "",
+        "tm_image": None,
     }
 
     # Search for the player
@@ -205,6 +249,9 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
         return result
 
     result["tm_url"] = f"{_BASE}{player.url}"
+
+    # Fetch player portrait image (for UI confirmation only — not stored)
+    result["tm_image"] = _fetch_player_image(player.url)
 
     # Convert season label "2025/2026" -> "25/26" for matching
     m = re.match(r"(\d{4})/(\d{4})", target_season_label)
