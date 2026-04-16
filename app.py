@@ -792,6 +792,78 @@ def _current_player_name(state_key: str = "player_data") -> str:
     return ""
 
 
+# ─── OneDrive sync helpers ────────────────────────────────────────────────
+
+def _onedrive_upload(scout: str, report_id: str, pptx_bytes: bytes,
+                     player_name: str = "", position: str = "") -> None:
+    """Upload finished report (PPTX + JSON) to OneDrive. Best-effort."""
+    try:
+        from onedrive_sync import upload_pptx, upload_json, is_configured
+        if not is_configured():
+            return
+        # Upload PPTX
+        ok, err = upload_pptx(scout, report_id, pptx_bytes)
+        if not ok and err:
+            st.warning(f"OneDrive upload: {err}")
+            return
+        # Upload the JSON metadata so we can restore state later
+        from storage import _finished_dir
+        json_path = _finished_dir(scout) / f"{report_id}.json"
+        if json_path.exists():
+            import json as _json
+            meta = _json.loads(json_path.read_text(encoding="utf-8"))
+            upload_json(scout, report_id, meta)
+        # Upload photo files if they exist
+        from onedrive_sync import upload_file
+        finished = _finished_dir(scout)
+        for suffix in ("_photo_full.png", "_photo_circ.png"):
+            photo_path = finished / f"{report_id}{suffix}"
+            if photo_path.exists():
+                upload_file(scout, f"{report_id}{suffix}", photo_path.read_bytes(),
+                            "image/png")
+    except Exception:
+        pass  # never break the app for a sync failure
+
+
+def _onedrive_delete(scout: str, report_id: str,
+                     player_name: str = "", position: str = "") -> None:
+    """Delete a report from OneDrive (best-effort, never blocks)."""
+    try:
+        from onedrive_sync import delete_report_files, is_configured
+        if not is_configured():
+            return
+        delete_report_files(scout, report_id)
+    except Exception:
+        pass
+
+
+def _onedrive_restore_if_needed() -> None:
+    """On first run after a deploy, restore local cache from OneDrive."""
+    if st.session_state.get("_onedrive_restored"):
+        return
+    st.session_state["_onedrive_restored"] = True
+    try:
+        from onedrive_sync import is_configured, restore_all_scouts
+        from storage import DATA_DIR
+        if not is_configured():
+            return
+        # Only restore if local data looks empty (no finished reports at all)
+        has_any = False
+        if DATA_DIR.exists():
+            for user_dir in DATA_DIR.iterdir():
+                fin = user_dir / "finished"
+                if fin.exists() and any(fin.glob("*.json")):
+                    has_any = True
+                    break
+        if not has_any:
+            results = restore_all_scouts(DATA_DIR)
+            if results:
+                total = sum(results.values())
+                st.toast(f"Restored {total} report(s) from OneDrive")
+    except Exception:
+        pass
+
+
 _POSITION_JERSEY = {
     "Goalkeeper": "#1",
     "Wingback": "#2 #5",
@@ -1308,6 +1380,9 @@ if not st.session_state.get("authenticated"):
 username = st.session_state["username"]
 L = _lang()
 
+# ── Restore local cache from OneDrive if this is a fresh deploy ─────────────
+_onedrive_restore_if_needed()
+
 # ── Pre-load draft values BEFORE sidebar widgets render ─────────────────────
 # This prevents StreamlitAPIException when "Continue Editing" sets club/lang
 # after the selectbox widgets have already been instantiated.
@@ -1488,6 +1563,8 @@ if page == "Dashboard":
                 )
         with c3:
             if st.button(t("delete", L), key=f"del_{prefix}_{rid}", use_container_width=True):
+                _onedrive_delete(username, rid,
+                                 meta.get("player_name", ""), meta.get("position", ""))
                 delete_fn(username, rid)
                 st.rerun()
 
@@ -1721,6 +1798,8 @@ elif page == "New Report":
                                   tm_stats=_gen_tm,
                                   photo_full=st.session_state.get("new_player_photo_full"),
                                   photo_circular=st.session_state.get("new_player_photo_circ"))
+            _onedrive_upload(username, rid, pptx_bytes,
+                             _current_player_name(NEW_PDATA_KEY), template_name)
             st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))
@@ -1786,6 +1865,8 @@ elif page == "New Report":
                                           tm_stats=_share_tm,
                                           photo_full=st.session_state.get("new_player_photo_full"),
                                           photo_circular=st.session_state.get("new_player_photo_circ"))
+                    _onedrive_upload(username, rid, pptx_bytes,
+                                     _current_player_name(NEW_PDATA_KEY), template_name)
                     storage.mark_shared(username, rid, sel_scout)
                     st.session_state.pop("_share_pending", None)
                     # Auto-send notification emails (receiver gets platform link)
@@ -2168,6 +2249,8 @@ elif page == "Upload & Edit":
                                       tm_stats=_upgen_tm,
                                       photo_full=st.session_state.get("upload_player_photo_full"),
                                       photo_circular=st.session_state.get("upload_player_photo_circ"))
+                _onedrive_upload(username, rid, pptx_bytes,
+                                 _current_player_name(UPLOAD_PDATA_KEY), pos)
                 st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))
@@ -2238,6 +2321,8 @@ elif page == "Upload & Edit":
                                               tm_stats=_upshare_tm,
                                               photo_full=st.session_state.get("upload_player_photo_full"),
                                               photo_circular=st.session_state.get("upload_player_photo_circ"))
+                        _onedrive_upload(username, rid, pptx_bytes,
+                                         _current_player_name(UPLOAD_PDATA_KEY), pos)
                         storage.mark_shared(username, rid, sel_scout)
                         st.session_state.pop("_share_pending", None)
                         # Auto-send notification emails (receiver gets platform link)
