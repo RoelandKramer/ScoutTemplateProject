@@ -18,8 +18,8 @@ Required secrets in st.secrets:
     tenant_id     = "aa736a64-..."
     client_id     = "e016dfcf-..."
     client_secret = "0D68Q~..."
-    user_email    = "r.s.kramer_1@tilburguniversity.edu"
-    base_folder   = "ScoutReports"
+    user_email    = "stage.it@fcdenbosch.nl"
+    base_folder   = "ScoutTemplateProject"
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def _get_config() -> dict | None:
         "client_id": cfg["client_id"],
         "client_secret": cfg["client_secret"],
         "user_email": cfg["user_email"],
-        "base_folder": cfg.get("base_folder", "ScoutReports"),
+        "base_folder": cfg.get("base_folder", "ScoutTemplateProject"),
     }
 
 
