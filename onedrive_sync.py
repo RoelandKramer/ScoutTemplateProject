@@ -94,8 +94,9 @@ def _safe(name: str) -> str:
     return name.strip() or "_"
 
 
-def _folder_path(cfg: dict, scout: str) -> str:
-    return f"{_safe(cfg['base_folder'])}/{_safe(scout)}"
+def _folder_path(cfg: dict, scout: str, subfolder: str = "") -> str:
+    base = f"{_safe(cfg['base_folder'])}/{_safe(scout)}"
+    return f"{base}/{_safe(subfolder)}" if subfolder else base
 
 
 # ─── Upload ────────────────────────────────────────────────────────────────
@@ -104,6 +105,7 @@ def upload_pptx(
     scout: str,
     report_id: str,
     pptx_bytes: bytes,
+    subfolder: str = "",
 ) -> tuple[bool, str | None]:
     """Upload a PPTX file.  Returns (ok, error)."""
     cfg = _get_config()
@@ -114,7 +116,7 @@ def upload_pptx(
     except Exception as exc:
         return False, f"Auth error: {exc}"
 
-    folder = _folder_path(cfg, scout)
+    folder = _folder_path(cfg, scout, subfolder)
     path = f"{folder}/{report_id}.pptx"
     url = f"{_drive_prefix(cfg)}/root:/{path}:/content"
     try:
@@ -132,6 +134,7 @@ def upload_json(
     scout: str,
     report_id: str,
     meta: dict,
+    subfolder: str = "",
 ) -> tuple[bool, str | None]:
     """Upload a JSON metadata file.  Returns (ok, error)."""
     cfg = _get_config()
@@ -142,7 +145,7 @@ def upload_json(
     except Exception as exc:
         return False, f"Auth error: {exc}"
 
-    folder = _folder_path(cfg, scout)
+    folder = _folder_path(cfg, scout, subfolder)
     path = f"{folder}/{report_id}.json"
     url = f"{_drive_prefix(cfg)}/root:/{path}:/content"
     body = json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8")
@@ -162,6 +165,7 @@ def upload_file(
     filename: str,
     data: bytes,
     content_type: str = "application/octet-stream",
+    subfolder: str = "",
 ) -> tuple[bool, str | None]:
     """Upload an arbitrary file (photos, videos) into a scout's folder."""
     cfg = _get_config()
@@ -172,7 +176,7 @@ def upload_file(
     except Exception as exc:
         return False, f"Auth error: {exc}"
 
-    folder = _folder_path(cfg, scout)
+    folder = _folder_path(cfg, scout, subfolder)
     path = f"{folder}/{_safe(filename)}"
     url = f"{_drive_prefix(cfg)}/root:/{path}:/content"
     try:
@@ -191,8 +195,13 @@ def upload_file(
 def delete_report_files(
     scout: str,
     report_id: str,
+    subfolder: str = "",
 ) -> tuple[bool, str | None]:
-    """Delete all files for a report (pptx, json, photos, videos)."""
+    """Delete all files for a report (pptx, json, photos, videos).
+
+    If subfolder is empty, deletes from both the finished area and the
+    drafts/ subfolder so a single report_id is fully purged.
+    """
     cfg = _get_config()
     if not cfg:
         return False, "OneDrive not configured"
@@ -201,28 +210,31 @@ def delete_report_files(
     except Exception as exc:
         return False, f"Auth error: {exc}"
 
-    folder = _folder_path(cfg, scout)
-    # List all files in the scout's folder that start with report_id
-    list_url = f"{_drive_prefix(cfg)}/root:/{folder}:/children"
-    try:
-        resp = requests.get(list_url, headers=_auth_headers(token), timeout=15)
-        if resp.status_code == 404:
-            return True, None  # folder gone already
-        resp.raise_for_status()
-        items = resp.json().get("value", [])
-    except Exception as exc:
-        return False, str(exc)
+    targets = [subfolder] if subfolder else ["", "drafts"]
+    errors: list[str] = []
 
-    errors = []
-    for item in items:
-        if item["name"].startswith(report_id):
-            del_url = f"{_drive_prefix(cfg)}/items/{item['id']}"
-            try:
-                r = requests.delete(del_url, headers=_auth_headers(token), timeout=15)
-                if r.status_code not in (204, 404):
-                    r.raise_for_status()
-            except Exception as exc:
-                errors.append(str(exc))
+    for sub in targets:
+        folder = _folder_path(cfg, scout, sub)
+        list_url = f"{_drive_prefix(cfg)}/root:/{folder}:/children"
+        try:
+            resp = requests.get(list_url, headers=_auth_headers(token), timeout=15)
+            if resp.status_code == 404:
+                continue  # folder doesn't exist, nothing to delete
+            resp.raise_for_status()
+            items = resp.json().get("value", [])
+        except Exception as exc:
+            errors.append(str(exc))
+            continue
+
+        for item in items:
+            if item["name"].startswith(report_id):
+                del_url = f"{_drive_prefix(cfg)}/items/{item['id']}"
+                try:
+                    r = requests.delete(del_url, headers=_auth_headers(token), timeout=15)
+                    if r.status_code not in (204, 404):
+                        r.raise_for_status()
+                except Exception as exc:
+                    errors.append(str(exc))
 
     return (len(errors) == 0), ("; ".join(errors) if errors else None)
 
@@ -279,55 +291,103 @@ def download_file(scout: str, filename: str) -> bytes | None:
 
 # ─── Restore local cache from OneDrive ─────────────────────────────────────
 
-def restore_scout_to_local(scout: str, local_finished_dir: Path) -> int:
-    """Download all files for a scout from OneDrive into local finished dir.
+def restore_scout_to_local(scout: str, data_dir: Path) -> tuple[int, int]:
+    """Restore a scout's OneDrive files to local cache.
 
-    Returns number of reports restored.
+    Each JSON on OneDrive is either:
+      - a finished report (written to data/<scout>/finished/)
+      - a share reference (is_share_ref=True) — written to data/<scout>/received/
+        and the pointed-to PPTX/photos/videos are fetched from the original
+        scout's folder and mirrored locally under the share_id filename.
+
+    Returns (finished_count, received_count).
     """
     files = list_scout_files(scout)
     if not files:
-        return 0
+        return (0, 0)
 
-    local_finished_dir.mkdir(parents=True, exist_ok=True)
-    report_ids: set[str] = set()
+    finished_dir = data_dir / scout / "finished"
+    received_dir = data_dir / scout / "received"
+    finished_dir.mkdir(parents=True, exist_ok=True)
+    received_dir.mkdir(parents=True, exist_ok=True)
 
+    share_refs: list[tuple[str, dict]] = []
+    finished_ids: set[str] = set()
+
+    # Pass 1 — classify JSONs
     for f in files:
         name = f["name"]
-        # Extract report_id from filenames like "abc123def456.pptx"
-        stem = name.rsplit(".", 1)[0] if "." in name else name
-        # Remove suffixes like "_photo_full", "_video_0" etc.
-        base_id = stem.split("_")[0] if "_" in stem else stem
-        if len(base_id) == 12 and base_id.isalnum():
-            report_ids.add(base_id)
+        if not name.endswith(".json"):
+            continue
+        data = download_file(scout, name)
+        if not data:
+            continue
+        try:
+            meta = json.loads(data.decode("utf-8"))
+        except Exception:
+            continue
+        stem = name.rsplit(".", 1)[0]
+        if meta.get("is_share_ref"):
+            share_refs.append((stem, meta))
+            (received_dir / name).write_bytes(data)
+        else:
+            finished_ids.add(stem)
+            (finished_dir / name).write_bytes(data)
 
-        local_path = local_finished_dir / name
-        if not local_path.exists():
-            data = download_file(scout, name)
-            if data:
-                local_path.write_bytes(data)
+    # Pass 2 — download finished PPTX + photos + videos
+    for f in files:
+        name = f["name"]
+        if name.endswith(".json"):
+            continue
+        stem_base = name.split("_")[0] if "_" in name else name.rsplit(".", 1)[0]
+        if stem_base in finished_ids:
+            local_path = finished_dir / name
+            if not local_path.exists():
+                d = download_file(scout, name)
+                if d:
+                    local_path.write_bytes(d)
 
-    return len({rid for rid in report_ids
-                if (local_finished_dir / f"{rid}.json").exists()})
+    # Pass 3 — resolve share refs: fetch original PPTX/photos/videos
+    for share_id, meta in share_refs:
+        original_scout = meta.get("original_scout") or meta.get("shared_by")
+        original_id = meta.get("original_id")
+        if not original_scout or not original_id:
+            continue
+        orig_files = list_scout_files(original_scout) or []
+        for of in orig_files:
+            oname = of["name"]
+            if not oname.startswith(original_id):
+                continue
+            # Skip the original JSON — the share ref JSON is authoritative
+            if oname == f"{original_id}.json":
+                continue
+            new_name = oname.replace(original_id, share_id, 1)
+            local_path = received_dir / new_name
+            if not local_path.exists():
+                d = download_file(original_scout, oname)
+                if d:
+                    local_path.write_bytes(d)
+
+    return (len(finished_ids), len(share_refs))
 
 
-def restore_all_scouts(data_dir: Path) -> dict[str, int]:
+def restore_all_scouts(data_dir: Path) -> dict[str, tuple[int, int]]:
     """Scan OneDrive base folder for all scout sub-folders and restore them.
 
-    Returns {scout_name: num_reports_restored}.
+    Returns {scout_name: (finished_count, received_count)}.
     """
     cfg = _get_config()
     if not cfg:
         return {}
     try:
-        token = _get_token(cfg)
+        _get_token(cfg)
     except Exception:
         return {}
 
-    # List sub-folders under the base folder
     base = _safe(cfg["base_folder"])
     url = f"{_drive_prefix(cfg)}/root:/{base}:/children"
     try:
-        resp = requests.get(url, headers=_auth_headers(token), timeout=15)
+        resp = requests.get(url, headers=_auth_headers(_get_token(cfg)), timeout=15)
         if resp.status_code == 404:
             return {}
         resp.raise_for_status()
@@ -335,14 +395,13 @@ def restore_all_scouts(data_dir: Path) -> dict[str, int]:
     except Exception:
         return {}
 
-    results = {}
+    results: dict[str, tuple[int, int]] = {}
     for item in items:
-        if item.get("folder"):  # is a folder
+        if item.get("folder"):
             scout_name = item["name"]
-            finished_dir = data_dir / scout_name / "finished"
-            count = restore_scout_to_local(scout_name, finished_dir)
-            if count > 0:
-                results[scout_name] = count
+            fin, rec = restore_scout_to_local(scout_name, data_dir)
+            if fin or rec:
+                results[scout_name] = (fin, rec)
 
     return results
 

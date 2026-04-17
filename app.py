@@ -834,14 +834,101 @@ def _onedrive_upload(scout: str, report_id: str, pptx_bytes: bytes,
         st.warning(f"OneDrive metadata/photo upload issue: {exc}")
 
 
+def _onedrive_upload_draft(scout: str, report_id: str) -> None:
+    """Upload a draft (JSON + snapshot PPTX + photos + videos) to OneDrive.
+
+    Writes to the same path finished reports use so saves overwrite a single
+    canonical file per report_id (no draft/finished duplicate).
+    """
+    try:
+        from onedrive_sync import upload_json, upload_file, is_configured
+    except Exception as exc:
+        st.warning(f"OneDrive module import failed: {exc}")
+        return
+
+    if not is_configured():
+        st.warning("OneDrive not configured — add the [onedrive] block to your Streamlit secrets.")
+        return
+
+    try:
+        from storage import _drafts_dir
+        import json as _json
+        drafts = _drafts_dir(scout)
+        json_path = drafts / f"{report_id}.json"
+        if not json_path.exists():
+            st.warning(f"Draft JSON not found locally: {json_path.name}")
+            return
+
+        meta = _json.loads(json_path.read_text(encoding="utf-8"))
+        ok, err = upload_json(scout, report_id, meta)
+        if not ok:
+            st.error(f"OneDrive draft JSON upload failed: {err}")
+            return
+
+        # Rename the snapshot `<rid>_upload.pptx` to `<rid>.pptx` on OneDrive
+        # so the finished-save uses the same key and subsequent saves overwrite.
+        snap = drafts / f"{report_id}_upload.pptx"
+        if snap.exists():
+            from onedrive_sync import upload_pptx as _upload_pptx
+            _upload_pptx(scout, report_id, snap.read_bytes())
+
+        # Upload auxiliary files (photos, videos) with their local names
+        for f in drafts.iterdir():
+            if not f.is_file() or not f.name.startswith(report_id):
+                continue
+            if f.name in (f"{report_id}.json", f"{report_id}_upload.pptx"):
+                continue
+            ctype = "application/octet-stream"
+            if f.suffix.lower() == ".png":
+                ctype = "image/png"
+            elif f.suffix.lower() in (".mp4", ".mov", ".webm"):
+                ctype = "video/mp4"
+            upload_file(scout, f.name, f.read_bytes(), ctype)
+
+        st.success(f"✅ Draft synced to OneDrive → {scout}/{report_id}")
+    except Exception as exc:
+        st.warning(f"OneDrive draft upload issue: {exc}")
+
+
+def _onedrive_upload_share_ref(from_scout: str, to_scout: str,
+                               share_id: str, original_rid: str,
+                               meta: dict) -> None:
+    """Upload a share-reference JSON to the recipient's OneDrive folder.
+
+    Does NOT copy the PPTX — the recipient follows the pointer back to the
+    sender's single canonical file.
+    """
+    try:
+        from onedrive_sync import upload_json, is_configured
+    except Exception as exc:
+        st.warning(f"OneDrive module import failed: {exc}")
+        return
+
+    if not is_configured():
+        return
+
+    ref = dict(meta)
+    ref["report_id"] = share_id
+    ref["original_id"] = original_rid
+    ref["original_scout"] = from_scout
+    ref["shared_by"] = from_scout
+    ref["is_share_ref"] = True
+
+    ok, err = upload_json(to_scout, share_id, ref)
+    if not ok:
+        st.warning(f"OneDrive share-ref upload failed: {err}")
+    else:
+        st.success(f"✅ Share linked on OneDrive → {to_scout}/{share_id}")
+
+
 def _onedrive_delete(scout: str, report_id: str,
                      player_name: str = "", position: str = "") -> None:
-    """Delete a report from OneDrive (best-effort, never blocks)."""
+    """Delete a report from OneDrive (both finished and draft areas)."""
     try:
         from onedrive_sync import delete_report_files, is_configured
         if not is_configured():
             return
-        delete_report_files(scout, report_id)
+        delete_report_files(scout, report_id)  # default: deletes from both
     except Exception:
         pass
 
@@ -867,8 +954,9 @@ def _onedrive_restore_if_needed() -> None:
         if not has_any:
             results = restore_all_scouts(DATA_DIR)
             if results:
-                total = sum(results.values())
-                st.toast(f"Restored {total} report(s) from OneDrive")
+                total_fin = sum(v[0] for v in results.values())
+                total_rec = sum(v[1] for v in results.values())
+                st.toast(f"Restored {total_fin} finished + {total_rec} received from OneDrive")
     except Exception:
         pass
 
@@ -1780,6 +1868,7 @@ elif page == "New Report":
                 photo_circular=st.session_state.get("new_player_photo_circ"),
             )
             st.session_state["active_report_id"] = rid
+            _onedrive_upload_draft(username, rid)
             st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
     with col_gen:
@@ -1849,7 +1938,7 @@ elif page == "New Report":
                     pptx_bytes = output.getvalue()
                     rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
                     player = _current_player_name(NEW_PDATA_KEY) or template_name
-                    storage.share_report(
+                    share_id = storage.share_report(
                         from_username=username,
                         to_username=sel_scout,
                         report_id=rid,
@@ -1876,6 +1965,20 @@ elif page == "New Report":
                                           photo_circular=st.session_state.get("new_player_photo_circ"))
                     _onedrive_upload(username, rid, pptx_bytes,
                                      _current_player_name(NEW_PDATA_KEY), template_name)
+                    _onedrive_upload_share_ref(
+                        username, sel_scout, share_id, rid,
+                        {
+                            "position": template_name,
+                            "club": club,
+                            "language": lang,
+                            "player_name": _current_player_name(NEW_PDATA_KEY),
+                            "star_values": s,
+                            "comments": c,
+                            "player_data": _share_pdata,
+                            "tm_stats": _share_tm,
+                            "shared_at": time.time(),
+                        },
+                    )
                     storage.mark_shared(username, rid, sel_scout)
                     st.session_state.pop("_share_pending", None)
                     # Auto-send notification emails (receiver gets platform link)
@@ -2225,6 +2328,7 @@ elif page == "Upload & Edit":
                     photo_circular=st.session_state.get("upload_player_photo_circ"),
                 )
                 st.session_state["upload_active_report_id"] = rid
+                _onedrive_upload_draft(username, rid)
                 st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
         with col_gen:
@@ -2243,14 +2347,17 @@ elif page == "Upload & Edit":
                 pptx_bytes = output.getvalue()
                 pos = matched_name or "Unknown"
 
-                rid = st.session_state.get("upload_active_report_id") or storage.save_draft(
-                    username, None, pos, detected_club, detected_lang, s, c, v,
-                    source="upload",
-                    upload_bytes=st.session_state.get("upload_bytes"),
-                    upload_filename=st.session_state.get("upload_filename"),
-                    player_data=_upgen_pdata,
-                    tm_stats=_upgen_tm,
-                )
+                rid = st.session_state.get("upload_active_report_id")
+                if not rid:
+                    rid = storage.save_draft(
+                        username, None, pos, detected_club, detected_lang, s, c, v,
+                        source="upload",
+                        upload_bytes=st.session_state.get("upload_bytes"),
+                        upload_filename=st.session_state.get("upload_filename"),
+                        player_data=_upgen_pdata,
+                        tm_stats=_upgen_tm,
+                    )
+                    _onedrive_upload_draft(username, rid)
                 storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                       player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                       player_data=_upgen_pdata,
@@ -2303,7 +2410,7 @@ elif page == "Upload & Edit":
                         player = _current_player_name(UPLOAD_PDATA_KEY) or pos
                         _upshare_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
                         _upshare_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upshare_pdata)
-                        storage.share_report(
+                        share_id = storage.share_report(
                             from_username=username,
                             to_username=sel_scout,
                             report_id=rid,
@@ -2332,6 +2439,20 @@ elif page == "Upload & Edit":
                                               photo_circular=st.session_state.get("upload_player_photo_circ"))
                         _onedrive_upload(username, rid, pptx_bytes,
                                          _current_player_name(UPLOAD_PDATA_KEY), pos)
+                        _onedrive_upload_share_ref(
+                            username, sel_scout, share_id, rid,
+                            {
+                                "position": pos,
+                                "club": detected_club,
+                                "language": detected_lang,
+                                "player_name": _current_player_name(UPLOAD_PDATA_KEY),
+                                "star_values": s,
+                                "comments": c,
+                                "player_data": _upshare_pdata,
+                                "tm_stats": _upshare_tm,
+                                "shared_at": time.time(),
+                            },
+                        )
                         storage.mark_shared(username, rid, sel_scout)
                         st.session_state.pop("_share_pending", None)
                         # Auto-send notification emails (receiver gets platform link)
