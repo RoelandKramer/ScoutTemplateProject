@@ -796,33 +796,42 @@ def _current_player_name(state_key: str = "player_data") -> str:
 
 def _onedrive_upload(scout: str, report_id: str, pptx_bytes: bytes,
                      player_name: str = "", position: str = "") -> None:
-    """Upload finished report (PPTX + JSON) to OneDrive. Best-effort."""
+    """Upload finished report (PPTX + JSON) to OneDrive."""
     try:
-        from onedrive_sync import upload_pptx, upload_json, is_configured
-        if not is_configured():
-            return
-        # Upload PPTX
-        ok, err = upload_pptx(scout, report_id, pptx_bytes)
-        if not ok and err:
-            st.warning(f"OneDrive upload: {err}")
-            return
-        # Upload the JSON metadata so we can restore state later
+        from onedrive_sync import upload_pptx, upload_json, upload_file, is_configured
+    except Exception as exc:
+        st.warning(f"OneDrive module import failed: {exc}")
+        return
+
+    if not is_configured():
+        st.warning("OneDrive not configured — add the [onedrive] block to your Streamlit secrets.")
+        return
+
+    ok, err = upload_pptx(scout, report_id, pptx_bytes)
+    if not ok:
+        st.error(f"OneDrive PPTX upload failed: {err}")
+        return
+
+    try:
         from storage import _finished_dir
         json_path = _finished_dir(scout) / f"{report_id}.json"
         if json_path.exists():
             import json as _json
             meta = _json.loads(json_path.read_text(encoding="utf-8"))
-            upload_json(scout, report_id, meta)
-        # Upload photo files if they exist
-        from onedrive_sync import upload_file
+            ok_j, err_j = upload_json(scout, report_id, meta)
+            if not ok_j:
+                st.warning(f"OneDrive JSON upload failed: {err_j}")
+
         finished = _finished_dir(scout)
         for suffix in ("_photo_full.png", "_photo_circ.png"):
             photo_path = finished / f"{report_id}{suffix}"
             if photo_path.exists():
-                upload_file(scout, f"{report_id}{suffix}", photo_path.read_bytes(),
-                            "image/png")
-    except Exception:
-        pass  # never break the app for a sync failure
+                upload_file(scout, f"{report_id}{suffix}",
+                            photo_path.read_bytes(), "image/png")
+
+        st.success(f"✅ Report synced to OneDrive → {scout}/{report_id}")
+    except Exception as exc:
+        st.warning(f"OneDrive metadata/photo upload issue: {exc}")
 
 
 def _onedrive_delete(scout: str, report_id: str,
