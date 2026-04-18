@@ -778,13 +778,15 @@ def competency_sections(
             translate_key  = f"{key_prefix}_{i}_translate"
             lang_key       = f"{key_prefix}_{i}_translate_lang"
             suggestion_key = f"{key_prefix}_{i}_suggestion"
-            col_imp, _spacer, col_lang, col_tr = st.columns([1, 1.5, 1, 1])
+            mode_key       = f"{key_prefix}_{i}_sug_mode"
+            col_imp, _sp, col_lang, col_tr, _tail = st.columns([1, 3, 0.4, 1, 0.6])
             with col_imp:
-                if st.button(f"✨ {t('improve', L)}", key=improve_key, use_container_width=True):
+                if st.button(f"✨ {t('improve', L)}", key=improve_key):
                     raw = st.session_state[comment_key]
                     if raw.strip():
                         with st.spinner(f"{t('improving', L)}"):
                             st.session_state[suggestion_key] = improve_text(raw)
+                            st.session_state[mode_key] = "improve"
                     else:
                         st.warning(t("nothing_to_improve", L))
             with col_lang:
@@ -795,17 +797,19 @@ def competency_sections(
                     label_visibility="collapsed",
                 )
             with col_tr:
-                if st.button(f"🌐 {t('translate', L)}", key=translate_key, use_container_width=True):
+                if st.button(f"🌐 {t('translate', L)}", key=translate_key):
                     raw = st.session_state[comment_key]
                     if raw.strip():
                         target = st.session_state.get(lang_key, "EN")
                         with st.spinner(t("translating", L)):
                             st.session_state[suggestion_key] = translate_text(raw, target)
+                            st.session_state[mode_key] = "translate"
                     else:
                         st.warning(t("nothing_to_improve", L))
             if st.session_state.get(suggestion_key):
                 suggestion = st.session_state[suggestion_key]
-                st.markdown(f"**{t('suggested_improvement', L)}**")
+                _heading_key = "translation_label" if st.session_state.get(mode_key) == "translate" else "suggested_improvement"
+                st.markdown(f"**{t(_heading_key, L)}**")
                 st.text_area("Suggested", value=suggestion, height=90, key=f"{key_prefix}_{i}_sug_display", label_visibility="collapsed")
                 _, col_accept, col_discard, _ = st.columns([1, 1.5, 1.5, 1])
                 with col_accept:
@@ -1433,19 +1437,23 @@ def _scisports_section(
                 total, options = search_players(token, query)
                 st.session_state[f"{key_prefix}_token"] = token
                 st.session_state[f"{key_prefix}_options"] = options
-                # Reset the selectbox to the first result on every new search
-                st.session_state.pop(f"{key_prefix}_selected_idx", None)
+                # Bump a version counter so the selectbox below uses a fresh
+                # widget key and defaults back to the first result.
+                st.session_state[f"{key_prefix}_options_ver"] = (
+                    st.session_state.get(f"{key_prefix}_options_ver", 0) + 1
+                )
             except Exception as exc:
                 st.error(f"SciSports error: {exc}")
 
     options = st.session_state.get(f"{key_prefix}_options", [])
     if options:
         labels = [opt.label() for opt in options]
+        _ver = st.session_state.get(f"{key_prefix}_options_ver", 0)
         selected_idx = st.selectbox(
             t("select_player", L),
             range(len(labels)),
             format_func=lambda i: labels[i],
-            key=f"{key_prefix}_selected_idx",
+            key=f"{key_prefix}_selected_idx_v{_ver}",
         )
 
         if st.button(t("obtain_scisports", L), type="primary", use_container_width=True, key=f"{key_prefix}_obtain"):
