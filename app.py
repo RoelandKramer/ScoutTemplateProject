@@ -791,7 +791,7 @@ def competency_sections(
             lang_key       = f"{key_prefix}_{i}_translate_lang"
             suggestion_key = f"{key_prefix}_{i}_suggestion"
             mode_key       = f"{key_prefix}_{i}_sug_mode"
-            col_imp, _sp, col_lang, col_tr = st.columns([1, 4, 1, 1])
+            col_imp, _sp, col_lang, col_tr = st.columns([1, 2, 2, 1])
             with col_imp:
                 if st.button(f"✨ {t('improve', L)}", key=improve_key):
                     raw = st.session_state[comment_key]
@@ -801,24 +801,29 @@ def competency_sections(
                             st.session_state[mode_key] = "improve"
                     else:
                         st.warning(t("nothing_to_improve", L))
+            _LANG_FULL = {"NL": "Nederlands", "EN": "English", "IT": "Italiano", "ZH": "中文"}
             with col_lang:
                 st.selectbox(
                     t("language_label", L),
                     ["NL", "EN", "IT", "ZH"],
+                    index=None,
+                    placeholder=t("translate_placeholder", L),
+                    format_func=lambda c: _LANG_FULL[c],
                     key=lang_key,
                     label_visibility="collapsed",
-                    help=t("translate_target_help", L),
                 )
             with col_tr:
                 if st.button(f"🌐 {t('translate', L)}", key=translate_key):
                     raw = st.session_state[comment_key]
-                    if raw.strip():
-                        target = st.session_state.get(lang_key, "EN")
+                    target = st.session_state.get(lang_key)
+                    if not raw.strip():
+                        st.warning(t("nothing_to_improve", L))
+                    elif not target:
+                        st.warning(t("select_target_language", L))
+                    else:
                         with st.spinner(t("translating", L)):
                             st.session_state[suggestion_key] = translate_text(raw, target)
                             st.session_state[mode_key] = "translate"
-                    else:
-                        st.warning(t("nothing_to_improve", L))
             if st.session_state.get(suggestion_key):
                 suggestion = st.session_state[suggestion_key]
                 _heading_key = "translation_label" if st.session_state.get(mode_key) == "translate" else "suggested_improvement"
