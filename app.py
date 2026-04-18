@@ -207,6 +207,43 @@ def improve_text(text: str) -> str:
         return text
 
 
+_LANG_NAME = {
+    "NL": "Dutch",
+    "EN": "English",
+    "IT": "Italian",
+    "ZH": "Chinese (Simplified)",
+}
+
+
+def translate_text(text: str, target_lang: str) -> str:
+    api_key = _get_anthropic_key()
+    if not api_key:
+        st.error("No Anthropic API key.")
+        return text
+    lang_name = _LANG_NAME.get(target_lang, target_lang)
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Translate the following scouting note into {lang_name}. "
+                    "Preserve tone and football terminology. "
+                    "Return ONLY the translated text with no introduction or explanation.\n\n"
+                    f"Input: {text}\n"
+                    "Output:"
+                ),
+            }],
+        )
+        return msg.content[0].text.strip()
+    except Exception as exc:
+        st.error(f"AI translation failed: {exc}")
+        return text
+
+
 
 # ─── Authentication ──────────────────────────────────────────────────────────
 
@@ -738,14 +775,32 @@ def competency_sections(
             st.text_area(t("scouting_notes", L), key=comment_key, height=90, placeholder="…")
 
             improve_key    = f"{key_prefix}_{i}_improve"
+            translate_key  = f"{key_prefix}_{i}_translate"
+            lang_key       = f"{key_prefix}_{i}_translate_lang"
             suggestion_key = f"{key_prefix}_{i}_suggestion"
-            col_btn, _ = st.columns([1, 4])
-            with col_btn:
-                if st.button(f"✨ {t('improve', L)}", key=improve_key):
+            col_imp, _spacer, col_lang, col_tr = st.columns([1, 1.5, 1, 1])
+            with col_imp:
+                if st.button(f"✨ {t('improve', L)}", key=improve_key, use_container_width=True):
                     raw = st.session_state[comment_key]
                     if raw.strip():
                         with st.spinner(f"{t('improving', L)}"):
                             st.session_state[suggestion_key] = improve_text(raw)
+                    else:
+                        st.warning(t("nothing_to_improve", L))
+            with col_lang:
+                st.selectbox(
+                    t("language_label", L),
+                    ["NL", "EN", "IT", "ZH"],
+                    key=lang_key,
+                    label_visibility="collapsed",
+                )
+            with col_tr:
+                if st.button(f"🌐 {t('translate', L)}", key=translate_key, use_container_width=True):
+                    raw = st.session_state[comment_key]
+                    if raw.strip():
+                        target = st.session_state.get(lang_key, "EN")
+                        with st.spinner(t("translating", L)):
+                            st.session_state[suggestion_key] = translate_text(raw, target)
                     else:
                         st.warning(t("nothing_to_improve", L))
             if st.session_state.get(suggestion_key):
@@ -796,129 +851,94 @@ def _current_player_name(state_key: str = "player_data") -> str:
 
 def _onedrive_upload(scout: str, report_id: str, pptx_bytes: bytes,
                      player_name: str = "", position: str = "") -> None:
-    """Upload finished report (PPTX + JSON) to OneDrive."""
+    """Upload finished report (PPTX + JSON + photos + videos) to OneDrive. Silent."""
     try:
         from onedrive_sync import upload_pptx, upload_json, upload_file, is_configured
-    except Exception as exc:
-        st.warning(f"OneDrive module import failed: {exc}")
-        return
+        if not is_configured():
+            return
+        upload_pptx(scout, report_id, pptx_bytes)
 
-    if not is_configured():
-        st.warning("OneDrive not configured — add the [onedrive] block to your Streamlit secrets.")
-        return
-
-    ok, err = upload_pptx(scout, report_id, pptx_bytes)
-    if not ok:
-        st.error(f"OneDrive PPTX upload failed: {err}")
-        return
-
-    try:
         from storage import _finished_dir
-        json_path = _finished_dir(scout) / f"{report_id}.json"
+        finished = _finished_dir(scout)
+        json_path = finished / f"{report_id}.json"
         if json_path.exists():
             import json as _json
             meta = _json.loads(json_path.read_text(encoding="utf-8"))
-            ok_j, err_j = upload_json(scout, report_id, meta)
-            if not ok_j:
-                st.warning(f"OneDrive JSON upload failed: {err_j}")
+            upload_json(scout, report_id, meta)
 
-        finished = _finished_dir(scout)
-        for suffix in ("_photo_full.png", "_photo_circ.png"):
-            photo_path = finished / f"{report_id}{suffix}"
-            if photo_path.exists():
-                upload_file(scout, f"{report_id}{suffix}",
-                            photo_path.read_bytes(), "image/png")
-
-        st.success(f"✅ Report synced to OneDrive → {scout}/{report_id}")
-    except Exception as exc:
-        st.warning(f"OneDrive metadata/photo upload issue: {exc}")
+        for f in finished.iterdir():
+            if not f.is_file() or not f.name.startswith(report_id):
+                continue
+            if f.name in (f"{report_id}.json", f"{report_id}.pptx"):
+                continue
+            ext = f.suffix.lower()
+            if ext == ".png":
+                ctype = "image/png"
+            elif ext in (".mp4", ".mov", ".webm"):
+                ctype = "video/mp4"
+            else:
+                ctype = "application/octet-stream"
+            upload_file(scout, f.name, f.read_bytes(), ctype)
+    except Exception:
+        pass
 
 
 def _onedrive_upload_draft(scout: str, report_id: str) -> None:
-    """Upload a draft (JSON + snapshot PPTX + photos + videos) to OneDrive.
-
-    Writes to the same path finished reports use so saves overwrite a single
-    canonical file per report_id (no draft/finished duplicate).
-    """
+    """Upload a draft to OneDrive (silent). Same path as finished so saves overwrite."""
     try:
-        from onedrive_sync import upload_json, upload_file, is_configured
-    except Exception as exc:
-        st.warning(f"OneDrive module import failed: {exc}")
-        return
+        from onedrive_sync import upload_json, upload_file, upload_pptx, is_configured
+        if not is_configured():
+            return
 
-    if not is_configured():
-        st.warning("OneDrive not configured — add the [onedrive] block to your Streamlit secrets.")
-        return
-
-    try:
         from storage import _drafts_dir
         import json as _json
         drafts = _drafts_dir(scout)
         json_path = drafts / f"{report_id}.json"
         if not json_path.exists():
-            st.warning(f"Draft JSON not found locally: {json_path.name}")
             return
 
         meta = _json.loads(json_path.read_text(encoding="utf-8"))
-        ok, err = upload_json(scout, report_id, meta)
-        if not ok:
-            st.error(f"OneDrive draft JSON upload failed: {err}")
-            return
+        upload_json(scout, report_id, meta)
 
-        # Rename the snapshot `<rid>_upload.pptx` to `<rid>.pptx` on OneDrive
-        # so the finished-save uses the same key and subsequent saves overwrite.
         snap = drafts / f"{report_id}_upload.pptx"
         if snap.exists():
-            from onedrive_sync import upload_pptx as _upload_pptx
-            _upload_pptx(scout, report_id, snap.read_bytes())
+            upload_pptx(scout, report_id, snap.read_bytes())
 
-        # Upload auxiliary files (photos, videos) with their local names
         for f in drafts.iterdir():
             if not f.is_file() or not f.name.startswith(report_id):
                 continue
             if f.name in (f"{report_id}.json", f"{report_id}_upload.pptx"):
                 continue
-            ctype = "application/octet-stream"
-            if f.suffix.lower() == ".png":
+            ext = f.suffix.lower()
+            if ext == ".png":
                 ctype = "image/png"
-            elif f.suffix.lower() in (".mp4", ".mov", ".webm"):
+            elif ext in (".mp4", ".mov", ".webm"):
                 ctype = "video/mp4"
+            else:
+                ctype = "application/octet-stream"
             upload_file(scout, f.name, f.read_bytes(), ctype)
-
-        st.success(f"✅ Draft synced to OneDrive → {scout}/{report_id}")
-    except Exception as exc:
-        st.warning(f"OneDrive draft upload issue: {exc}")
+    except Exception:
+        pass
 
 
 def _onedrive_upload_share_ref(from_scout: str, to_scout: str,
                                share_id: str, original_rid: str,
                                meta: dict) -> None:
-    """Upload a share-reference JSON to the recipient's OneDrive folder.
-
-    Does NOT copy the PPTX — the recipient follows the pointer back to the
-    sender's single canonical file.
-    """
+    """Upload a share-reference JSON to the recipient's OneDrive folder (silent)."""
     try:
         from onedrive_sync import upload_json, is_configured
-    except Exception as exc:
-        st.warning(f"OneDrive module import failed: {exc}")
-        return
+        if not is_configured():
+            return
 
-    if not is_configured():
-        return
-
-    ref = dict(meta)
-    ref["report_id"] = share_id
-    ref["original_id"] = original_rid
-    ref["original_scout"] = from_scout
-    ref["shared_by"] = from_scout
-    ref["is_share_ref"] = True
-
-    ok, err = upload_json(to_scout, share_id, ref)
-    if not ok:
-        st.warning(f"OneDrive share-ref upload failed: {err}")
-    else:
-        st.success(f"✅ Share linked on OneDrive → {to_scout}/{share_id}")
+        ref = dict(meta)
+        ref["report_id"] = share_id
+        ref["original_id"] = original_rid
+        ref["original_scout"] = from_scout
+        ref["shared_by"] = from_scout
+        ref["is_share_ref"] = True
+        upload_json(to_scout, share_id, ref)
+    except Exception:
+        pass
 
 
 def _onedrive_delete(scout: str, report_id: str,
@@ -952,11 +972,7 @@ def _onedrive_restore_if_needed() -> None:
                     has_any = True
                     break
         if not has_any:
-            results = restore_all_scouts(DATA_DIR)
-            if results:
-                total_fin = sum(v[0] for v in results.values())
-                total_rec = sum(v[1] for v in results.values())
-                st.toast(f"Restored {total_fin} finished + {total_rec} received from OneDrive")
+            restore_all_scouts(DATA_DIR)
     except Exception:
         pass
 
@@ -1417,6 +1433,8 @@ def _scisports_section(
                 total, options = search_players(token, query)
                 st.session_state[f"{key_prefix}_token"] = token
                 st.session_state[f"{key_prefix}_options"] = options
+                # Reset the selectbox to the first result on every new search
+                st.session_state.pop(f"{key_prefix}_selected_idx", None)
             except Exception as exc:
                 st.error(f"SciSports error: {exc}")
 
