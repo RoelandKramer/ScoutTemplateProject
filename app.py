@@ -779,7 +779,7 @@ def competency_sections(
             lang_key       = f"{key_prefix}_{i}_translate_lang"
             suggestion_key = f"{key_prefix}_{i}_suggestion"
             mode_key       = f"{key_prefix}_{i}_sug_mode"
-            col_imp, _sp, col_lang, col_tr, _tail = st.columns([1, 3, 0.4, 1, 0.6])
+            col_imp, _sp, col_lang, col_tr = st.columns([1, 4, 1, 1])
             with col_imp:
                 if st.button(f"✨ {t('improve', L)}", key=improve_key):
                     raw = st.session_state[comment_key]
