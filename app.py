@@ -20,6 +20,18 @@ from i18n import t, APP_LANGUAGES
 # ─── Page config ────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Scouting Rapport Pro+", page_icon="", layout="wide")
 
+st.markdown(
+    """
+    <style>
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        min-height: 38px;
+        height: 38px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # (Flag CSS is emitted from _render_flags() — AFTER _apply_theme() — so it
 #  can override the theme's global button styles with higher specificity.)
 
@@ -795,6 +807,7 @@ def competency_sections(
                     ["NL", "EN", "IT", "ZH"],
                     key=lang_key,
                     label_visibility="collapsed",
+                    help=t("translate_target_help", L),
                 )
             with col_tr:
                 if st.button(f"🌐 {t('translate', L)}", key=translate_key):
