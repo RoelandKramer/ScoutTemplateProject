@@ -1436,9 +1436,7 @@ def _physical_data_section(
                 data["top_speed"] = ts_val
                 st.session_state[state_key] = data
         if data.get("n_matches_60plus"):
-            st.caption(
-                t("physical_based_on_matches", L).format(n=data["n_matches_60plus"])
-            )
+            st.caption(t("physical_based_on_matches", L))
 
     return st.session_state.get(state_key)
 

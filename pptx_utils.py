@@ -895,29 +895,9 @@ def _write_text_shape(shape, text: str) -> None:
         run.text = text
 
 
-_WELCOME_NAME_PT = 64.0
-
-
 def _fit_name_to_shape(shape, text: str) -> None:
-    """Write name at 64pt, shrinking only if it would overflow shape width."""
-    if not shape.has_text_frame:
-        return
-    tf = shape.text_frame
+    """Write name into welcome-slide shape preserving template formatting (64pt)."""
     _write_text_shape(shape, text)
-    try:
-        tf.auto_size = MSO_AUTO_SIZE.NONE
-    except Exception:
-        pass
-
-    run = tf.paragraphs[0].runs[0] if tf.paragraphs and tf.paragraphs[0].runs else None
-    if run is None or not text:
-        return
-
-    base_pt = _WELCOME_NAME_PT
-    width_pt = shape.width * 72.0 / 914400.0
-    needed_pt = width_pt / (len(text) * 0.6)
-    final_pt = min(base_pt, needed_pt) if needed_pt < base_pt - 1.0 else base_pt
-    run.font.size = Pt(max(20.0, final_pt))
 
 
 def fill_player_info(prs, template_cfg: dict, player_data: dict) -> None:
@@ -1070,14 +1050,101 @@ def fill_scouting_dates(prs, template_cfg: dict, scouting_dates: list) -> None:
         _write_text_shape(target, "\n".join(lines))
 
 
-# ─── Physical data (no template placeholder yet — kept for app preview) ───
+# ─── Physical data ─────────────────────────────────────────────────────────
+
+def _write_multiline_text_shape(shape, lines: list) -> None:
+    """Write one line per paragraph into a shape, preserving each paragraph's
+    existing first-run formatting (font size / colour / family)."""
+    if not shape.has_text_frame:
+        return
+    tf = shape.text_frame
+    paragraphs = tf.paragraphs
+    for i, line in enumerate(lines):
+        text = "" if line is None else str(line)
+        if i < len(paragraphs):
+            p = paragraphs[i]
+            if p.runs:
+                p.runs[0].text = text
+                for r in p.runs[1:]:
+                    r.text = ""
+            else:
+                p.clear()
+                r = p.add_run()
+                r.text = text
+
 
 def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
-    """No-op: the slide template currently has no physical-data placeholders.
-    Kept so that callers can pass `physical_data=` without errors. Once the
-    template gets dedicated placeholders, fill them here.
+    """Fill the physical-data placeholders on the rating slide.
+
+    * ``TextBox 31`` (bottom-left stack, top~12.64″, left~2.85″) — 4 lines:
+      Total Distance / HI-runs / Sprints / Top speed
+    * ``xx%`` shape (top~5.60″, left~13.88″) — player availability %
     """
-    return
+    if not physical_data:
+        return
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+
+    def _fmt_distance(v):
+        try:
+            return f"{float(v) / 1000.0:.2f} km"
+        except (TypeError, ValueError):
+            return ""
+
+    def _fmt_int(v):
+        try:
+            return str(int(round(float(v))))
+        except (TypeError, ValueError):
+            return ""
+
+    def _fmt_speed(v):
+        if v is None:
+            return ""
+        s = str(v).strip()
+        if not s:
+            return ""
+        low = s.lower().replace(" ", "")
+        if low.endswith("km/h") or low.endswith("kmh") or low.endswith("kph"):
+            return s
+        try:
+            return f"{float(s):.1f} km/h"
+        except ValueError:
+            return s
+
+    def _fmt_pct(v):
+        try:
+            return f"{float(v):.0f}%"
+        except (TypeError, ValueError):
+            return ""
+
+    total_distance = physical_data.get("total_distance")
+    hi_runs = physical_data.get("hi_runs")
+    sprints = physical_data.get("sprint_efforts")
+    top_speed = physical_data.get("top_speed")
+    availability = physical_data.get("availability")
+
+    EMU = 914400
+    # Bottom-left 4-line TextBox 31 (the slide has another TextBox 31 at top~10
+    # that's a separator — filter on position).
+    for shape in rating_slide.shapes:
+        if (shape.name == "TextBox 31"
+                and shape.has_text_frame
+                and (shape.top or 0) > int(11.5 * EMU)
+                and (shape.left or 0) < int(5 * EMU)):
+            _write_multiline_text_shape(shape, [
+                _fmt_distance(total_distance),
+                _fmt_int(hi_runs),
+                _fmt_int(sprints),
+                _fmt_speed(top_speed),
+            ])
+            break
+
+    # Big "PLAYER AVAILABILITY" box (right-hand side)
+    for shape in rating_slide.shapes:
+        if shape.name == "xx%" and shape.has_text_frame:
+            pct = _fmt_pct(availability)
+            if pct:
+                _write_text_shape(shape, pct)
+            break
 
 
 def fill_player_photo(
