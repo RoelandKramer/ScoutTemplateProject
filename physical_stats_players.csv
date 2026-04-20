@@ -1,0 +1,1312 @@
+player_id_global,player_name,club,division,position_tm,availability_pct,total_distance_per90,hi_runs_per90,sprint_runs_per90,n_matches_60plus
+Eredivisie:101,Kristoffer Peterson,Fortuna Sittard,Eredivisie,DM,100.0,10424.9,27.7,11.0,11.0
+Eredivisie:118,Owen Wijndal,Ajax,Eredivisie,LB,67.9,10278.0,24.8,11.4,16.0
+Eredivisie:120,Myron Boadu,PSV,Eredivisie,CF,46.4,9712.7,34.3,11.8,1.0
+Eredivisie:123,Jordy Clasie,AZ,Eredivisie,DM,25.0,10274.7,21.1,2.8,6.0
+Eredivisie:125,Dani de Wit,FC Utrecht,Eredivisie,AM,78.6,11944.2,37.2,4.7,19.0
+Eredivisie:127,,Feyenoord,Eredivisie,,7.1,,,,
+Eredivisie:130,Kenzo Goudmijn,Go Ahead Eagles,Eredivisie,AM,53.6,11702.2,41.6,6.3,8.0
+Eredivisie:131,Danny Bakker,Telstar,Eredivisie,CB,89.3,10241.0,24.4,6.4,23.0
+Eredivisie:134,Aaron Meijers,FC Volendam,Eredivisie,LB,71.4,10791.5,27.0,8.2,2.0
+Eredivisie:136,Luuk Koopmans,Fortuna Sittard,Eredivisie,GK,67.9,5177.3,0.8,0.0,7.0
+Eredivisie:1407,Jasper Cillessen,N.E.C.,Eredivisie,GK,42.9,5894.3,1.0,0.0,2.0
+Eredivisie:1414,Patrick van Aanholt,Sparta Rotterdam,Eredivisie,LB,57.1,9637.2,22.3,9.4,7.0
+Eredivisie:1425,Calvin Raatsie,Excelsior,Eredivisie,GK,42.9,6589.5,2.9,0.5,2.0
+Eredivisie:1426,Quinten Timber,Feyenoord,Eredivisie,DM,60.7,10307.5,31.0,7.5,14.0
+Eredivisie:1429,Shawn Adewoye,Fortuna Sittard,Eredivisie,CB,89.3,10070.9,20.3,5.9,19.0
+Eredivisie:143,Bilal Ould-Chikh,FC Volendam,Eredivisie,RW,28.6,9556.2,21.9,8.7,6.0
+Eredivisie:1434,Silvinho Esajas,FC Volendam,Eredivisie,CM,32.1,,,,
+Eredivisie:1437,Neraysho Kasanwirjo,Fortuna Sittard,Eredivisie,CB,39.3,9975.5,19.9,5.5,9.0
+Eredivisie:1438,Daan Reiziger,Telstar,Eredivisie,GK,53.6,4560.9,0.9,0.9,1.0
+Eredivisie:1439,Giovanni van Zwam,Go Ahead Eagles,Eredivisie,CB,57.1,10324.2,27.2,5.4,5.0
+Eredivisie:1444,Kian Fitz-Jim,Ajax,Eredivisie,CM,85.7,11809.0,35.7,11.3,4.0
+Eredivisie:1445,Zico Buurmeester,PEC Zwolle,Eredivisie,DM,67.9,11996.8,37.8,10.5,8.0
+Eredivisie:1451,,PSV,Eredivisie,,46.4,,,,
+Eredivisie:1456,Kaj de Rooij,PEC Zwolle,Eredivisie,LW,96.4,10333.7,29.2,12.4,16.0
+Eredivisie:1457,,NAC Breda,Eredivisie,,42.9,,,,
+Eredivisie:146,Bryan Linssen,N.E.C.,Eredivisie,CF,96.4,10648.0,31.9,9.7,24.0
+Eredivisie:1462,Gerrit Nauber,Go Ahead Eagles,Eredivisie,CB,32.1,9206.0,12.7,3.6,9.0
+Eredivisie:1463,Bas Kuipers,FC Twente,Eredivisie,CF,46.4,,,,
+Eredivisie:1464,Mats Deijl,Feyenoord,Eredivisie,RB,96.4,11161.3,29.9,9.9,26.0
+Eredivisie:1466,Luuk Brouwers,sc Heerenveen,Eredivisie,DM,85.7,11320.0,36.8,8.6,19.0
+Eredivisie:1468,Boyd Lucassen,NAC Breda,Eredivisie,CM,75.0,10538.4,26.5,8.8,11.0
+Eredivisie:147,Armando Obispo,PSV,Eredivisie,CB,85.7,10063.9,19.2,5.1,7.0
+Eredivisie:1473,Andries Noppert,sc Heerenveen,Eredivisie,GK,46.4,5369.3,0.7,0.2,4.0
+Eredivisie:1487,Ernest Poku,AZ,Eredivisie,RW,3.6,9903.2,27.7,9.2,1.0
+Eredivisie:150,Remko Pasveer,Heracles Almelo,Eredivisie,GK,75.0,5083.9,0.7,0.0,12.0
+Eredivisie:1503,Dimitrios Limnios,Fortuna Sittard,Eredivisie,RW,100.0,10955.3,33.1,12.3,19.0
+Eredivisie:1504,Ricky van Wolfswinkel,FC Twente,Eredivisie,LW,89.3,10632.3,33.8,9.3,16.0
+Eredivisie:1508,Youri Baas,Ajax,Eredivisie,CB,89.3,10010.4,20.1,5.5,25.0
+Eredivisie:1510,Mattijs Branderhorst,Fortuna Sittard,Eredivisie,GK,75.0,4935.2,0.9,0.2,21.0
+Eredivisie:1511,Iván Márquez,Fortuna Sittard,Eredivisie,RB,100.0,9548.9,15.3,4.6,25.0
+Eredivisie:1513,Bart van Rooij,FC Twente,Eredivisie,RB,96.4,10594.9,32.6,15.2,27.0
+Eredivisie:1514,Souffian El Karouani,FC Utrecht,Eredivisie,LB,92.9,10588.5,28.7,12.0,26.0
+Eredivisie:1515,Dirk Proper,N.E.C.,Eredivisie,CF,75.0,11539.7,32.3,8.1,11.0
+Eredivisie:1521,Ilias Bronkhorst,Excelsior,Eredivisie,RB,96.4,10841.5,26.9,13.0,23.0
+Eredivisie:1548,Mees de Wit,AZ,Eredivisie,LB,96.4,10887.3,29.6,9.0,26.0
+Eredivisie:155,Eli Dasa,N.E.C.,Eredivisie,CB,60.7,10366.5,31.8,10.6,16.0
+Eredivisie:1556,Djevencio van der Kust,Heracles Almelo,Eredivisie,LB,71.4,10542.1,38.9,11.8,10.0
+Eredivisie:157,Yassin Oukili,Fortuna Sittard,Eredivisie,RW,25.0,,,,
+Eredivisie:1570,Lennard Hartjes,Excelsior,Eredivisie,DM,53.6,11635.2,30.4,13.2,11.0
+Eredivisie:1572,Mike van der Hoorn,FC Utrecht,Eredivisie,CB,82.1,9644.4,17.7,4.5,17.0
+Eredivisie:1577,Arthur Zagré,Excelsior,Eredivisie,LB,85.7,9991.7,26.9,11.0,21.0
+Eredivisie:1578,Mimeirhel Benita,Heracles Almelo,Eredivisie,RB,82.1,9587.7,22.0,8.2,9.0
+Eredivisie:158,Thomas Buitink,PEC Zwolle,Eredivisie,CF,42.9,,,,
+Eredivisie:1591,Ivo Daniel Ferreira Mendonça Pinto,Fortuna Sittard,Eredivisie,RB,96.4,10471.2,27.6,14.1,22.0
+Eredivisie:1602,Ringo Meerveld,sc Heerenveen,Eredivisie,AM,85.7,11864.6,36.7,8.8,23.0
+Eredivisie:1604,,Go Ahead Eagles,Eredivisie,,21.4,,,,
+Eredivisie:1611,Rick Meissen,Excelsior,Eredivisie,CB,96.4,9912.4,18.7,5.4,21.0
+Eredivisie:1614,Thijmen Blokzijl,FC Groningen,Eredivisie,CB,100.0,10178.4,22.8,5.9,28.0
+Eredivisie:1621,Rijk Janse,N.E.C.,Eredivisie,GK,17.9,5896.3,2.9,0.0,1.0
+Eredivisie:1624,Luciano Valente,Feyenoord,Eredivisie,CM,92.9,11703.6,32.0,8.4,23.0
+Eredivisie:1625,Youri Regeer,Ajax,Eredivisie,CM,85.7,11230.5,29.0,9.4,17.0
+Eredivisie:1626,Gyan de Regt,Excelsior,Eredivisie,CM,100.0,11602.4,35.0,14.5,24.0
+Eredivisie:1627,Damian van der Haar,PEC Zwolle,Eredivisie,LB,14.3,,,,
+Eredivisie:1631,Nils Rossen,Telstar,Eredivisie,CM,89.3,11830.9,41.6,5.9,25.0
+Eredivisie:1635,,FC Utrecht,Eredivisie,,39.3,,,,
+Eredivisie:1636,Amourricho van Axel Dongen,sc Heerenveen,Eredivisie,CF,35.7,,,,
+Eredivisie:1643,,Go Ahead Eagles,Eredivisie,,21.4,,,,
+Eredivisie:1655,Arno Verschueren,FC Twente,Eredivisie,CM,89.3,11488.7,41.8,15.6,3.0
+Eredivisie:166,Calvin Verdonk,N.E.C.,Eredivisie,LB,14.3,9628.9,22.1,7.6,4.0
+Eredivisie:1660,Kamal Sowah,NAC Breda,Eredivisie,CM,96.4,11185.8,33.0,11.9,26.0
+Eredivisie:1668,Timo Jansink,Heracles Almelo,Eredivisie,GK,71.4,4755.6,0.4,0.1,12.0
+Eredivisie:1669,Sem Scheperman,Heracles Almelo,Eredivisie,DM,39.3,11058.1,32.3,7.5,7.0
+Eredivisie:1671,Mexx Meerdink,AZ,Eredivisie,CB,46.4,10418.7,35.8,10.7,6.0
+Eredivisie:1673,Przemyslaw Tyton,FC Twente,Eredivisie,GK,46.4,5141.9,0.9,0.0,1.0
+Eredivisie:1675,,FC Groningen,Eredivisie,,10.7,,,,
+Eredivisie:168,Joël Drommel,Sparta Rotterdam,Eredivisie,GK,100.0,5291.6,0.9,0.1,28.0
+Eredivisie:1680,Maxim Dekker,AZ,Eredivisie,CB,46.4,10705.9,23.6,5.9,2.0
+Eredivisie:1685,Milan Smit,Go Ahead Eagles,Eredivisie,CF,67.9,11807.7,38.9,12.7,15.0
+Eredivisie:1687,,FC Twente,Eredivisie,,42.9,,,,
+Eredivisie:1690,Anass Salah-Eddine,PSV,Eredivisie,LB,53.6,10280.0,21.9,9.9,10.0
+Eredivisie:1691,Miliano Jonathans,Excelsior,Eredivisie,LB,82.1,11774.3,31.6,13.3,2.0
+Eredivisie:1693,Philippe Sandler,N.E.C.,Eredivisie,CB,67.9,9793.8,22.0,8.6,16.0
+Eredivisie:1695,Tristan van Gilst,Heracles Almelo,Eredivisie,LW,78.6,11542.8,39.9,14.0,8.0
+Eredivisie:1704,Mike Eerdhuijzen,FC Utrecht,Eredivisie,CB,39.3,9995.6,26.9,5.6,1.0
+Eredivisie:1705,Jonathan de Guzmán,Sparta Rotterdam,Eredivisie,DM,32.1,,,,
+Eredivisie:1706,Tobias Lauritsen,Sparta Rotterdam,Eredivisie,CF,100.0,9863.0,26.2,5.1,28.0
+Eredivisie:1708,Charles-Andreas Brym,NAC Breda,Eredivisie,RW,78.6,10301.7,29.4,15.3,15.0
+Eredivisie:1710,Joshua Kitolano,Sparta Rotterdam,Eredivisie,DM,92.9,11423.3,33.9,12.2,23.0
+Eredivisie:1722,Stijn van Gassel,Excelsior,Eredivisie,GK,92.9,5533.6,1.4,0.1,25.0
+Eredivisie:1726,Julian Baas,Sparta Rotterdam,Eredivisie,DM,82.1,11935.7,33.4,4.5,10.0
+Eredivisie:1728,,Sparta Rotterdam,Eredivisie,,42.9,,,,
+Eredivisie:1739,Rui Jorge Monteiro Mendes,FC Groningen,Eredivisie,CM,53.6,,,,
+Eredivisie:1741,Remi van Ekeris,Telstar,Eredivisie,LW,14.3,,,,
+Eredivisie:1745,Julius Dirksen,Go Ahead Eagles,Eredivisie,CB,64.3,10158.9,19.3,4.6,6.0
+Eredivisie:1754,Vasilios Barkas,FC Utrecht,Eredivisie,GK,96.4,4922.0,0.9,0.0,26.0
+Eredivisie:1756,Taylor Booth,FC Twente,Eredivisie,RW,39.3,12277.2,47.7,11.7,4.0
+Eredivisie:1757,Can Bozdogan,FC Utrecht,Eredivisie,DM,71.4,11334.1,35.9,6.4,3.0
+Eredivisie:1764,Derry John Murkin,FC Utrecht,Eredivisie,LB,53.6,11030.5,34.5,11.7,2.0
+Eredivisie:1765,Billy van Duijl,AZ,Eredivisie,CB,32.1,9798.6,23.2,7.4,4.0
+Eredivisie:1767,Damon Mirani,Heracles Almelo,Eredivisie,CB,96.4,10453.9,24.1,6.5,27.0
+Eredivisie:1769,Robert Mühren,FC Volendam,Eredivisie,LW,92.9,10855.1,28.1,9.6,3.0
+Eredivisie:1772,Lequincio Zeefuik,Heracles Almelo,Eredivisie,CF,75.0,9544.9,25.6,8.8,10.0
+Eredivisie:1773,Kayne van Oevelen,FC Volendam,Eredivisie,GK,100.0,5306.0,1.7,0.1,28.0
+Eredivisie:1774,Givairo Read,Feyenoord,Eredivisie,RB,42.9,10535.6,30.6,13.9,9.0
+Eredivisie:1776,Walid Ould-Chikh,Heracles Almelo,Eredivisie,AM,75.0,10122.2,29.5,9.3,13.0
+Eredivisie:1779,Ryan Flamingo,PSV,Eredivisie,CB,96.4,10753.5,28.0,5.5,11.0
+Eredivisie:1783,Noah Naujoks,Excelsior,Eredivisie,CM,89.3,12308.6,33.1,13.3,22.0
+Eredivisie:1791,Willum Willumsson,N.E.C.,Eredivisie,AM,14.3,12758.5,68.1,10.3,1.0
+Eredivisie:1792,Oliver Edvardsen,Ajax,Eredivisie,RW,60.7,11207.8,39.7,15.5,4.0
+Eredivisie:1793,Robbin Weijenberg,Go Ahead Eagles,Eredivisie,LB,39.3,,,,
+Eredivisie:1794,,Go Ahead Eagles,Eredivisie,,32.1,,,,
+Eredivisie:1801,Derensili Sanches Fernandes,Excelsior,Eredivisie,CM,96.4,10963.1,33.6,15.4,23.0
+Eredivisie:1802,Patrick Brouwer,Telstar,Eredivisie,CM,85.7,12070.0,42.9,16.1,22.0
+Eredivisie:1809,Dean James,Go Ahead Eagles,Eredivisie,LB,78.6,11349.5,33.6,12.7,18.0
+Eredivisie:1817,Ahmetcan Kaplan,N.E.C.,Eredivisie,CB,89.3,9802.6,19.9,6.8,23.0
+Eredivisie:1833,Xavier Mbuyamba,FC Volendam,Eredivisie,CM,57.1,10038.6,20.2,8.9,7.0
+Eredivisie:1836,Ricardo Pepi,PSV,Eredivisie,CF,71.4,10404.5,32.3,11.9,9.0
+Eredivisie:1846,Thom van Bergen,FC Groningen,Eredivisie,CF,100.0,10955.1,34.5,14.2,28.0
+Eredivisie:1853,,Go Ahead Eagles,Eredivisie,,42.9,,,,
+Eredivisie:1855,Niek Schiks,PSV,Eredivisie,GK,46.4,6067.0,3.3,0.0,2.0
+Eredivisie:1856,Jorg Schreuders,FC Groningen,Eredivisie,CM,100.0,11154.6,36.1,13.2,25.0
+Eredivisie:1857,Déron Payne,FC Volendam,Eredivisie,RB,64.3,9971.8,27.3,9.8,9.0
+Eredivisie:1861,Alfons Sampsted,Go Ahead Eagles,Eredivisie,RB,21.4,11847.8,41.3,8.9,5.0
+Eredivisie:1865,,AZ,Eredivisie,,10.7,,,,
+Eredivisie:1866,Rome-Jayden Owusu-Oduro,AZ,Eredivisie,GK,64.3,4492.7,1.0,0.2,18.0
+Eredivisie:1873,Olivier Aertssen,PEC Zwolle,Eredivisie,AM,78.6,9903.9,21.6,9.6,12.0
+Eredivisie:1878,Calvin Twigt,Go Ahead Eagles,Eredivisie,DM,53.6,12420.2,40.5,5.7,4.0
+Eredivisie:1885,Irakli Yegoian,Excelsior,Eredivisie,CM,89.3,12158.9,40.4,9.5,25.0
+Eredivisie:1889,Wouter Goes,AZ,Eredivisie,CB,96.4,10645.3,22.4,4.2,26.0
+Eredivisie:1893,Bernt Klaverboer,sc Heerenveen,Eredivisie,GK,96.4,6025.0,1.0,0.0,23.0
+Eredivisie:1896,Anthony Descotte,FC Volendam,Eredivisie,DM,32.1,10550.1,25.1,8.1,3.0
+Eredivisie:1908,Mathijs Tielemans,Excelsior,Eredivisie,DM,21.4,12335.8,47.1,6.8,2.0
+Eredivisie:1909,Mohamed Nassoh,NAC Breda,Eredivisie,LW,89.3,11394.3,36.8,8.6,16.0
+Eredivisie:1911,Jetro Willems,N.E.C.,Eredivisie,CB,35.7,9951.8,24.2,3.6,2.0
+Eredivisie:1912,Lewis Schouten,Excelsior,Eredivisie,CB,71.4,11390.0,25.1,4.0,7.0
+Eredivisie:1913,Mats Rots,FC Twente,Eredivisie,LB,100.0,10523.3,30.9,13.6,27.0
+Eredivisie:1915,,FC Twente,Eredivisie,,3.6,,,,
+Eredivisie:1919,Kristian Hlynsson,FC Twente,Eredivisie,CM,96.4,12470.4,48.6,11.6,24.0
+Eredivisie:192,,Sparta Rotterdam,Eredivisie,,42.9,,,,
+Eredivisie:1923,Mika Godts,Ajax,Eredivisie,LW,92.9,10010.4,26.1,13.0,24.0
+Eredivisie:1926,Tygo Land,FC Groningen,Eredivisie,CM,96.4,11851.5,28.7,3.5,10.0
+Eredivisie:1933,,FC Groningen,Eredivisie,,7.1,,,,
+Eredivisie:194,Alen Halilovic,Fortuna Sittard,Eredivisie,LW,10.7,,,,
+Eredivisie:1947,Anselmo MacNulty,PEC Zwolle,Eredivisie,CB,96.4,10083.3,21.4,5.9,27.0
+Eredivisie:195,Joey Veerman,PSV,Eredivisie,DM,92.9,11587.7,33.4,4.4,24.0
+Eredivisie:1950,Nordin Bakker,sc Heerenveen,Eredivisie,GK,50.0,6258.8,0.0,0.0,1.0
+Eredivisie:1955,Jochem Ritmeester van de Kamp,Telstar,Eredivisie,RW,82.1,11774.9,43.0,16.2,22.0
+Eredivisie:1956,Lance Duijvestijn,Fortuna Sittard,Eredivisie,AM,78.6,11599.7,43.8,10.4,15.0
+Eredivisie:1958,Tyrese Noslin,Telstar,Eredivisie,CM,100.0,11129.9,37.0,14.0,21.0
+Eredivisie:1966,Stije Resink,FC Groningen,Eredivisie,CM,85.7,11836.8,31.9,6.9,23.0
+Eredivisie:197,Mitchell van Bergen,Sparta Rotterdam,Eredivisie,RW,92.9,11644.3,34.1,19.5,23.0
+Eredivisie:1976,Mats Egbring,sc Heerenveen,Eredivisie,RB,50.0,11232.8,30.3,19.3,1.0
+Eredivisie:1978,,PSV,Eredivisie,,7.1,,,,
+Eredivisie:1983,Espen van Ee,sc Heerenveen,Eredivisie,AM,10.7,12108.6,44.3,13.8,1.0
+Eredivisie:1985,Oliver Braude,sc Heerenveen,Eredivisie,RB,92.9,11095.8,30.0,12.5,26.0
+Eredivisie:1987,Richonell Margaret,Go Ahead Eagles,Eredivisie,LW,75.0,11739.5,34.9,13.9,8.0
+Eredivisie:1995,Sava-Arangel Cestic,Heracles Almelo,Eredivisie,CB,7.1,9606.3,21.3,7.3,2.0
+Eredivisie:1996,Antonio Satriano,Heracles Almelo,Eredivisie,CF,7.1,,,,
+Eredivisie:1997,Jannes Wieckhoff,Heracles Almelo,Eredivisie,RB,67.9,10593.0,34.0,8.1,4.0
+Eredivisie:1998,Bryan Limbombe,Heracles Almelo,Eredivisie,RW,78.6,10596.4,34.0,13.6,16.0
+Eredivisie:1999,,Heracles Almelo,Eredivisie,,14.3,,,,
+Eredivisie:200,Sherel Floranus,PEC Zwolle,Eredivisie,LB,96.4,10129.2,26.4,12.5,26.0
+Eredivisie:2001,Nick Fichtinger,PEC Zwolle,Eredivisie,DM,67.9,11295.5,34.1,7.0,4.0
+Eredivisie:2003,,PEC Zwolle,Eredivisie,,42.9,,,,
+Eredivisie:2009,Bram Nuytinck,N.E.C.,Eredivisie,CB,7.1,,,,
+Eredivisie:2010,,N.E.C.,Eredivisie,,7.1,,,,
+Eredivisie:2011,Koki Ogawa,N.E.C.,Eredivisie,LW,82.1,10476.0,36.1,4.9,14.0
+Eredivisie:2013,Brayann Pereira,N.E.C.,Eredivisie,CB,78.6,9885.8,30.1,15.7,9.0
+Eredivisie:2016,Roberto González Bayón,N.E.C.,Eredivisie,AM,46.4,10701.9,34.3,8.6,1.0
+Eredivisie:2017,Casper Widell,Excelsior,Eredivisie,CB,100.0,10335.2,20.4,4.8,28.0
+Eredivisie:2021,Ruben van Bommel,PSV,Eredivisie,LW,21.4,10010.6,33.8,13.8,4.0
+Eredivisie:2022,Leo Sauer,Feyenoord,Eredivisie,LW,71.4,10479.8,27.3,13.1,15.0
+Eredivisie:2023,Alexandre Manuel Penetra Correia,AZ,Eredivisie,CB,96.4,9835.4,21.1,4.0,25.0
+Eredivisie:2024,Denso Kasius,AZ,Eredivisie,RB,50.0,10138.1,21.5,11.4,11.0
+Eredivisie:2026,Ayase Ueda,Feyenoord,Eredivisie,CF,92.9,10159.0,32.7,9.8,25.0
+Eredivisie:2027,Jakob Breum,Go Ahead Eagles,Eredivisie,DM,78.6,12548.4,46.9,6.6,17.0
+Eredivisie:2029,Victor Edvardsen,Go Ahead Eagles,Eredivisie,AM,71.4,10730.2,29.8,15.2,16.0
+Eredivisie:2030,Thibo Baeten,Go Ahead Eagles,Eredivisie,RW,82.1,10917.3,35.0,18.0,4.0
+Eredivisie:2038,Naci Ünüvar,Heracles Almelo,Eredivisie,LW,71.4,10043.1,30.3,7.7,9.0
+Eredivisie:2039,Younes Taha,FC Groningen,Eredivisie,CM,96.4,11323.7,44.0,18.3,27.0
+Eredivisie:2042,Mannou Berger,Feyenoord,Eredivisie,CF,7.1,,,,
+Eredivisie:2043,Gjivai Zechiël,FC Utrecht,Eredivisie,DM,100.0,10939.8,32.0,10.0,25.0
+Eredivisie:2044,Alec Van Hoorenbeeck,Heracles Almelo,Eredivisie,CB,89.3,10490.2,26.5,9.5,20.0
+Eredivisie:2045,Dave Kwakman,FC Volendam,Eredivisie,CM,82.1,10672.6,25.2,4.7,8.0
+Eredivisie:2048,Troy Parrott,AZ,Eredivisie,CF,82.1,10329.6,40.4,11.4,21.0
+Eredivisie:2050,Zidane Aamar Iqbal,FC Utrecht,Eredivisie,AM,32.1,11443.5,33.7,3.4,2.0
+Eredivisie:2052,Yoann Cathline,FC Utrecht,Eredivisie,LW,71.4,10072.1,34.1,15.2,15.0
+Eredivisie:2057,Daouda Weidmann,FC Twente,Eredivisie,CM,46.4,11619.7,32.1,10.0,3.0
+Eredivisie:206,Sergiño Dest,PSV,Eredivisie,LB,85.7,10802.4,30.0,14.6,22.0
+Eredivisie:2060,Milan de Haan,FC Volendam,Eredivisie,LW,10.7,,,,
+Eredivisie:2063,Josip Sutalo,Ajax,Eredivisie,CB,71.4,10269.3,20.7,5.5,14.0
+Eredivisie:2066,Anton Gaaei,Ajax,Eredivisie,LB,82.1,11014.6,31.8,19.5,12.0
+Eredivisie:2073,Kodai Sano,N.E.C.,Eredivisie,CM,100.0,10957.1,32.0,8.6,28.0
+Eredivisie:2074,Chadwick Booth,Excelsior,Eredivisie,CF,14.3,11949.9,35.2,10.4,1.0
+Eredivisie:2075,Yannick Leliendal,FC Volendam,Eredivisie,DM,96.4,9734.0,26.0,10.7,25.0
+Eredivisie:2084,Ibrahim Sadiq,AZ,Eredivisie,RW,78.6,9945.7,28.5,11.3,2.0
+Eredivisie:2086,,Sparta Rotterdam,Eredivisie,,14.3,,,,
+Eredivisie:2095,Tristan Gooijer,PEC Zwolle,Eredivisie,RB,75.0,10400.2,27.7,9.5,12.0
+Eredivisie:2104,Tom de Graaff,PEC Zwolle,Eredivisie,GK,100.0,5687.3,0.4,0.0,26.0
+Eredivisie:2113,Shunsuke Mito,Sparta Rotterdam,Eredivisie,LW,67.9,11382.4,36.8,16.5,17.0
+Eredivisie:2114,Dylan Ruward,PEC Zwolle,Eredivisie,LB,28.6,,,,
+Eredivisie:2116,Cedric Hatenboer,Telstar,Eredivisie,CM,35.7,11979.9,37.3,6.9,8.0
+Eredivisie:2118,Adrian Blake,FC Utrecht,Eredivisie,RW,71.4,11015.0,29.8,8.7,9.0
+Eredivisie:2120,Yvandro Borges Sanches,Heracles Almelo,Eredivisie,AM,42.9,9468.0,26.1,12.0,4.0
+Eredivisie:2127,Lucas Vennegoor of Hesselink,FC Twente,Eredivisie,CM,46.4,,,,
+Eredivisie:2128,Tjaronn Chery,N.E.C.,Eredivisie,RW,96.4,11492.5,33.8,5.3,26.0
+Eredivisie:2137,Anis Hadj Moussa,Feyenoord,Eredivisie,RW,89.3,10140.2,33.6,12.3,23.0
+Eredivisie:2138,Søren Tengstedt,Go Ahead Eagles,Eredivisie,DM,28.6,,,,
+Eredivisie:2139,Niklas Vesterlund,FC Utrecht,Eredivisie,RB,64.3,11688.0,35.0,12.8,7.0
+Eredivisie:2149,Kees Smit,AZ,Eredivisie,DM,78.6,11394.1,34.7,8.3,20.0
+Eredivisie:2153,Jaden Slory,Go Ahead Eagles,Eredivisie,RW,57.1,11103.6,39.4,17.8,8.0
+Eredivisie:2155,Myron Mau-Asam,FC Volendam,Eredivisie,CM,14.3,,,,
+Eredivisie:2162,Jop Tijink,Heracles Almelo,Eredivisie,LB,25.0,,,,
+Eredivisie:2163,Tristan Schenkhuizen,Fortuna Sittard,Eredivisie,CM,17.9,,,,
+Eredivisie:2169,Joel Ideho,FC Volendam,Eredivisie,LW,85.7,10156.8,35.3,13.9,8.0
+Eredivisie:2179,Fredrik Oldrup Jensen,NAC Breda,Eredivisie,CB,46.4,10259.4,21.6,2.9,3.0
+Eredivisie:218,Lars Unnerstall,FC Twente,Eredivisie,GK,96.4,4765.5,1.0,0.0,27.0
+Eredivisie:2182,Cherrion Valerius,NAC Breda,Eredivisie,RB,89.3,10316.6,27.9,11.4,17.0
+Eredivisie:219,Ryan Thomas,PEC Zwolle,Eredivisie,DM,89.3,11696.0,34.7,6.6,21.0
+Eredivisie:2192,Rio Hillen,NAC Breda,Eredivisie,CB,82.1,9738.0,20.8,7.0,18.0
+Eredivisie:2196,Basar Önal,N.E.C.,Eredivisie,CM,92.9,10711.4,27.7,16.8,21.0
+Eredivisie:2199,Maas Willemsen,sc Heerenveen,Eredivisie,CB,100.0,10532.4,25.9,6.3,23.0
+Eredivisie:2203,Philip Brittijn,Fortuna Sittard,Eredivisie,DM,96.4,11756.3,35.7,9.8,22.0
+Eredivisie:2211,Mathis Suray,Go Ahead Eagles,Eredivisie,LW,92.9,10891.4,38.5,10.7,24.0
+Eredivisie:2212,Dylan Mbayo,PEC Zwolle,Eredivisie,LW,53.6,10101.2,30.2,13.8,4.0
+Eredivisie:222,Mohamed Ihattaren,Fortuna Sittard,Eredivisie,RW,85.7,11114.7,35.5,9.8,19.0
+Eredivisie:2226,Matisse Didden,FC Utrecht,Eredivisie,CB,92.9,10162.7,16.7,6.1,18.0
+Eredivisie:2227,Sami Ouaissa,N.E.C.,Eredivisie,CM,92.9,10373.5,35.8,14.4,26.0
+Eredivisie:2228,Václav Sejk,sc Heerenveen,Eredivisie,CB,60.7,11492.0,40.2,14.3,3.0
+Eredivisie:224,Sam Lammers,FC Twente,Eredivisie,CF,67.9,11175.9,39.4,7.0,11.0
+Eredivisie:2240,Marvin Peersman,FC Groningen,Eredivisie,LB,96.4,10645.9,28.9,11.5,27.0
+Eredivisie:2241,Tika de Jonge,FC Groningen,Eredivisie,CM,78.6,11677.7,36.6,6.9,17.0
+Eredivisie:2243,,FC Groningen,Eredivisie,,42.9,,,,
+Eredivisie:2245,Brynjólfur Willumsson,FC Groningen,Eredivisie,CM,82.1,11254.8,41.9,7.6,11.0
+Eredivisie:2246,Noam Emeran,FC Groningen,Eredivisie,RW,25.0,,,,
+Eredivisie:2247,Hidde Jurjus,FC Groningen,Eredivisie,GK,64.3,5330.2,0.4,0.2,6.0
+Eredivisie:2248,Nils Eggens,FC Groningen,Eredivisie,LW,14.3,,,,
+Eredivisie:2249,Daniel Bielica,NAC Breda,Eredivisie,GK,100.0,5063.9,1.2,0.1,27.0
+Eredivisie:2250,Enes Mahmutovic,NAC Breda,Eredivisie,CM,57.1,8876.2,13.9,4.0,4.0
+Eredivisie:2251,Leo Greiml,NAC Breda,Eredivisie,CB,50.0,9998.5,18.4,4.9,12.0
+Eredivisie:2252,Max Balard,NAC Breda,Eredivisie,DM,96.4,10299.3,22.0,4.5,27.0
+Eredivisie:2254,,NAC Breda,Eredivisie,,7.1,,,,
+Eredivisie:2270,,N.E.C.,Eredivisie,,28.6,,,,
+Eredivisie:2272,Sayfallah Ltaief,Sparta Rotterdam,Eredivisie,LW,42.9,10945.6,31.1,19.1,6.0
+Eredivisie:2274,Vasilios Zagaritis,sc Heerenveen,Eredivisie,LB,100.0,10530.4,28.3,16.0,27.0
+Eredivisie:228,Nick Viergever,FC Utrecht,Eredivisie,CB,85.7,9796.7,19.2,4.6,18.0
+Eredivisie:2282,Seiya Maikuma,AZ,Eredivisie,RB,17.9,,,,
+Eredivisie:2286,Oskar Zawada,FC Groningen,Eredivisie,CF,71.4,,,,
+Eredivisie:2289,Teo Quintero,Sparta Rotterdam,Eredivisie,LB,96.4,10106.2,25.5,10.1,22.0
+Eredivisie:2290,Mike Kleijn,Sparta Rotterdam,Eredivisie,LB,64.3,11104.5,31.4,10.0,3.0
+Eredivisie:2291,Marvin Young,Sparta Rotterdam,Eredivisie,CB,96.4,10196.7,20.8,6.2,27.0
+Eredivisie:2292,,Heracles Almelo,Eredivisie,,39.3,,,,
+Eredivisie:2293,Juho Talvitie,NAC Breda,Eredivisie,RW,82.1,10933.5,32.8,13.4,11.0
+Eredivisie:2294,Ivan Mesík,Heracles Almelo,Eredivisie,LB,96.4,10295.1,27.0,13.1,27.0
+Eredivisie:2296,Tiago Codinha,FC Volendam,Eredivisie,CF,7.1,,,,
+Eredivisie:2297,,Heracles Almelo,Eredivisie,,42.9,,,,
+Eredivisie:2298,Alonzo Engwanda,FC Utrecht,Eredivisie,DM,100.0,11051.7,28.6,8.0,27.0
+Eredivisie:2299,Ryan Fosso,Fortuna Sittard,Eredivisie,DM,60.7,9860.3,20.6,7.0,17.0
+Eredivisie:2300,,PEC Zwolle,Eredivisie,,3.6,,,,
+Eredivisie:2302,Makan Aiko,Fortuna Sittard,Eredivisie,LW,46.4,10526.9,37.1,16.1,2.0
+Eredivisie:2305,Luka Tunjic,Fortuna Sittard,Eredivisie,LW,57.1,11673.1,42.5,9.6,2.0
+Eredivisie:2306,Samuel Bastien,Fortuna Sittard,Eredivisie,DM,17.9,,,,
+Eredivisie:2307,Dies Janse,FC Groningen,Eredivisie,CB,96.4,10216.6,20.3,5.7,24.0
+Eredivisie:2308,Bertrand Traoré,Ajax,Eredivisie,RW,7.1,10691.2,30.0,20.0,1.0
+Eredivisie:2312,Isaiah Ahmed,sc Heerenveen,Eredivisie,DM,35.7,,,,
+Eredivisie:2313,Jacob Trenskow,sc Heerenveen,Eredivisie,RW,96.4,11140.4,33.5,10.2,25.0
+Eredivisie:2314,Levi Smans,sc Heerenveen,Eredivisie,CF,3.6,,,,
+Eredivisie:2316,Ayoub Oufkir,AZ,Eredivisie,CM,82.1,11831.3,36.1,22.8,5.0
+Eredivisie:2317,Wouter Prins,FC Groningen,Eredivisie,LB,89.3,11066.8,33.3,10.1,4.0
+Eredivisie:2319,Chris-Kévin Nadje,Excelsior,Eredivisie,DM,25.0,11161.5,25.2,7.7,1.0
+Eredivisie:2320,Raul Paula,NAC Breda,Eredivisie,AM,75.0,12123.9,49.1,11.8,3.0
+Eredivisie:2321,Daan van Reeuwijk,NAC Breda,Eredivisie,CB,10.7,,,,
+Eredivisie:2322,Simon Graves,PEC Zwolle,Eredivisie,CB,92.9,9844.4,22.2,3.8,24.0
+Eredivisie:2325,,FC Utrecht,Eredivisie,,46.4,,,,
+Eredivisie:2326,Miguel Rodríguez,FC Utrecht,Eredivisie,RW,85.7,10642.7,36.4,13.2,12.0
+Eredivisie:233,Etienne Vaessen,FC Groningen,Eredivisie,GK,82.1,5858.4,2.3,0.7,21.0
+Eredivisie:2330,Jan Plug,Feyenoord,Eredivisie,CB,39.3,11192.1,37.1,6.6,1.0
+Eredivisie:2331,Aske Adelgaard,Go Ahead Eagles,Eredivisie,RB,89.3,11556.7,34.0,9.0,11.0
+Eredivisie:2332,Jari De Busser,Go Ahead Eagles,Eredivisie,GK,100.0,5015.5,1.3,0.0,28.0
+Eredivisie:2340,Luka Kulenovic,Heracles Almelo,Eredivisie,LW,85.7,9921.9,25.1,7.6,12.0
+Eredivisie:2343,,PSV,Eredivisie,,46.4,,,,
+Eredivisie:2344,Kento Shiogai,N.E.C.,Eredivisie,CF,57.1,10954.2,39.2,12.7,1.0
+Eredivisie:2346,Jamiro Gregory Monteiro Alvarenga,PEC Zwolle,Eredivisie,CM,64.3,10965.2,35.3,8.1,11.0
+Eredivisie:2347,Jordan Lotomba,Feyenoord,Eredivisie,RB,67.9,10237.7,30.8,10.1,7.0
+Eredivisie:2351,Terence Kongolo,NAC Breda,Eredivisie,CB,32.1,9209.5,14.2,3.5,2.0
+Eredivisie:2352,Nikolai Hopland,sc Heerenveen,Eredivisie,CB,67.9,10083.1,22.8,6.5,5.0
+Eredivisie:2354,Wout Weghorst,Ajax,Eredivisie,CF,78.6,10538.2,33.6,10.7,14.0
+Eredivisie:2357,In-Beom Hwang,Feyenoord,Eredivisie,AM,67.9,11685.1,34.5,9.1,9.0
+Eredivisie:2358,,Fortuna Sittard,Eredivisie,,3.6,,,,
+Eredivisie:2359,Ivan Perisic,PSV,Eredivisie,LW,92.9,10320.1,31.4,18.5,23.0
+Eredivisie:2361,,PSV,Eredivisie,,7.1,,,,
+Eredivisie:2362,Jan Zamburek,Heracles Almelo,Eredivisie,DM,85.7,12166.2,38.7,6.8,18.0
+Eredivisie:2363,Jan Faberski,PEC Zwolle,Eredivisie,LW,67.9,10990.9,27.6,14.1,4.0
+Eredivisie:2366,,FC Twente,Eredivisie,,3.6,,,,
+Eredivisie:2367,Aymen Sliti,Feyenoord,Eredivisie,LW,75.0,11319.7,32.1,7.7,2.0
+Eredivisie:2368,Ro-Zangelo Daal,AZ,Eredivisie,LW,82.1,10780.2,35.3,10.6,10.0
+Eredivisie:2369,Elijah Dijkstra,AZ,Eredivisie,RB,85.7,11181.1,36.8,15.1,7.0
+Eredivisie:2370,,Fortuna Sittard,Eredivisie,,42.9,,,,
+Eredivisie:2375,,Feyenoord,Eredivisie,,3.6,,,,
+Eredivisie:2376,Édouard Michut,Fortuna Sittard,Eredivisie,DM,71.4,11223.3,32.9,8.1,17.0
+Eredivisie:2377,David van der Werff,FC Groningen,Eredivisie,CF,100.0,11615.8,44.9,9.7,18.0
+Eredivisie:2378,Precious Ugwu,FC Volendam,Eredivisie,RB,96.4,11065.1,27.3,10.7,17.0
+Eredivisie:2380,,Ajax,Eredivisie,,17.9,,,,
+Eredivisie:2381,Jorthy Mokio,Ajax,Eredivisie,CM,89.3,10808.2,25.6,9.5,6.0
+Eredivisie:2382,Nick Verschuren,FC Volendam,Eredivisie,CB,100.0,10175.0,20.1,6.4,25.0
+Eredivisie:2385,Dion Versluis,NAC Breda,Eredivisie,CB,35.7,,,,
+Eredivisie:2386,Gabriel Reiziger,PEC Zwolle,Eredivisie,CM,53.6,,,,
+Eredivisie:2387,,sc Heerenveen,Eredivisie,,28.6,,,,
+Eredivisie:2388,Aaron Bouwman,Ajax,Eredivisie,CM,42.9,10044.6,20.1,6.1,6.0
+Eredivisie:2389,,PEC Zwolle,Eredivisie,,25.0,,,,
+Eredivisie:2393,Marcus Linday,sc Heerenveen,Eredivisie,DM,92.9,11833.2,34.1,7.5,19.0
+Eredivisie:2394,Hristiyan Petrov,sc Heerenveen,Eredivisie,CB,75.0,10459.2,23.6,10.7,4.0
+Eredivisie:2396,Esmir Bajraktarevic,PSV,Eredivisie,RW,92.9,11379.3,37.5,17.8,5.0
+Eredivisie:2397,Eser Gürbüz,sc Heerenveen,Eredivisie,RW,57.1,11512.6,41.3,16.2,1.0
+Eredivisie:2398,Nökkvi Thórisson,Telstar,Eredivisie,CF,71.4,11805.3,37.2,16.5,5.0
+Eredivisie:240,Emil Hansson,Excelsior,Eredivisie,CM,25.0,13072.0,54.5,11.2,3.0
+Eredivisie:2404,,Fortuna Sittard,Eredivisie,,3.6,,,,
+Eredivisie:2405,Yousri Sbai,N.E.C.,Eredivisie,RB,28.6,,,,
+Eredivisie:2407,Gerald Alders,Telstar,Eredivisie,CM,46.4,10697.0,33.6,9.3,6.0
+Eredivisie:2408,Rayane Bounida,Ajax,Eredivisie,CF,89.3,11604.0,37.5,11.1,8.0
+Eredivisie:2409,Jakub Moder,Feyenoord,Eredivisie,CM,28.6,11700.0,34.4,7.0,6.0
+Eredivisie:241,Melle Meulensteen,Go Ahead Eagles,Eredivisie,DM,100.0,10943.1,25.4,7.3,26.0
+Eredivisie:2410,,Feyenoord,Eredivisie,,39.3,,,,
+Eredivisie:2411,Oskar Sivertsen,Go Ahead Eagles,Eredivisie,LW,53.6,12274.5,49.7,16.1,1.0
+Eredivisie:2413,Sean Steur,Ajax,Eredivisie,CM,60.7,11912.7,32.7,8.9,11.0
+Eredivisie:2415,Lucas Oliveira Rosa,Ajax,Eredivisie,RB,85.7,10522.1,27.4,9.0,17.0
+Eredivisie:2416,Sem van Duijn,Telstar,Eredivisie,CF,28.6,11794.0,40.0,14.8,6.0
+Eredivisie:2417,Oscar Pettersson,Go Ahead Eagles,Eredivisie,RW,35.7,11309.5,35.7,15.7,1.0
+Eredivisie:2419,Tobias van den Elshout,Feyenoord,Eredivisie,RB,21.4,,,,
+Eredivisie:2420,Oussama Targhalline,Feyenoord,Eredivisie,CM,78.6,11291.0,30.7,9.2,14.0
+Eredivisie:2421,Don-Angelo Konadu,Ajax,Eredivisie,CF,42.9,10999.3,35.2,11.7,1.0
+Eredivisie:2422,,Go Ahead Eagles,Eredivisie,,3.6,,,,
+Eredivisie:2424,Thijs Kraaijeveld,Feyenoord,Eredivisie,RB,46.4,10782.8,30.9,7.4,2.0
+Eredivisie:2426,,sc Heerenveen,Eredivisie,,32.1,,,,
+Eredivisie:2427,Ruud Nijstad,FC Twente,Eredivisie,CB,64.3,10140.3,21.0,4.7,14.0
+Eredivisie:2428,Wassim Bouziane,AZ,Eredivisie,CM,14.3,,,,
+Eredivisie:2432,Kasper Boogaard,AZ,Eredivisie,CM,32.1,11847.7,30.1,5.0,7.0
+Eredivisie:2438,Stan Henderikx,Excelsior,Eredivisie,CB,60.7,10773.8,26.1,4.5,5.0
+Eredivisie:2454,Ronald Koeman,Telstar,Eredivisie,GK,96.4,4535.6,0.6,0.1,27.0
+Eredivisie:2455,Devon Koswal,Telstar,Eredivisie,CB,71.4,9811.3,18.3,6.3,13.0
+Eredivisie:2457,Tyrone Owusu,Telstar,Eredivisie,CM,64.3,11639.8,40.1,12.1,15.0
+Eredivisie:2458,Guus Offerhaus,Telstar,Eredivisie,CB,96.4,10903.7,27.7,6.9,27.0
+Eredivisie:2459,Mohamed Hamdaoui,Telstar,Eredivisie,LW,32.1,,,,
+Eredivisie:2463,Sebastiaan Hagedoorn,Telstar,Eredivisie,CM,42.9,,,,
+Eredivisie:2464,,Telstar,Eredivisie,,46.4,,,,
+Eredivisie:2465,Adil Lechkar,Telstar,Eredivisie,CM,75.0,,,,
+Eredivisie:2466,,Telstar,Eredivisie,,17.9,,,,
+Eredivisie:2467,Matej Kovár,PSV,Eredivisie,GK,92.9,5040.7,0.9,0.1,26.0
+Eredivisie:2468,Yarek Gasiorowski,PSV,Eredivisie,CB,82.1,9733.7,21.8,6.4,15.0
+Eredivisie:2469,Alassane Pléa,PSV,Eredivisie,CF,7.1,10317.3,41.2,9.4,1.0
+Eredivisie:2470,Eus Waayers,Go Ahead Eagles,Eredivisie,RB,21.4,,,,
+Eredivisie:2471,Joel van den Berg,PSV,Eredivisie,AM,17.9,,,,
+Eredivisie:2472,Kiliann Sildillia,PSV,Eredivisie,RB,60.7,10722.6,32.7,7.9,7.0
+Eredivisie:2473,Yassir Salah Rahmouni,Go Ahead Eagles,Eredivisie,DM,75.0,12124.0,34.7,6.8,5.0
+Eredivisie:2474,Justin Hubner,Fortuna Sittard,Eredivisie,CB,82.1,10245.2,22.8,9.8,10.0
+Eredivisie:2475,Marko Kerkez,Fortuna Sittard,Eredivisie,CF,46.4,,,,
+Eredivisie:2476,Moussa Gbemou,Fortuna Sittard,Eredivisie,AM,32.1,,,,
+Eredivisie:2477,Gonzalo Crettaz,N.E.C.,Eredivisie,GK,89.3,5703.1,2.6,0.4,25.0
+Eredivisie:2478,Sam de Laat,N.E.C.,Eredivisie,DM,35.7,,,,
+Eredivisie:2479,,N.E.C.,Eredivisie,,14.3,,,,
+Eredivisie:2480,Adam Carlén,Excelsior,Eredivisie,CM,75.0,11411.5,22.1,5.5,12.0
+Eredivisie:2481,Stijn Middendorp,Excelsior,Eredivisie,DM,35.7,12200.0,48.1,10.6,2.0
+Eredivisie:2482,Tijmen Holla,Excelsior,Eredivisie,GK,10.7,6590.3,4.2,1.4,1.0
+Eredivisie:2483,Nolan Martens,Excelsior,Eredivisie,RB,57.1,11572.0,29.8,11.5,6.0
+Eredivisie:2484,Nesto Groen,Excelsior,Eredivisie,CF,7.1,,,,
+Eredivisie:2485,Do-Young Yoon,Excelsior,Eredivisie,RW,46.4,,,,
+Eredivisie:2486,,Excelsior,Eredivisie,,17.9,,,,
+Eredivisie:2487,Jerolldino Bergraaf,Excelsior,Eredivisie,CF,82.1,10530.4,41.0,11.8,11.0
+Eredivisie:2488,Anel Ahmedhodzic,Feyenoord,Eredivisie,CB,92.9,10241.7,22.0,7.0,23.0
+Eredivisie:2489,Tsuyoshi Watanabe,Feyenoord,Eredivisie,CB,89.3,10121.9,26.7,6.7,25.0
+Eredivisie:2490,Gaoussou Diarra,Feyenoord,Eredivisie,CM,46.4,11289.1,41.1,12.5,2.0
+Eredivisie:2491,Gonçalo Óscar Albuquerque Borges,Feyenoord,Eredivisie,RW,57.1,11078.7,30.8,11.6,3.0
+Eredivisie:2492,Jordan Bos,Feyenoord,Eredivisie,LB,85.7,10622.1,33.2,14.2,16.0
+Eredivisie:2493,Casper Tengstedt,Feyenoord,Eredivisie,CF,85.7,11915.2,45.0,5.8,1.0
+Eredivisie:2494,Brahim Ghalidi,NAC Breda,Eredivisie,AM,35.7,,,,
+Eredivisie:2495,Pepijn Reulen,NAC Breda,Eredivisie,CB,57.1,,,,
+Eredivisie:2496,,NAC Breda,Eredivisie,,3.6,,,,
+Eredivisie:2497,,NAC Breda,Eredivisie,,7.1,,,,
+Eredivisie:2498,Maxence Rivera,sc Heerenveen,Eredivisie,LW,96.4,11574.7,40.2,13.0,21.0
+Eredivisie:2499,Jermaine Rijssel,sc Heerenveen,Eredivisie,LW,28.6,,,,
+Eredivisie:250,Thomas Ouwejan,N.E.C.,Eredivisie,LW,46.4,10427.5,32.2,6.5,4.0
+Eredivisie:2500,Mawouna Amevor,FC Volendam,Eredivisie,CB,100.0,9445.5,14.1,2.9,24.0
+Eredivisie:2501,Ozan Kökçü,FC Volendam,Eredivisie,AM,96.4,11293.9,27.3,8.9,15.0
+Eredivisie:2502,Gibson Yah,FC Volendam,Eredivisie,DM,64.3,11019.8,26.8,8.7,15.0
+Eredivisie:2503,Aurelio Oehlers,FC Volendam,Eredivisie,AM,96.4,10405.9,29.1,14.2,12.0
+Eredivisie:2504,Alex Plat,FC Volendam,Eredivisie,DM,82.1,12432.7,39.6,8.0,4.0
+Eredivisie:2505,Robin van Cruijsen,FC Volendam,Eredivisie,CM,75.0,12345.9,37.6,7.5,11.0
+Eredivisie:2506,,FC Volendam,Eredivisie,,46.4,,,,
+Eredivisie:2507,,FC Volendam,Eredivisie,,46.4,,,,
+Eredivisie:2508,Nordin Bukala,FC Volendam,Eredivisie,CM,75.0,11820.5,31.6,9.2,19.0
+Eredivisie:2509,Key-Shawn Wong-A-Soij,FC Volendam,Eredivisie,DM,25.0,,,,
+Eredivisie:2510,,FC Volendam,Eredivisie,,21.4,,,,
+Eredivisie:2511,Jesper Tielemans,FC Volendam,Eredivisie,CM,14.3,,,,
+Eredivisie:2512,Ayoni Santos,Sparta Rotterdam,Eredivisie,DM,85.7,11694.5,38.2,11.4,12.0
+Eredivisie:2513,,Sparta Rotterdam,Eredivisie,,25.0,,,,
+Eredivisie:2514,Koen Kostons,PEC Zwolle,Eredivisie,CF,100.0,10527.2,36.3,15.8,27.0
+Eredivisie:2515,Jadiel Pereira da Gama,PEC Zwolle,Eredivisie,CM,50.0,,,,
+Eredivisie:2516,,PEC Zwolle,Eredivisie,,28.6,,,,
+Eredivisie:2517,Stav Lemkin,FC Twente,Eredivisie,CB,85.7,10499.0,21.2,6.5,16.0
+Eredivisie:2518,Guilherme Martinho Peixoto,FC Twente,Eredivisie,RB,46.4,,,,
+Eredivisie:2519,Vítezslav Jaros,Ajax,Eredivisie,GK,82.1,5426.7,0.9,0.1,19.0
+Eredivisie:2520,Raúl Moro,Ajax,Eredivisie,RW,53.6,10589.0,36.0,20.1,6.0
+Eredivisie:2521,Mateo Chávez,AZ,Eredivisie,LB,82.1,10709.3,39.6,14.4,6.0
+Eredivisie:2522,Oscar Gloukh,Ajax,Eredivisie,CM,85.7,11022.0,33.4,9.5,13.0
+Eredivisie:2523,Isak Jensen,AZ,Eredivisie,RW,96.4,10918.3,34.3,9.0,17.0
+Eredivisie:2524,,Ajax,Eredivisie,,28.6,,,,
+Eredivisie:2525,,FC Groningen,Eredivisie,,17.9,,,,
+Eredivisie:2526,,FC Groningen,Eredivisie,,28.6,,,,
+Eredivisie:2527,,FC Groningen,Eredivisie,,14.3,,,,
+Eredivisie:2528,Soufiane Hetli,Telstar,Eredivisie,CF,89.3,11847.7,37.8,13.7,17.0
+Eredivisie:2529,Mark Hoekstra,FC Groningen,Eredivisie,DM,35.7,,,,
+Eredivisie:2530,Milan Zonneveld,Sparta Rotterdam,Eredivisie,CF,92.9,11084.8,39.0,10.2,8.0
+Eredivisie:2531,Tyrique Mercera,FC Groningen,Eredivisie,CM,92.9,11416.9,35.6,11.2,7.0
+Eredivisie:2532,Dylan Mertens,Telstar,Eredivisie,CM,75.0,11844.5,39.3,14.6,4.0
+Eredivisie:2533,Neville Ogidi Nwankwo,Telstar,Eredivisie,CB,82.1,10249.3,27.1,10.1,17.0
+Eredivisie:2534,Rojendro Oudsten,Telstar,Eredivisie,CM,53.6,,,,
+Eredivisie:2535,,Telstar,Eredivisie,,10.7,,,,
+Eredivisie:2536,Jeff Reine-Adélaïde,Heracles Almelo,Eredivisie,AM,3.6,,,,
+Eredivisie:2537,Nigel Ogidi Nwankwo,Telstar,Eredivisie,CM,39.3,,,,
+Eredivisie:2538,,Telstar,Eredivisie,,3.6,,,,
+Eredivisie:2539,Jaygo van Ommeren,FC Utrecht,Eredivisie,DM,25.0,,,,
+Eredivisie:2540,Emirhan Demircan,FC Utrecht,Eredivisie,CF,46.4,,,,
+Eredivisie:2541,,FC Utrecht,Eredivisie,,3.6,,,,
+Eredivisie:2542,Dennis Man,PSV,Eredivisie,RW,89.3,10508.8,36.3,15.3,13.0
+Eredivisie:2543,,AZ,Eredivisie,,3.6,,,,
+Eredivisie:2544,Lewis Holtby,NAC Breda,Eredivisie,CM,85.7,11773.5,37.9,6.8,18.0
+Eredivisie:2545,Houboulang Mendes,Fortuna Sittard,Eredivisie,RB,35.7,,,,
+Eredivisie:2546,Paul Wanner,PSV,Eredivisie,AM,85.7,11956.1,36.5,8.2,14.0
+Eredivisie:2547,,FC Groningen,Eredivisie,,39.3,,,,
+Eredivisie:2548,,N.E.C.,Eredivisie,,3.6,,,,
+Eredivisie:2549,Jayden Candelaria,NAC Breda,Eredivisie,CM,42.9,,,,
+Eredivisie:2550,Szymon Wlodarczyk,Excelsior,Eredivisie,CM,60.7,12070.4,36.5,12.4,8.0
+Eredivisie:2551,Nolhan Courtens,sc Heerenveen,Eredivisie,LW,39.3,,,,
+Eredivisie:2552,Sondre Ørjasæter,FC Twente,Eredivisie,LW,85.7,11631.6,38.4,13.4,22.0
+Eredivisie:2553,Noah Fernandez,PSV,Eredivisie,AM,42.9,11284.3,37.7,14.5,1.0
+Eredivisie:2554,Kay Tejan,Telstar,Eredivisie,CB,78.6,10773.5,35.1,12.6,5.0
+Eredivisie:2555,,N.E.C.,Eredivisie,,10.7,,,,
+Eredivisie:2556,Weslley Pinto Batista,AZ,Eredivisie,RW,78.6,11870.5,38.9,10.5,12.0
+Eredivisie:2557,Matej Sín,AZ,Eredivisie,CM,57.1,12249.1,43.3,11.0,2.0
+Eredivisie:2558,James McConnell,Ajax,Eredivisie,DM,28.6,,,,
+Eredivisie:2559,,PEC Zwolle,Eredivisie,,3.6,,,,
+Eredivisie:2560,David Voute,PEC Zwolle,Eredivisie,RB,21.4,,,,
+Eredivisie:2561,Shola Shoretire,PEC Zwolle,Eredivisie,LW,85.7,10514.2,30.8,12.9,19.0
+Eredivisie:2562,Kiano Dyer,FC Volendam,Eredivisie,AM,32.1,,,,
+Eredivisie:2563,Deveron Fonville,N.E.C.,Eredivisie,CB,82.1,10294.7,30.0,13.6,8.0
+Eredivisie:2564,Darko Nejasmic,N.E.C.,Eredivisie,CM,82.1,11039.1,26.5,6.9,19.0
+Eredivisie:2565,Noé Lebreton,N.E.C.,Eredivisie,LW,71.4,11789.6,33.5,10.1,9.0
+Eredivisie:2566,Marko Pjaca,FC Twente,Eredivisie,LW,82.1,10572.6,27.3,6.3,6.0
+Eredivisie:2567,Malcolm Jeng,Feyenoord,Eredivisie,CB,10.7,,,,
+Eredivisie:2568,Stefan Mitrovic,Excelsior,Eredivisie,RW,35.7,,,,
+Eredivisie:2569,Travis Hernes,FC Groningen,Eredivisie,CM,42.9,12129.7,38.8,12.7,2.0
+Eredivisie:2570,Cyle Larin,Feyenoord,Eredivisie,AM,39.3,,,,
+Eredivisie:2571,,FC Twente,Eredivisie,,7.1,,,,
+Eredivisie:2572,,N.E.C.,Eredivisie,,7.1,,,,
+Eredivisie:2573,Amin Laoukili,Fortuna Sittard,Eredivisie,CB,7.1,,,,
+Eredivisie:2574,,PSV,Eredivisie,,3.6,,,,
+Eredivisie:2575,Pharell Nash,Ajax,Eredivisie,CM,7.1,,,,
+Eredivisie:2576,,FC Groningen,Eredivisie,,10.7,,,,
+Eredivisie:2577,,Feyenoord,Eredivisie,,3.6,,,,
+Eredivisie:2578,Jelani Seedorf,Telstar,Eredivisie,CF,28.6,,,,
+Eredivisie:2579,,Heracles Almelo,Eredivisie,,3.6,,,,
+Eredivisie:2580,,Heracles Almelo,Eredivisie,,3.6,,,,
+Eredivisie:2581,Sil Blokhuis,Heracles Almelo,Eredivisie,RW,7.1,,,,
+Eredivisie:2582,,AZ,Eredivisie,,14.3,,,,
+Eredivisie:2583,Noa El Hamdaoui,Excelsior,Eredivisie,CF,7.1,,,,
+Eredivisie:2584,,Ajax,Eredivisie,,3.6,,,,
+Eredivisie:2585,Luca Blondeau,FC Volendam,Eredivisie,RW,7.1,,,,
+Eredivisie:2586,,PEC Zwolle,Eredivisie,,7.1,,,,
+Eredivisie:2587,,PEC Zwolle,Eredivisie,,7.1,,,,
+Eredivisie:2588,Moussa Soumano,NAC Breda,Eredivisie,LW,39.3,9570.9,23.6,8.1,5.0
+Eredivisie:2589,,AZ,Eredivisie,,3.6,,,,
+Eredivisie:2591,Lushendry Martes,Sparta Rotterdam,Eredivisie,RB,35.7,10672.2,34.1,13.0,7.0
+Eredivisie:2592,,AZ,Eredivisie,,3.6,,,,
+Eredivisie:2593,Shaqueel van Persie,Feyenoord,Eredivisie,CF,7.1,,,,
+Eredivisie:2594,Ayoub Ouarghi,Feyenoord,Eredivisie,AM,3.6,,,,
+Eredivisie:2596,Denis Odoi,NAC Breda,Eredivisie,RB,50.0,10255.0,22.1,7.9,11.0
+Eredivisie:2599,Younes el Meftahi,Sparta Rotterdam,Eredivisie,RW,3.6,,,,
+Eredivisie:2600,Jinairo Johnson,Ajax,Eredivisie,CM,3.6,,,,
+Eredivisie:2603,Nicolas Verkooijen,PSV,Eredivisie,CF,10.7,,,,
+Eredivisie:2609,André Ayew,NAC Breda,Eredivisie,CF,39.3,9504.7,28.1,5.5,5.0
+Eredivisie:2610,Lasse Nordås,sc Heerenveen,Eredivisie,CF,35.7,11444.8,30.1,12.4,7.0
+Eredivisie:2611,Luca Oyen,sc Heerenveen,Eredivisie,LW,28.6,12380.1,39.0,11.3,2.0
+Eredivisie:2614,Erik Ahlstrand,Heracles Almelo,Eredivisie,RW,28.6,11684.5,41.3,22.7,6.0
+Eredivisie:2615,Ryan Metu,FC Groningen,Eredivisie,CB,14.3,,,,
+Eredivisie:2616,Oualid Agougil,FC Utrecht,Eredivisie,RB,21.4,,,,
+Eredivisie:2617,Rio Robbemond,AZ,Eredivisie,DM,3.6,12956.6,36.5,5.2,1.0
+Eredivisie:2618,Takehiro Tomiyasu,Ajax,Eredivisie,LB,21.4,10901.3,24.1,5.7,2.0
+Eredivisie:2619,Kevin Kers,N.E.C.,Eredivisie,CF,3.6,,,,
+Eredivisie:2621,Alwande Roaldsøy,Sparta Rotterdam,Eredivisie,DM,10.7,,,,
+Eredivisie:2626,Ángel Alarcón,FC Utrecht,Eredivisie,RW,32.1,10293.5,25.8,16.7,8.0
+Eredivisie:2627,Artem Stepanov,FC Utrecht,Eredivisie,CF,32.1,11255.6,36.0,13.6,6.0
+Eredivisie:2629,Amine Salama,NAC Breda,Eredivisie,CF,21.4,10966.9,34.4,19.6,2.0
+Eredivisie:2631,Isak Hansen-Aarøen,N.E.C.,Eredivisie,RW,10.7,,,,
+Eredivisie:2632,Juninho Bacuna,FC Volendam,Eredivisie,LB,25.0,9865.4,31.4,10.0,1.0
+Eredivisie:2633,Benjamin Pauwels,FC Volendam,Eredivisie,LW,14.3,10756.2,37.3,11.9,2.0
+Eredivisie:2634,Nigel Groenewald,FC Twente,Eredivisie,RW,3.6,,,,
+Eredivisie:2635,Casper Terho,Sparta Rotterdam,Eredivisie,DM,17.9,,,,
+Eredivisie:2637,Steven Benda,Feyenoord,Eredivisie,GK,3.6,5276.4,1.8,0.0,1.0
+Eredivisie:2638,Stefán Sigurdarson,Go Ahead Eagles,Eredivisie,CF,28.6,11133.0,30.5,9.2,2.0
+Eredivisie:2639,Rion Ichihara,AZ,Eredivisie,CB,3.6,,,,
+Eredivisie:2641,Oleksandr Zinchenko,Ajax,Eredivisie,LB,7.1,,,,
+Eredivisie:2644,Rhys Bozinovski,Heracles Almelo,Eredivisie,DM,21.4,11489.5,39.2,13.1,3.0
+Eredivisie:2647,Maher Carrizo,Ajax,Eredivisie,CB,7.1,,,,
+Eredivisie:2648,Raheem Sterling,Feyenoord,Eredivisie,LW,17.9,9841.9,28.9,12.1,2.0
+Eredivisie:267,Jeff Hardeveld,Telstar,Eredivisie,CM,100.0,10867.3,34.7,8.1,27.0
+Eredivisie:273,Mauro Jaqueson Júnior Ferreira dos Santos,PSV,Eredivisie,CM,78.6,11259.7,33.9,10.9,20.0
+Eredivisie:28,Timon Wellenreuther,Feyenoord,Eredivisie,GK,96.4,5282.3,1.8,0.2,27.0
+Eredivisie:282,,Heracles Almelo,Eredivisie,,14.3,,,,
+Eredivisie:284,Ko Itakura,Ajax,Eredivisie,CM,60.7,9320.4,17.7,5.2,12.0
+Eredivisie:296,Ajdin Hrustic,Heracles Almelo,Eredivisie,CF,92.9,11123.3,36.4,7.9,24.0
+Eredivisie:299,Mike te Wierik,Heracles Almelo,Eredivisie,CB,85.7,10487.3,24.8,8.4,13.0
+Eredivisie:327,Danilo Pereira da Silva,N.E.C.,Eredivisie,CM,17.9,10940.7,33.6,15.2,1.0
+Eredivisie:333,Dion Malone,Telstar,Eredivisie,CM,53.6,,,,
+Eredivisie:341,Robin Pröpper,FC Twente,Eredivisie,CB,78.6,10366.6,25.1,7.1,18.0
+Eredivisie:344,Saïd Bakari,Sparta Rotterdam,Eredivisie,RB,60.7,10621.4,30.9,10.5,3.0
+Eredivisie:361,Dylan Vente,sc Heerenveen,Eredivisie,LW,89.3,11191.9,33.7,10.5,20.0
+Eredivisie:363,,Heracles Almelo,Eredivisie,,3.6,,,,
+Eredivisie:372,Kaj Sierhuis,Fortuna Sittard,Eredivisie,LW,85.7,10044.7,32.0,9.7,16.0
+Eredivisie:377,Youssef El Kachati,N.E.C.,Eredivisie,CF,64.3,10862.9,29.3,12.2,3.0
+Eredivisie:390,Jerdy Schouten,PSV,Eredivisie,CM,96.4,10651.3,23.2,5.1,27.0
+Eredivisie:40,Paul Gladon,Fortuna Sittard,Eredivisie,CF,96.4,10332.9,31.1,6.1,4.0
+Eredivisie:412,Sem Steijn,Feyenoord,Eredivisie,CM,67.9,12266.8,42.3,10.8,12.0
+Eredivisie:413,Kasper Dolberg,Ajax,Eredivisie,RW,67.9,10272.0,26.6,10.5,10.0
+Eredivisie:43,Mike van Duinen,Excelsior,Eredivisie,CF,89.3,10858.5,32.4,9.0,4.0
+Eredivisie:433,Sydney van Hooijdonk,NAC Breda,Eredivisie,CF,64.3,10155.0,26.0,7.4,14.0
+Eredivisie:435,Jeremiah St. Juste,Feyenoord,Eredivisie,CB,10.7,,,,
+Eredivisie:439,Mats Seuntjens,FC Groningen,Eredivisie,CM,57.1,,,,
+Eredivisie:440,Guus Til,PSV,Eredivisie,CM,82.1,10765.8,36.1,13.7,20.0
+Eredivisie:442,Brandley Kuwas,FC Volendam,Eredivisie,CF,92.9,9550.6,25.1,8.9,18.0
+Eredivisie:453,Siebe Horemans,FC Utrecht,Eredivisie,DM,75.0,10432.1,30.0,10.7,17.0
+Eredivisie:473,Younes Namli,PEC Zwolle,Eredivisie,RW,39.3,10711.0,31.0,9.8,10.0
+Eredivisie:481,Finn Stokkers,Go Ahead Eagles,Eredivisie,CF,64.3,,,,
+Eredivisie:5,Evert Linthorst,Go Ahead Eagles,Eredivisie,AM,89.3,11490.0,38.0,6.6,14.0
+Eredivisie:50,Sam Kersten,sc Heerenveen,Eredivisie,CB,89.3,9629.7,17.7,5.9,20.0
+Eredivisie:500,Jizz Hornkamp,AZ,Eredivisie,CM,78.6,9475.1,25.3,7.0,14.0
+Eredivisie:52,Pelle Clement,Sparta Rotterdam,Eredivisie,AM,85.7,11321.1,28.9,6.6,17.0
+Eredivisie:544,Maarten Paes,Ajax,Eredivisie,GK,17.9,4688.1,0.6,0.2,5.0
+Eredivisie:545,Justin Lonwijk,Fortuna Sittard,Eredivisie,AM,53.6,10575.4,29.6,9.9,10.0
+Eredivisie:55,Vito van Crooij,Sparta Rotterdam,Eredivisie,AM,67.9,11430.5,36.1,10.7,3.0
+Eredivisie:563,Joris Kramer,Go Ahead Eagles,Eredivisie,CB,100.0,10427.6,21.7,5.3,27.0
+Eredivisie:573,,N.E.C.,Eredivisie,,3.6,,,,
+Eredivisie:62,Clint Leemans,NAC Breda,Eredivisie,DM,96.4,11227.1,26.7,4.4,8.0
+Eredivisie:642,Eliano Reijnders,PEC Zwolle,Eredivisie,RW,7.1,,,,
+Eredivisie:644,Henk Veerman,FC Volendam,Eredivisie,CF,64.3,8628.1,13.4,3.2,17.0
+Eredivisie:645,Couhaib Driouech,PSV,Eredivisie,RW,92.9,11187.3,33.1,17.5,4.0
+Eredivisie:648,Pawel Bochniewicz,sc Heerenveen,Eredivisie,RW,7.1,,,,
+Eredivisie:654,Jasper Dahlhaus,Fortuna Sittard,Eredivisie,LB,75.0,10136.7,23.7,11.5,18.0
+Eredivisie:660,Ramiz Zerrouki,FC Twente,Eredivisie,CM,92.9,11322.1,28.5,5.6,25.0
+Eredivisie:681,Boy Kemper,NAC Breda,Eredivisie,LB,96.4,10460.1,30.7,10.0,26.0
+Eredivisie:689,Kostas Lamprou,NAC Breda,Eredivisie,GK,42.9,4907.7,0.0,0.9,1.0
+Eredivisie:691,David Min,FC Utrecht,Eredivisie,CF,64.3,10866.1,31.8,10.6,7.0
+Eredivisie:706,Sven Mijnans,AZ,Eredivisie,AM,85.7,11910.6,40.2,5.9,18.0
+Eredivisie:714,Michael Brouwer,FC Utrecht,Eredivisie,GK,46.4,5270.4,0.9,0.0,1.0
+Eredivisie:716,Gijs Smal,Feyenoord,Eredivisie,LB,60.7,10378.4,35.1,12.2,7.0
+Eredivisie:72,,Feyenoord,Eredivisie,,35.7,,,,
+Eredivisie:720,Thomas van den Belt,FC Twente,Eredivisie,CM,96.4,11632.3,29.9,7.5,19.0
+Eredivisie:724,Marco Rente,FC Groningen,Eredivisie,RB,82.1,10793.4,24.7,9.3,20.0
+Eredivisie:734,Jesper Karlsson,FC Utrecht,Eredivisie,RW,35.7,10163.3,42.6,12.2,3.0
+Eredivisie:735,Hobie Verhulst,AZ,Eredivisie,GK,50.0,4646.2,0.9,0.0,1.0
+Eredivisie:74,Jens Toornstra,Sparta Rotterdam,Eredivisie,LW,57.1,11584.6,38.7,9.5,7.0
+Eredivisie:743,Bruno Martins Indi,Sparta Rotterdam,Eredivisie,CB,85.7,9601.4,15.8,3.7,23.0
+Eredivisie:746,Mario Engels,Heracles Almelo,Eredivisie,DM,64.3,10096.8,23.8,9.9,4.0
+Eredivisie:75,Steven Berghuis,Ajax,Eredivisie,RW,46.4,11241.3,38.1,9.6,7.0
+Eredivisie:750,Davy Klaassen,Ajax,Eredivisie,CM,96.4,12037.5,36.2,6.2,20.0
+Eredivisie:767,,Ajax,Eredivisie,,3.6,,,,
+Eredivisie:770,Casper Staring,NAC Breda,Eredivisie,CM,42.9,,,,
+Eredivisie:771,Samir Lagsir,PEC Zwolle,Eredivisie,LW,32.1,,,,
+Eredivisie:775,Ismael Saibari,PSV,Eredivisie,CM,85.7,11191.8,39.8,17.4,23.0
+Eredivisie:780,Mathias Kjølø,FC Twente,Eredivisie,CM,53.6,12018.4,34.1,5.8,3.0
+Eredivisie:79,Bart Nieuwkoop,Feyenoord,Eredivisie,AM,64.3,11306.5,30.6,12.1,3.0
+Eredivisie:801,Max Bruns,FC Twente,Eredivisie,CM,42.9,10211.1,22.7,6.1,8.0
+Eredivisie:803,Daan Rots,FC Twente,Eredivisie,RW,100.0,11104.5,38.8,14.7,21.0
+Eredivisie:818,Tijs Velthuis,PEC Zwolle,Eredivisie,CB,71.4,10180.6,23.0,6.6,3.0
+Eredivisie:824,Thijs Oosting,PEC Zwolle,Eredivisie,AM,100.0,11841.1,35.5,10.4,24.0
+Eredivisie:829,Davy van den Berg,FC Utrecht,Eredivisie,CM,32.1,,,,
+Eredivisie:848,Kenneth Taylor,Ajax,Eredivisie,CM,53.6,11407.6,27.2,8.0,14.0
+Eredivisie:85,Thomas Bruns,Heracles Almelo,Eredivisie,DM,85.7,11215.9,24.5,6.3,7.0
+Eredivisie:853,Odysseus Velanas,PEC Zwolle,Eredivisie,LW,25.0,,,,
+Eredivisie:859,Fabian de Keijzer,Heracles Almelo,Eredivisie,GK,42.9,5160.8,0.7,0.3,8.0
+Eredivisie:875,Jasper Schendelaar,PEC Zwolle,Eredivisie,GK,14.3,5401.8,1.4,0.0,2.0
+Eredivisie:88,Simon Janssen,Excelsior,Eredivisie,LB,46.4,11988.1,38.3,12.6,5.0
+Eredivisie:90,Joris van Overeem,sc Heerenveen,Eredivisie,DM,100.0,10779.0,32.7,6.6,28.0
+Eredivisie:942,Victor Jensen,FC Utrecht,Eredivisie,AM,32.1,12189.8,52.6,8.4,6.0
+Eredivisie:943,Peer Koopmeiners,AZ,Eredivisie,DM,92.9,11216.1,30.7,7.3,21.0
+Eredivisie:951,Shurandy Sambo,Sparta Rotterdam,Eredivisie,RB,78.6,10000.9,26.3,8.6,14.0
+Eredivisie:960,Sébastien Haller,FC Utrecht,Eredivisie,CF,57.1,10791.2,37.9,7.8,7.0
+Eredivisie:968,Virgil Misidjan,N.E.C.,Eredivisie,CM,67.9,10245.8,33.3,10.4,3.0
+Eredivisie:97,Jeroen Zoet,AZ,Eredivisie,GK,71.4,4907.8,0.5,0.0,9.0
+Eredivisie:970,Syb van Ottele,Fortuna Sittard,Eredivisie,CB,32.1,9288.3,17.0,5.0,4.0
+Eredivisie:976,Noah Ohio,FC Utrecht,Eredivisie,AM,10.7,,,,
+KKD:10,Danny Verbeek,FC Den Bosch,KKD,RB,56.2,10105.6,20.0,5.4,9.0
+KKD:101,Nick Doodeman,Willem II,KKD,CM,100.0,11515.1,35.6,12.9,31.0
+KKD:1049,,FC Dordrecht,KKD,,6.1,,,,
+KKD:1063,Connor van den Berg,Vitesse,KKD,GK,87.9,6160.5,0.9,0.1,18.0
+KKD:107,Dennis Vos,Helmond Sport,KKD,CB,81.2,10925.2,29.7,6.8,22.0
+KKD:1073,,FC Den Bosch,KKD,,21.9,,,,
+KKD:1074,Joran Hardeman,De Graafschap,KKD,CB,6.2,,,,
+KKD:1076,Ties Wieggers,De Graafschap,KKD,GK,100.0,6058.4,2.3,0.4,32.0
+KKD:1078,Tristan Kuijsten,Almere City FC,KKD,GK,44.1,4919.6,0.7,0.3,8.0
+KKD:1080,Jurre van Aken,FC Dordrecht,KKD,CM,78.8,11589.3,38.4,12.1,17.0
+KKD:1082,Jort Borgmans,Eindhoven,KKD,GK,100.0,5481.8,1.2,0.1,19.0
+KKD:1097,Casper Staring,FC Emmen,KKD,CM,29.0,11324.4,37.3,5.7,9.0
+KKD:1103,Koen Bucker,FC Emmen,KKD,GK,54.8,5851.9,0.0,0.0,2.0
+KKD:1110,,MVV Maastricht,KKD,,37.5,,,,
+KKD:1117,Diego van Oorschot,VVV-Venlo,KKD,CM,75.8,12183.6,31.7,6.4,10.0
+KKD:1145,Jesse van de Haar,Jong FC Utrecht,KKD,LW,41.2,11747.1,30.6,11.1,8.0
+KKD:1149,Eus Waayers,Jong PSV,KKD,RB,27.3,10878.7,25.6,12.7,5.0
+KKD:1152,Tim van den Heuvel,Jong PSV,KKD,DM,12.1,,,,
+KKD:1170,Yaid Marhoum,TOP Oss,KKD,CF,75.0,10162.8,35.5,4.1,1.0
+KKD:1171,Stijn Bultman,De Graafschap,KKD,CB,87.5,10276.9,20.8,5.9,17.0
+KKD:1178,,Roda JC Kerkrade,KKD,,30.3,,,,
+KKD:118,Koen Jansen,Roda JC Kerkrade,KKD,LB,60.6,11299.6,30.9,17.5,14.0
+KKD:1191,Youri Regeer,Jong Ajax,KKD,AM,3.0,12737.0,42.0,15.6,1.0
+KKD:1206,Jasper Hartog,Jong AZ,KKD,RW,78.1,10774.2,31.8,13.4,15.0
+KKD:1207,Teun Gijselhart,De Graafschap,KKD,CM,96.9,11412.3,26.7,8.5,31.0
+KKD:1208,Julian Oerip,Jong AZ,KKD,LW,34.4,12943.0,38.8,10.1,3.0
+KKD:1209,Elijah Dijkstra,Jong AZ,KKD,RB,21.9,10673.4,30.5,14.6,6.0
+KKD:121,Mees Kreekels,ADO Den Haag,KKD,CF,75.8,11177.4,33.1,15.4,3.0
+KKD:1216,Nazjir Held,RKC Waalwijk,KKD,RB,90.9,11002.6,27.4,11.8,21.0
+KKD:1223,David Kalokoh,Jong Ajax,KKD,LB,60.6,11135.8,32.1,9.9,1.0
+KKD:1225,Oualid Agougil,Jong FC Utrecht,KKD,DM,88.2,12361.3,42.6,8.4,28.0
+KKD:1232,,Eindhoven,KKD,,51.5,,,,
+KKD:1244,Ilias Boumassaoudi,FC Den Bosch,KKD,LW,65.6,11705.1,33.6,8.6,13.0
+KKD:1249,,Jong Ajax,KKD,,48.5,,,,
+KKD:1250,Jorn Berkhout,SC Cambuur,KKD,LW,65.6,10923.1,36.0,6.7,9.0
+KKD:1258,Diego van Zutphen,VVV-Venlo,KKD,RB,18.2,,,,
+KKD:1273,Maurilio de Lannoy,TOP Oss,KKD,RW,93.8,11356.9,28.9,13.3,16.0
+KKD:1279,Mark Diemers,SC Cambuur,KKD,CM,87.5,11805.6,30.0,5.5,26.0
+KKD:1282,Jari Vlak,ADO Den Haag,KKD,CM,90.9,12342.0,43.7,8.7,30.0
+KKD:1291,Guus Beaumont,Almere City FC,KKD,DM,44.1,11853.4,27.3,2.3,2.0
+KKD:1295,Mees Laros,FC Den Bosch,KKD,RB,93.8,11187.9,29.4,9.8,29.0
+KKD:1305,Thomas Cox,TOP Oss,KKD,RB,40.6,10869.1,30.0,9.4,9.0
+KKD:1306,Julian Kuijpers,TOP Oss,KKD,LB,96.9,11065.3,29.9,8.0,23.0
+KKD:1311,Joshua Eijgenraam,VVV-Venlo,KKD,CM,90.9,11638.1,31.3,6.9,17.0
+KKD:1330,Marcel Schaapman,RKC Waalwijk,KKD,CM,30.3,,,,
+KKD:1332,Wiebe Kooistra,SC Cambuur,KKD,RB,87.5,12086.5,39.2,20.3,1.0
+KKD:1338,Marco Tol,Roda JC Kerkrade,KKD,CB,97.0,9947.0,18.2,6.9,32.0
+KKD:1339,Remco Balk,SC Cambuur,KKD,CM,96.9,11989.2,35.7,13.7,27.0
+KKD:1341,Michael Breij,Roda JC Kerkrade,KKD,RW,97.0,10884.7,36.5,10.2,29.0
+KKD:1348,,RKC Waalwijk,KKD,,15.2,,,,
+KKD:135,Boris van Schuppen,Eindhoven,KKD,AM,48.5,12429.9,46.6,14.9,7.0
+KKD:1357,Jesper van Riel,Jong FC Utrecht,KKD,LB,50.0,13300.1,49.3,18.5,1.0
+KKD:136,Rowan Besselink,De Graafschap,KKD,CB,78.1,10012.7,19.7,6.4,25.0
+KKD:137,Mike Havekotte,TOP Oss,KKD,GK,100.0,5442.1,1.0,0.0,32.0
+KKD:1373,Tarik Essakkati,Helmond Sport,KKD,CF,71.9,11889.9,35.2,14.7,10.0
+KKD:1375,Michel-Simon Ludwig,Helmond Sport,KKD,CB,56.2,,,,
+KKD:1377,Fofin Turay,TOP Oss,KKD,RW,25.0,,,,
+KKD:138,Flor Van den Eynden,Helmond Sport,KKD,CB,93.8,10907.8,26.7,7.8,24.0
+KKD:1388,Kevin van Veen,Eindhoven,KKD,CF,60.6,9864.9,19.4,6.2,4.0
+KKD:139,Bryan Van Hove,TOP Oss,KKD,RB,65.6,10472.5,32.7,12.6,13.0
+KKD:1390,Liam van Gelderen,RKC Waalwijk,KKD,RB,51.5,10378.6,24.7,6.0,12.0
+KKD:1397,Nassef Chourak,Jong Ajax,KKD,CM,42.4,11133.4,36.4,7.2,9.0
+KKD:14,Rein van Hedel,RKC Waalwijk,KKD,CF,51.5,11220.1,35.4,7.5,9.0
+KKD:1403,Farouq Limouri,Eindhoven,KKD,CB,54.5,10752.7,23.5,5.1,14.0
+KKD:1405,Jorn Brondeel,Eindhoven,KKD,GK,42.4,6519.3,1.1,0.0,13.0
+KKD:1406,Sven Simons,Eindhoven,KKD,CM,97.0,12346.3,42.1,9.8,29.0
+KKD:1416,Mohammed Odriss,VVV-Venlo,KKD,CM,66.7,12434.5,40.5,7.9,15.0
+KKD:1421,Wout Coomans,MVV Maastricht,KKD,CB,78.1,10559.6,25.4,5.6,22.0
+KKD:1427,Ferre Slegers,MVV Maastricht,KKD,CF,12.5,,,,
+KKD:1429,Yoël van den Ban,Jong AZ,KKD,CF,90.6,11668.6,37.2,14.6,14.0
+KKD:1430,Sil van der Wegen,Jong FC Utrecht,KKD,RB,91.2,11887.5,41.0,11.5,25.0
+KKD:1431,Adrian Blake,Jong FC Utrecht,KKD,CM,5.9,11432.4,25.7,11.4,2.0
+KKD:1432,Neal Viereck,Jong FC Utrecht,KKD,CB,91.2,10726.4,24.0,7.1,21.0
+KKD:1439,Jevon Simons,De Graafschap,KKD,CM,84.4,11651.7,35.4,11.8,13.0
+KKD:1440,Wessel Kuhn,Jong PSV,KKD,LB,48.5,11061.9,28.7,10.5,12.0
+KKD:1441,Tygo Land,Jong PSV,KKD,DM,3.0,11399.1,27.9,4.3,1.0
+KKD:1442,Reda El Meliani,Roda JC Kerkrade,KKD,RB,63.6,12262.8,49.8,8.3,1.0
+KKD:1446,Tai Abed,Jong PSV,KKD,CM,57.6,10671.6,28.5,13.7,18.0
+KKD:1466,Roy Kuijpers,RKC Waalwijk,KKD,LW,66.7,11527.8,33.5,20.0,5.0
+KKD:1467,Lars Mol,TOP Oss,KKD,DM,78.1,12281.5,38.4,13.1,9.0
+KKD:1472,,SC Cambuur,KKD,,46.9,,,,
+KKD:1475,Skye Vink,Jong Ajax,KKD,CF,87.9,11357.7,33.3,10.6,17.0
+KKD:1477,Gerald Alders,Jong Ajax,KKD,LB,30.3,10919.5,26.1,10.3,8.0
+KKD:1495,Luuk Wouters,RKC Waalwijk,KKD,CB,97.0,10385.0,18.9,5.9,29.0
+KKD:1505,Naïm Matoug,VVV-Venlo,KKD,CM,60.6,11100.4,37.2,11.8,7.0
+KKD:1511,Iwan Henstra,SC Cambuur,KKD,RW,93.8,11743.2,28.6,8.6,1.0
+KKD:1516,Lucas Beerten,Roda JC Kerkrade,KKD,LB,93.9,10787.0,22.8,6.2,19.0
+KKD:1519,Kiyani Zeggen,Jong AZ,KKD,GK,71.9,5574.9,0.7,0.1,16.0
+KKD:1522,Jordy Bawuah,Jong PSV,KKD,DM,48.5,11233.2,37.1,9.2,11.0
+KKD:1523,Raf van de Riet,Jong PSV,KKD,CB,93.9,11016.1,30.6,11.4,22.0
+KKD:1537,Onesime Zimuangana,Helmond Sport,KKD,CF,18.8,11215.3,37.3,18.3,2.0
+KKD:1539,Nicolas Verkooijen,Jong PSV,KKD,AM,78.8,12844.7,47.0,17.2,17.0
+KKD:1543,Robin van Duiven,Jong PSV,KKD,CF,66.7,10917.1,30.2,9.6,21.0
+KKD:1549,Kayden Wolff,Jong Ajax,KKD,CM,63.6,10797.0,27.7,11.7,16.0
+KKD:1551,Tim Coremans,FC Dordrecht,KKD,GK,42.4,5563.1,0.0,0.0,2.0
+KKD:156,Robert Klaasen,MVV Maastricht,KKD,CF,84.4,11262.3,28.4,3.0,21.0
+KKD:1565,,TOP Oss,KKD,,46.9,,,,
+KKD:1567,,FC Den Bosch,KKD,,12.5,,,,
+KKD:1572,Ahmetcan Kaplan,Jong Ajax,KKD,CB,9.1,9997.6,19.1,6.9,3.0
+KKD:1576,Avery Appiah,Jong Ajax,KKD,RB,90.9,10305.3,30.2,10.5,24.0
+KKD:1577,Shedrach Ebite,Jong FC Utrecht,KKD,CF,73.5,,,,
+KKD:158,Nick Venema,FC Dordrecht,KKD,CF,93.9,11176.0,28.5,14.5,19.0
+KKD:1585,,VVV-Venlo,KKD,,45.5,,,,
+KKD:1589,Per Kloosterboer,Jong FC Utrecht,KKD,CB,88.2,11399.1,31.0,10.8,19.0
+KKD:159,Thijme Verheijen,MVV Maastricht,KKD,CM,78.1,11317.5,31.4,11.1,9.0
+KKD:1598,Zidane Aamar Iqbal,Jong FC Utrecht,KKD,CM,20.6,12244.0,32.2,9.5,3.0
+KKD:1599,Denzel Eijken,De Graafschap,KKD,DM,28.1,11771.4,26.9,10.5,2.0
+KKD:1603,Nils Eggens,De Graafschap,KKD,CF,21.9,10807.7,28.5,9.6,6.0
+KKD:1606,Toni Jonker,SC Cambuur,KKD,CB,43.8,9793.5,18.4,5.8,1.0
+KKD:1607,Finn de Bruin,ADO Den Haag,KKD,CM,54.5,,,,
+KKD:1611,Gijs Bolk,FC Emmen,KKD,CB,83.9,10921.1,27.3,7.7,11.0
+KKD:1627,Jens Mathijsen,Willem II,KKD,CB,50.0,11097.9,30.8,6.6,3.0
+KKD:163,Joep Kluskens,VVV-Venlo,KKD,LB,63.6,12198.6,45.3,5.3,2.0
+KKD:1637,Tijn den Boggende,Jong FC Utrecht,KKD,CM,64.7,13161.5,50.1,16.0,13.0
+KKD:1650,Deacon van der Klaauw,Jong AZ,KKD,AM,78.1,11358.2,33.3,14.6,4.0
+KKD:1651,Kasper Boogaard,Jong AZ,KKD,DM,68.8,11860.6,30.1,5.0,20.0
+KKD:167,Thomas Poll,Helmond Sport,KKD,RB,100.0,11486.9,40.2,16.6,22.0
+KKD:1677,Sami Bouhoudane,Jong PSV,KKD,CF,57.6,11339.6,36.6,9.6,10.0
+KKD:1678,Damian van Dijk,FC Den Bosch,KKD,RB,12.5,,,,
+KKD:1684,,Jong FC Utrecht,KKD,,2.9,,,,
+KKD:1685,Omar Achouitar,Vitesse,KKD,CB,84.8,10017.3,21.7,7.0,18.0
+KKD:169,Joey Jacobs,Almere City FC,KKD,AM,76.5,10441.5,22.4,4.1,15.0
+KKD:1690,,Vitesse,KKD,,3.0,,,,
+KKD:1691,Youssef Ouallil,Vitesse,KKD,DM,48.5,12679.8,42.6,7.1,1.0
+KKD:1692,,Vitesse,KKD,,42.4,,,,
+KKD:1693,Koen te Veluwe,Vitesse,KKD,CM,18.2,,,,
+KKD:1696,Bas Huisman,Almere City FC,KKD,CF,32.4,11807.0,49.3,15.4,2.0
+KKD:1698,Anass Zarrouk,Willem II,KKD,CM,75.0,12002.4,19.4,4.3,4.0
+KKD:1699,Jim Koller,Jong PSV,KKD,LW,63.6,12059.4,37.9,9.7,9.0
+KKD:1700,Bouke Boersma,De Graafschap,KKD,CF,68.8,10812.5,30.7,8.3,16.0
+KKD:1705,Cheveyo Mul,ADO Den Haag,KKD,RW,3.0,,,,
+KKD:1707,Feliciano de Ruijter,Willem II,KKD,RB,18.8,,,,
+KKD:1719,Bram Marsman,SC Cambuur,KKD,LB,75.0,11245.1,28.8,16.7,4.0
+KKD:1720,Aaron Bouwman,Jong Ajax,KKD,CB,15.2,10328.2,22.5,6.3,5.0
+KKD:1723,Don O'Niel,Jong Ajax,KKD,RW,97.0,10699.9,31.4,15.8,30.0
+KKD:1724,Sean Steur,Jong Ajax,KKD,AM,33.3,12122.3,38.6,10.2,9.0
+KKD:1725,Luca Messori,Jong Ajax,KKD,AM,51.5,11672.0,33.8,19.7,1.0
+KKD:1726,Massien Ghaddari,Jong FC Utrecht,KKD,DM,67.6,11560.5,34.6,12.5,16.0
+KKD:1727,Celton Anssumane Biai,FC Dordrecht,KKD,GK,93.9,5052.6,2.1,0.3,31.0
+KKD:1728,Joel van den Berg,Jong PSV,KKD,CM,42.4,12532.1,43.7,13.3,13.0
+KKD:173,Tijmen Wildeboer,TOP Oss,KKD,CF,87.5,11492.2,34.2,6.8,22.0
+KKD:1741,Siem de Moes,Eindhoven,KKD,CB,36.4,10488.6,20.7,6.1,1.0
+KKD:1747,Justin Bakker,Vitesse,KKD,LB,42.4,,,,
+KKD:1751,Marcus Steffen,Vitesse,KKD,CB,57.6,10384.6,21.4,4.4,16.0
+KKD:1755,Miliano Jonathans,Jong FC Utrecht,KKD,RW,14.7,11134.1,32.2,10.5,4.0
+KKD:1763,Luuk Verheij,VVV-Venlo,KKD,CB,81.8,11126.1,25.2,7.9,14.0
+KKD:1764,Tyrese Simons,Eindhoven,KKD,CM,97.0,10143.5,25.9,12.7,29.0
+KKD:1765,Hugo Deenen,Eindhoven,KKD,CF,33.3,12967.8,42.5,26.6,2.0
+KKD:1767,Byron Burgering,Almere City FC,KKD,RW,79.4,11588.4,39.5,21.9,19.0
+KKD:1769,Jules Van Bost,TOP Oss,KKD,AM,50.0,10237.7,28.4,12.3,1.0
+KKD:1776,Xander Blomme,Eindhoven,KKD,CM,30.3,12482.3,41.0,9.6,6.0
+KKD:178,Marcelencio Esajas,TOP Oss,KKD,CM,93.8,11526.7,38.4,9.0,26.0
+KKD:1787,Luca Unbehaun,FC Emmen,KKD,GK,96.8,6150.7,1.6,0.1,29.0
+KKD:1788,Pascal Mulder,ADO Den Haag,KKD,CB,81.8,10734.9,21.1,5.0,27.0
+KKD:1789,Djenahro Nunumete,FC Emmen,KKD,CM,77.4,11244.6,33.9,4.8,8.0
+KKD:1793,Jalen Hawkins,ADO Den Haag,KKD,CM,33.3,10390.2,29.0,13.4,3.0
+KKD:1794,Tim Geypens,FC Emmen,KKD,CM,80.6,10598.0,32.1,11.3,8.0
+KKD:1799,Sem Valk,FC Dordrecht,KKD,CB,75.8,10401.9,22.9,6.6,22.0
+KKD:180,Layee Kromah,VVV-Venlo,KKD,CF,87.9,11424.2,35.5,12.7,13.0
+KKD:1800,Mauresmo Hinoke,TOP Oss,KKD,LW,90.6,10251.8,23.5,11.7,21.0
+KKD:1801,Dean Zandbergen,VVV-Venlo,KKD,CF,90.9,10892.0,31.3,15.2,23.0
+KKD:1807,Tim Braem,De Graafschap,KKD,CM,43.8,12155.5,33.9,0.0,1.0
+KKD:1809,Ilano Silva Timas,MVV Maastricht,KKD,CM,93.8,11983.7,34.8,14.7,22.0
+KKD:1812,Ibrahim El Kadiri,De Graafschap,KKD,CM,75.0,11766.7,34.2,15.6,21.0
+KKD:1822,Milan de Haan,Almere City FC,KKD,DM,91.2,11391.1,28.0,7.1,30.0
+KKD:1825,Rayan Atikallah,Jong AZ,KKD,CB,12.5,,,,
+KKD:1826,Sem van Duijn,Jong AZ,KKD,CF,62.5,11863.0,40.3,18.5,19.0
+KKD:1827,Kevin Toppenberg,Jong AZ,KKD,AM,78.1,11607.4,33.4,9.3,19.0
+KKD:1828,Tim Köther,Roda JC Kerkrade,KKD,LB,33.3,10372.0,23.4,7.0,10.0
+KKD:1829,Joshua Schwirten,Roda JC Kerkrade,KKD,CF,36.4,11500.4,38.0,9.0,7.0
+KKD:183,Joep van der Sluijs,FC Dordrecht,KKD,AM,51.5,12059.6,40.2,9.5,13.0
+KKD:1831,Michael Bresser,Jong PSV,KKD,RB,42.4,10630.3,31.0,5.2,9.0
+KKD:1832,Lucas Jetten,Jong Ajax,KKD,LW,72.7,10702.3,31.5,11.3,14.0
+KKD:1833,Jorthy Mokio,Jong Ajax,KKD,AM,6.1,10991.7,24.0,16.1,2.0
+KKD:1834,Jan Faberski,Jong Ajax,KKD,RW,3.0,,,,
+KKD:1836,Sven van der Plas,Jong PSV,KKD,CB,93.9,10315.7,24.1,5.4,23.0
+KKD:1838,Ayodele Thomas,Jong PSV,KKD,LW,54.5,10100.6,25.4,14.5,17.0
+KKD:1840,Denzel Kuijpers,FC Den Bosch,KKD,CF,40.6,,,,
+KKD:1843,Lorenzo Codutti,FC Dordrecht,KKD,CM,72.7,10374.8,29.2,10.6,4.0
+KKD:185,Justin Mathieu,TOP Oss,KKD,AM,6.2,,,,
+KKD:1851,Agon Sadiku,FC Emmen,KKD,CF,12.9,10218.2,18.0,10.5,1.0
+KKD:1855,Tony Rölke,SC Cambuur,KKD,CM,96.9,11739.2,34.4,9.0,17.0
+KKD:1866,Milan Hokke,ADO Den Haag,KKD,LB,78.8,10967.9,28.9,8.8,19.0
+KKD:1867,Freddy Quispel,FC Emmen,KKD,CF,67.7,11817.6,33.4,12.3,6.0
+KKD:1873,Kaya Symons,De Graafschap,KKD,LB,90.6,12100.6,32.7,12.1,15.0
+KKD:1876,,ADO Den Haag,KKD,,6.1,,,,
+KKD:1878,Justin Treichel,Roda JC Kerkrade,KKD,GK,100.0,4976.2,1.4,0.2,33.0
+KKD:1885,Ayman Kassimi,MVV Maastricht,KKD,LW,21.9,,,,
+KKD:1886,Jamie Jacobs,Almere City FC,KKD,DM,23.5,,,,
+KKD:1897,Gabin Blancquart,VVV-Venlo,KKD,CB,81.8,10609.9,23.4,4.0,24.0
+KKD:1899,Stan Van Dessel,MVV Maastricht,KKD,CM,100.0,12536.3,36.9,6.9,28.0
+KKD:1900,Thijs Muller,Eindhoven,KKD,CF,87.9,11606.3,42.4,9.7,13.0
+KKD:1904,Joeri Oud,Jong AZ,KKD,LB,3.1,,,,
+KKD:1909,Billy van Duijl,Jong AZ,KKD,LB,75.0,10339.5,22.1,7.4,23.0
+KKD:1910,Tygo Grotenhuis,De Graafschap,KKD,RW,3.1,,,,
+KKD:1914,Simon Francis,MVV Maastricht,KKD,RB,71.9,,,,
+KKD:1917,Tijn Joosten,VVV-Venlo,KKD,CM,60.6,10426.8,21.2,4.6,9.0
+KKD:1919,,FC Dordrecht,KKD,,9.1,,,,
+KKD:192,Roshon van Eijma,RKC Waalwijk,KKD,CB,72.7,9990.8,20.4,6.0,18.0
+KKD:1920,Rio Robbemond,Jong AZ,KKD,AM,65.6,12140.4,30.2,5.8,13.0
+KKD:1922,Mathijs Menu,Jong AZ,KKD,CB,81.2,10754.1,25.5,7.0,17.0
+KKD:1926,Djairo Tehubijuluw,MVV Maastricht,KKD,LB,46.9,10722.5,24.1,8.2,8.0
+KKD:1927,Illaijh de Ruijter,ADO Den Haag,KKD,CM,60.6,10846.8,29.3,14.1,9.0
+KKD:1928,Jayson Ezeb,FC Dordrecht,KKD,CF,15.2,,,,
+KKD:1933,Ryan van de Pavert,Jong Ajax,KKD,DM,27.3,12169.3,30.7,10.0,4.0
+KKD:1935,Kyano Kwint,De Graafschap,KKD,LW,34.4,,,,
+KKD:1937,Essien Bassey,Jong PSV,KKD,RB,69.7,10969.2,26.7,18.1,13.0
+KKD:1939,,Helmond Sport,KKD,,46.9,,,,
+KKD:1941,Jordy de Beer,Vitesse,KKD,RB,15.2,10775.4,30.0,9.6,1.0
+KKD:1943,Rayane Bounida,Jong Ajax,KKD,AM,30.3,12066.3,35.2,12.0,9.0
+KKD:1944,Alaa Bakir,FC Emmen,KKD,AM,74.2,11526.0,33.7,7.4,15.0
+KKD:1946,,ADO Den Haag,KKD,,24.2,,,,
+KKD:1948,,SC Cambuur,KKD,,3.1,,,,
+KKD:1951,Wassim Bouziane,Jong AZ,KKD,LW,53.1,11299.5,33.2,12.3,9.0
+KKD:1952,Jinairo Johnson,Jong Ajax,KKD,CB,75.8,9372.7,22.6,6.4,19.0
+KKD:1953,Augustin Drakpe,FC Dordrecht,KKD,CB,63.6,10186.1,25.3,7.7,20.0
+KKD:1954,,ADO Den Haag,KKD,,3.0,,,,
+KKD:1965,Nino Zonneveld,Vitesse,KKD,LW,97.0,11558.9,39.6,14.0,7.0
+KKD:1966,Marouane Afaker,FC Dordrecht,KKD,CM,66.7,11783.3,34.2,13.8,8.0
+KKD:1970,Jaygo van Ommeren,Jong FC Utrecht,KKD,DM,58.8,12136.9,36.1,6.9,15.0
+KKD:1971,Luka Reischl,ADO Den Haag,KKD,LB,97.0,11097.2,37.1,8.3,16.0
+KKD:1974,Stan van Manen,FC Emmen,KKD,LW,67.7,11494.2,47.7,16.3,1.0
+KKD:1975,Rivas Manuhutu,Jong PSV,KKD,LB,3.0,,,,
+KKD:1978,Reuven Niemeijer,De Graafschap,KKD,CM,100.0,11389.9,34.3,8.0,32.0
+KKD:1980,Bjorn van Zijl,VVV-Venlo,KKD,CF,78.8,11059.4,28.7,12.8,8.0
+KKD:1983,Delano Vianello,TOP Oss,KKD,CM,93.8,12424.2,34.8,5.5,29.0
+KKD:1984,Luciano Slagveer,TOP Oss,KKD,LW,68.8,11767.8,43.5,16.8,15.0
+KKD:1991,Boet Mulders,Jong PSV,KKD,RB,12.1,,,,
+KKD:1992,Nolan Martens,De Graafschap,KKD,RB,21.9,11582.5,28.0,11.1,7.0
+KKD:1996,,VVV-Venlo,KKD,,6.1,,,,
+KKD:1998,Senne Vugts,FC Dordrecht,KKD,DM,42.4,11570.0,31.3,5.8,4.0
+KKD:2004,Ethan Butera,Jong Ajax,KKD,LB,75.8,10264.7,25.7,7.5,18.0
+KKD:2005,Sem Verdonk,FC Dordrecht,KKD,RB,39.4,,,,
+KKD:2008,Manuel Bahaty,Jong PSV,KKD,DM,66.7,10833.2,31.9,26.2,1.0
+KKD:2009,Driess Saddiki,VVV-Venlo,KKD,CM,54.5,11283.9,29.3,7.3,6.0
+KKD:201,Mees Rijks,De Graafschap,KKD,CF,31.2,,,,
+KKD:2011,Lennon Smulders,Eindhoven,KKD,RB,9.1,,,,
+KKD:2012,Yassin Hamdi,Jong AZ,KKD,AM,18.8,,,,
+KKD:2013,,TOP Oss,KKD,,6.2,,,,
+KKD:2014,Zaid El Bakkali,FC Den Bosch,KKD,LW,84.4,11462.3,40.4,9.2,1.0
+KKD:2015,Hessel de Wit,Jong AZ,KKD,LW,37.5,12510.7,33.0,14.3,4.0
+KKD:2019,Daan Visser,SC Cambuur,KKD,DM,25.0,12011.8,29.8,7.1,5.0
+KKD:2021,Fabian Merién,Jong PSV,KKD,RB,90.9,11166.9,31.3,10.1,24.0
+KKD:2022,Khadim Ngom,Jong PSV,KKD,GK,51.5,6255.3,1.4,0.0,2.0
+KKD:2023,Thomas Didillon-Hödl,Willem II,KKD,GK,90.6,4556.1,0.7,0.1,29.0
+KKD:2030,Leonel Miguel,TOP Oss,KKD,CB,84.4,10088.0,25.4,5.0,24.0
+KKD:2031,Maxim Mariani,TOP Oss,KKD,CB,62.5,10988.1,30.2,7.1,11.0
+KKD:2032,Jillian Bernardina,TOP Oss,KKD,RW,25.0,,,,
+KKD:2033,Mert Erkan,TOP Oss,KKD,RW,81.2,12234.5,38.6,14.0,10.0
+KKD:2034,,TOP Oss,KKD,,50.0,,,,
+KKD:2035,Kas de Wit,TOP Oss,KKD,CM,75.0,,,,1.0
+KKD:2036,Joshua Zimmerman,TOP Oss,KKD,RW,62.5,11492.8,31.6,17.7,11.0
+KKD:2037,Kanou Sy,MVV Maastricht,KKD,RB,90.6,11078.6,31.3,9.1,10.0
+KKD:2038,Mitch van Kempen,MVV Maastricht,KKD,LB,81.2,11383.0,29.5,8.8,14.0
+KKD:2039,Ilias Breugelmans,MVV Maastricht,KKD,CB,84.4,10024.5,23.0,8.2,24.0
+KKD:2040,Delano Asante,MVV Maastricht,KKD,CM,87.5,11083.6,30.1,15.9,12.0
+KKD:2041,Sven Braken,MVV Maastricht,KKD,CF,93.8,9238.5,20.0,4.8,20.0
+KKD:2042,Adriano Mansala,MVV Maastricht,KKD,CF,15.6,,,,
+KKD:2043,Lenn-Minh Tran,MVV Maastricht,KKD,RB,84.4,11157.0,29.0,12.2,20.0
+KKD:2044,Mats Kuipers,MVV Maastricht,KKD,CB,43.8,11794.7,45.0,13.7,7.0
+KKD:2045,Adam Zaian,MVV Maastricht,KKD,CB,87.5,10228.0,25.0,6.3,10.0
+KKD:2046,,MVV Maastricht,KKD,,37.5,,,,
+KKD:2047,Marko Kleinen,MVV Maastricht,KKD,DM,78.1,11967.9,29.0,5.8,12.0
+KKD:2048,Jaël Pawirodihardjo,MVV Maastricht,KKD,LW,31.2,,,,
+KKD:2049,Deveron Fonville,FC Dordrecht,KKD,LB,12.1,10507.1,32.8,11.0,4.0
+KKD:2050,Martin Vetkal,FC Dordrecht,KKD,CM,90.9,12152.0,39.7,9.2,19.0
+KKD:2051,Robin van Asten,FC Dordrecht,KKD,CF,75.8,11673.6,41.3,13.0,9.0
+KKD:2052,Yannick Eduardo,FC Dordrecht,KKD,CF,66.7,11065.7,32.9,14.4,20.0
+KKD:2053,Seung-Gyun Bae,FC Dordrecht,KKD,CM,72.7,12017.0,38.7,7.8,14.0
+KKD:2054,Guus Huitzing,FC Dordrecht,KKD,CM,33.3,,,,
+KKD:2055,Yannis M'Bemba,FC Dordrecht,KKD,CB,81.8,10380.4,20.3,6.2,13.0
+KKD:2056,Nicolás Rossi,FC Dordrecht,KKD,CM,75.8,11211.5,31.7,14.2,8.0
+KKD:2057,,FC Dordrecht,KKD,,24.2,,,,
+KKD:2058,,FC Dordrecht,KKD,,12.1,,,,
+KKD:2059,Jamal Amofa,SC Cambuur,KKD,CB,96.9,9899.4,20.0,5.1,31.0
+KKD:206,Dylan Timber,VVV-Venlo,KKD,CB,3.0,,,,
+KKD:2060,Rik Mulders,SC Cambuur,KKD,RB,84.4,10942.4,33.1,11.8,21.0
+KKD:2061,Tomas Galvez,SC Cambuur,KKD,LB,93.8,10899.7,26.3,10.0,28.0
+KKD:2062,Nicolas Binder,SC Cambuur,KKD,CM,56.2,11485.2,37.7,8.8,2.0
+KKD:2063,Oscar Sjöstrand,SC Cambuur,KKD,LW,96.9,10698.6,30.3,13.1,30.0
+KKD:2064,Jelte Priem,SC Cambuur,KKD,CB,21.9,,,,
+KKD:2065,,SC Cambuur,KKD,,37.5,,,,
+KKD:2066,Diyae Jermoumi,SC Cambuur,KKD,RB,56.2,10703.1,29.7,11.7,2.0
+KKD:2067,,SC Cambuur,KKD,,12.5,,,,
+KKD:2068,Kian Visser,SC Cambuur,KKD,CM,71.9,,,,
+KKD:2069,Jochem Nap,SC Cambuur,KKD,DM,43.8,13110.4,39.6,7.3,5.0
+KKD:2070,Yoram van der Veen,RKC Waalwijk,KKD,CM,78.8,,,,
+KKD:2071,Jeffry Fortes,FC Den Bosch,KKD,RB,84.4,10724.9,27.1,7.9,24.0
+KKD:2072,Nick de Groot,FC Den Bosch,KKD,LB,96.9,11510.5,35.5,14.3,30.0
+KKD:2073,Kévin Monzialo,FC Den Bosch,KKD,CF,93.8,10016.4,26.8,12.2,29.0
+KKD:2074,Kevin Felida,FC Den Bosch,KKD,CM,93.8,11030.4,22.8,5.4,28.0
+KKD:2075,Filali el Iliass,FC Den Bosch,KKD,CF,9.4,,,,
+KKD:2076,Luc van Koeverden,FC Den Bosch,KKD,CB,62.5,10423.7,23.8,5.6,5.0
+KKD:2077,Amine Boushaba,FC Den Bosch,KKD,RB,28.1,,,,
+KKD:2078,Emian-Johar Semedo,FC Den Bosch,KKD,LW,87.5,11423.9,37.6,11.8,10.0
+KKD:2079,Djesi Bodo,FC Den Bosch,KKD,CM,15.6,,,,
+KKD:2080,Joeri Heerkens,Jong Ajax,KKD,GK,54.5,6095.0,1.6,0.1,18.0
+KKD:2081,Thomas Kok,De Graafschap,KKD,CB,65.6,10362.6,26.0,6.1,18.0
+KKD:2082,Othniël Raterink,De Graafschap,KKD,RB,71.9,10483.8,29.8,13.3,17.0
+KKD:2083,Milan Smits,De Graafschap,KKD,RB,46.9,11575.1,36.1,5.4,4.0
+KKD:2084,Dimitris Theodoridis,De Graafschap,KKD,CF,65.6,10934.2,29.3,15.0,3.0
+KKD:2085,Don-Angelo Konadu,Jong Ajax,KKD,CF,48.5,10549.5,25.9,11.2,14.0
+KKD:2086,,De Graafschap,KKD,,40.6,,,,
+KKD:2087,Leroy Fränkel,Jong Ajax,KKD,CB,9.1,,,,
+KKD:2088,Damián van der Vaart,Jong Ajax,KKD,DM,78.8,12030.7,30.6,6.0,5.0
+KKD:2089,,De Graafschap,KKD,,9.4,,,,
+KKD:2090,Zakaria Ouazane,Jong Ajax,KKD,CM,66.7,11439.4,31.7,11.5,3.0
+KKD:2091,Nathan Kaninda,De Graafschap,KKD,CM,59.4,12007.2,38.8,16.5,4.0
+KKD:2092,Abdellah Ouazane,Jong Ajax,KKD,AM,63.6,11070.2,31.8,8.1,11.0
+KKD:2093,Lasse Abildgaard,Willem II,KKD,CM,28.1,,,,
+KKD:2094,Emre Ünüvar,Jong Ajax,KKD,CF,39.4,11188.4,29.8,14.0,6.0
+KKD:2095,Youri Schoonderwaldt,VVV-Venlo,KKD,GK,100.0,5851.7,1.3,0.1,33.0
+KKD:2096,Michael Davis,VVV-Venlo,KKD,RB,60.6,10544.6,25.9,12.0,12.0
+KKD:2097,Thomas Reinders,VVV-Venlo,KKD,LW,21.2,10731.1,28.3,6.3,4.0
+KKD:2098,Philip Heise,VVV-Venlo,KKD,LB,75.8,10767.1,28.7,7.2,20.0
+KKD:2099,Jorn Triep,VVV-Venlo,KKD,CM,57.6,12557.9,45.2,12.3,13.0
+KKD:210,Lynden Edhart,Jong FC Utrecht,KKD,LW,47.1,11472.7,36.7,13.8,5.0
+KKD:2100,Navarone Foor,VVV-Venlo,KKD,CM,90.9,11756.4,29.1,4.5,20.0
+KKD:2101,Lars de Blok,VVV-Venlo,KKD,LB,100.0,11474.5,33.0,10.4,25.0
+KKD:2102,,VVV-Venlo,KKD,,42.4,,,,
+KKD:2103,Nassim Ait Mouhou,VVV-Venlo,KKD,CM,97.0,10699.5,29.0,11.9,23.0
+KKD:2104,John Neeskens,Eindhoven,KKD,CB,100.0,10420.3,23.4,6.2,33.0
+KKD:2105,Rangelo Janga,Eindhoven,KKD,CF,100.0,10792.2,34.9,8.7,27.0
+KKD:2106,Owen Renfrum,Eindhoven,KKD,LB,93.9,10337.2,22.3,9.8,12.0
+KKD:2107,Amir Bryson,Eindhoven,KKD,CB,66.7,,,,2.0
+KKD:2108,Zakaria Haddaoui,Eindhoven,KKD,LW,33.3,13085.0,50.7,8.0,3.0
+KKD:2109,Marlon van de Wetering,Eindhoven,KKD,CB,57.6,10288.5,24.2,12.1,4.0
+KKD:2110,,Eindhoven,KKD,,9.1,,,,
+KKD:2111,Joshua Mukeh,FC Emmen,KKD,CM,90.3,10448.6,23.2,6.2,23.0
+KKD:2112,Emirhan Demircan,Jong FC Utrecht,KKD,CM,70.6,10628.7,26.8,14.8,22.0
+KKD:2113,Brian van den Boogaard,Jong FC Utrecht,KKD,LB,35.3,,,,
+KKD:2114,Viggo Plantinga,Jong FC Utrecht,KKD,RB,97.1,11659.0,33.5,14.0,15.0
+KKD:2115,Hylke van der Mast,Jong FC Utrecht,KKD,CM,29.4,,,,
+KKD:2116,Justin Eversen,Jong FC Utrecht,KKD,GK,44.1,5219.1,0.0,0.0,1.0
+KKD:2117,Noa Dundas,Jong FC Utrecht,KKD,CM,91.2,11891.9,37.7,13.3,15.0
+KKD:2118,Mees Eppink,Jong FC Utrecht,KKD,GK,61.8,6563.3,1.1,2.0,10.0
+KKD:2119,Gustav Arcos Sundqvist,Jong FC Utrecht,KKD,CF,47.1,11543.4,35.1,12.5,2.0
+KKD:2120,Menno Bergsen,Helmond Sport,KKD,GK,100.0,5619.2,0.5,0.1,31.0
+KKD:2121,Brian Koglin,Helmond Sport,KKD,CB,93.8,10110.9,18.7,5.6,24.0
+KKD:2122,Justin Ogenia,Helmond Sport,KKD,RB,84.4,11160.1,32.2,11.1,4.0
+KKD:2123,Pol Llonch,Helmond Sport,KKD,CM,68.8,11700.1,31.1,3.3,18.0
+KKD:2124,Noah Makanza,Helmond Sport,KKD,CM,96.9,11890.6,31.0,5.6,26.0
+KKD:2125,André Leipold,Helmond Sport,KKD,CM,90.6,11418.8,33.2,13.8,24.0
+KKD:2126,Maik Lukowicz,Helmond Sport,KKD,CF,87.5,10899.9,30.7,12.4,13.0
+KKD:2127,Dayen Geerts,Helmond Sport,KKD,CM,78.1,12706.3,38.7,3.9,6.0
+KKD:2128,Julian Geerts,Helmond Sport,KKD,RB,53.1,,,,1.0
+KKD:2129,Amine Et-Taïbi,Willem II,KKD,RB,84.4,11081.9,26.1,9.0,25.0
+KKD:2130,Alen Dizdarevic,Helmond Sport,KKD,CM,96.9,10571.1,27.1,7.4,18.0
+KKD:2131,Labinot Bajrami,Helmond Sport,KKD,CF,93.8,10737.9,26.8,10.6,13.0
+KKD:2132,Helgi Ingason,Helmond Sport,KKD,CM,71.9,13056.4,42.5,2.7,5.0
+KKD:2133,Joshua Nisbet,Roda JC Kerkrade,KKD,CM,100.0,11489.6,33.2,7.3,32.0
+KKD:2134,Dario Van den Buijs,Roda JC Kerkrade,KKD,CB,45.5,9584.4,16.6,1.7,15.0
+KKD:2135,Joey Müller,Roda JC Kerkrade,KKD,CM,100.0,11954.1,29.1,5.4,33.0
+KKD:2136,Anthony van den Hurk,Roda JC Kerkrade,KKD,CF,93.9,9761.1,23.0,5.0,29.0
+KKD:2137,Juul Timmermans,Roda JC Kerkrade,KKD,LB,51.5,,,,
+KKD:2138,Jack Cooper-Love,Roda JC Kerkrade,KKD,CM,97.0,11968.5,34.1,9.2,10.0
+KKD:2139,Ryan Leijten,Roda JC Kerkrade,KKD,RW,51.5,,,,
+KKD:2140,,Roda JC Kerkrade,KKD,,45.5,,,,
+KKD:2141,Mitchel Paulissen,Roda JC Kerkrade,KKD,CM,54.5,11107.6,27.8,3.7,6.0
+KKD:2142,Jonathan Foss,Roda JC Kerkrade,KKD,AM,60.6,10503.0,25.8,4.3,8.0
+KKD:2143,Kilian Nikièma,ADO Den Haag,KKD,GK,97.0,5356.1,1.3,0.3,32.0
+KKD:2144,Diogo Tomas,ADO Den Haag,KKD,CB,75.8,11083.6,30.2,7.1,7.0
+KKD:2145,Steven van der Sloot,ADO Den Haag,KKD,RB,100.0,11582.5,38.7,13.9,32.0
+KKD:2146,Sékou Sylla,ADO Den Haag,KKD,LB,87.9,11286.6,31.9,14.3,20.0
+KKD:2147,Juho Kilo,ADO Den Haag,KKD,DM,100.0,12052.0,33.1,3.9,33.0
+KKD:2148,Daryl van Mieghem,ADO Den Haag,KKD,CM,75.8,11053.1,32.8,10.0,14.0
+KKD:2149,,ADO Den Haag,KKD,,39.4,,,,
+KKD:2150,,ADO Den Haag,KKD,,45.5,,,,
+KKD:2151,Nigel Thomas,ADO Den Haag,KKD,CM,84.8,11018.0,31.4,12.0,3.0
+KKD:2152,Cameron Peupion,ADO Den Haag,KKD,CM,97.0,11370.4,31.5,10.8,18.0
+KKD:2153,Mylian Jiménez,ADO Den Haag,KKD,LB,84.8,12521.6,40.9,6.8,3.0
+KKD:2154,Mickaël Tirpan,Willem II,KKD,RB,9.4,10229.3,18.7,9.7,3.0
+KKD:2155,Raffael Behounek,Willem II,KKD,CB,100.0,9859.8,19.7,5.4,29.0
+KKD:2156,Rúnar Sigurgeirsson,Willem II,KKD,LB,9.4,11141.2,30.4,12.6,3.0
+KKD:2157,Uriel van Aalst,Willem II,KKD,CF,96.9,12364.6,37.0,11.9,20.0
+KKD:2158,Jari Schuurman,Willem II,KKD,CM,25.0,12286.4,34.0,11.4,7.0
+KKD:2159,Per van Loon,Willem II,KKD,RB,62.5,10876.6,18.0,11.3,3.0
+KKD:2160,Karst de Leeuw,Willem II,KKD,GK,56.2,5270.2,1.6,0.0,3.0
+KKD:2161,,Willem II,KKD,,31.2,,,,
+KKD:2162,Thomas Verheydt,Willem II,KKD,CF,71.9,10956.3,23.9,3.4,12.0
+KKD:2163,Pieter van Maarschalkerwaard,Willem II,KKD,CM,37.5,,,,
+KKD:2164,Siegert Baartmans,Willem II,KKD,CF,75.0,11658.8,21.7,17.3,1.0
+KKD:2165,,Willem II,KKD,,18.8,,,,
+KKD:2166,Nathan Tjoe-A-On,Willem II,KKD,LB,93.8,10495.1,24.1,10.2,28.0
+KKD:2167,Esmir Bajraktarevic,Jong PSV,KKD,RW,3.0,11661.1,34.6,12.5,1.0
+KKD:2168,Noah Fernandez,Jong PSV,KKD,RW,39.4,12088.6,40.3,8.9,10.0
+KKD:2169,Yiandro Raap,Jong PSV,KKD,CB,75.8,10365.1,24.5,13.4,4.0
+KKD:2170,Sol Sidibé,Jong PSV,KKD,DM,100.0,11787.2,31.9,4.7,23.0
+KKD:2171,,Jong PSV,KKD,,3.0,,,,
+KKD:2172,Jairo Beerens,Jong PSV,KKD,CM,15.2,,,,
+KKD:2173,Juliën Mesbahi,FC Emmen,KKD,RB,54.8,10881.6,29.5,8.6,7.0
+KKD:2174,Luca Denk,FC Emmen,KKD,AM,3.2,,,,
+KKD:2175,Daniël Beukers,FC Emmen,KKD,CM,74.2,11795.4,43.3,15.4,11.0
+KKD:2176,Rodney Kongolo,FC Emmen,KKD,CM,90.3,11096.4,25.3,4.8,21.0
+KKD:2177,Torben Rhein,FC Emmen,KKD,DM,3.2,12160.0,45.0,5.8,1.0
+KKD:2178,Lukas Larsen,FC Emmen,KKD,LB,96.8,10992.6,29.5,11.9,26.0
+KKD:2179,Romano Postema,FC Emmen,KKD,CF,90.3,10383.3,34.4,13.4,28.0
+KKD:2180,Nelson Amadin,FC Emmen,KKD,RW,48.4,10896.3,30.4,6.5,9.0
+KKD:2181,,FC Emmen,KKD,,41.9,,,,
+KKD:2182,Christian Østergaard,FC Emmen,KKD,LB,83.9,10496.4,23.4,6.8,20.0
+KKD:2183,Adam Claridge,FC Emmen,KKD,CM,54.8,11379.2,28.6,6.7,15.0
+KKD:2184,Ties Oostra,FC Emmen,KKD,LW,51.6,,,,
+KKD:2185,Rome-Jayden Owusu-Oduro,Jong AZ,KKD,GK,3.1,4332.9,0.9,0.0,1.0
+KKD:2186,Jur Schipper,Jong AZ,KKD,GK,65.6,5632.4,0.5,0.0,6.0
+KKD:2187,Kiani Inge,Jong AZ,KKD,RB,31.2,10969.9,37.1,17.6,3.0
+KKD:2188,Bohdan Budko,Jong AZ,KKD,DM,56.2,11250.4,31.3,8.8,9.0
+KKD:2189,Mark Spenkelink,RKC Waalwijk,KKD,GK,100.0,5217.5,0.4,0.1,33.0
+KKD:2190,Juan Familia-Castillo,RKC Waalwijk,KKD,LB,81.8,10701.5,32.9,13.4,19.0
+KKD:2191,Daouda Weidmann,RKC Waalwijk,KKD,CM,12.1,12129.8,45.9,6.6,4.0
+KKD:2192,Godfried Roemeratoe,RKC Waalwijk,KKD,CM,87.9,10984.1,27.7,5.2,22.0
+KKD:2193,Denilho Cleonise,RKC Waalwijk,KKD,CM,81.8,10154.2,26.0,12.8,19.0
+KKD:2194,Chris Lokesa,RKC Waalwijk,KKD,RW,51.5,10728.7,34.4,6.5,8.0
+KKD:2195,Michiel Kramer,RKC Waalwijk,KKD,CF,57.6,10616.3,20.5,6.1,3.0
+KKD:2196,Melle Witteveen,RKC Waalwijk,KKD,LB,60.6,12418.2,31.6,14.4,1.0
+KKD:2197,Harrie Kuster,RKC Waalwijk,KKD,CF,100.0,11984.1,32.9,7.1,18.0
+KKD:2198,Jordi Altena,RKC Waalwijk,KKD,RB,63.6,10751.2,31.1,9.5,20.0
+KKD:2199,,RKC Waalwijk,KKD,,48.5,,,,
+KKD:2200,Richard van der Venne,RKC Waalwijk,KKD,CF,75.8,11735.7,42.6,11.7,13.0
+KKD:2201,Ruben Silva-Richards,ADO Den Haag,KKD,CF,51.5,,,,
+KKD:2202,Filip Janssen,Roda JC Kerkrade,KKD,CB,21.2,,,,
+KKD:2203,Luca Maiorano,Roda JC Kerkrade,KKD,RB,66.7,,,,
+KKD:2204,Ismaël Baouf,SC Cambuur,KKD,CB,71.9,10268.1,22.8,5.5,23.0
+KKD:2205,,De Graafschap,KKD,,15.6,,,,
+KKD:2206,Nart Ahmeti,De Graafschap,KKD,CB,6.2,,,,
+KKD:2207,Evangelos Soferis,VVV-Venlo,KKD,AM,12.1,,,,
+KKD:2208,Isaac Babadi,Jong PSV,KKD,CF,3.0,11268.3,37.0,8.6,1.0
+KKD:2209,Fabio Kluit,Jong PSV,KKD,RW,81.8,11454.8,38.9,19.2,11.0
+KKD:2210,,MVV Maastricht,KKD,,21.9,,,,
+KKD:2211,Luca Foubert,MVV Maastricht,KKD,RW,81.2,12093.0,35.1,10.6,5.0
+KKD:2212,Stephano Carrillo,FC Dordrecht,KKD,CF,87.9,10800.6,36.4,12.5,11.0
+KKD:2213,Matteo Malasomma,FC Dordrecht,KKD,CF,33.3,,,,
+KKD:2214,Liam-Dean Marheineke,FC Emmen,KKD,LW,19.4,,,,
+KKD:2215,Dim Otten,FC Emmen,KKD,AM,19.4,,,,
+KKD:2216,,FC Emmen,KKD,,9.7,,,,
+KKD:2217,Franck Evina,FC Emmen,KKD,LB,67.7,10909.8,38.2,8.6,2.0
+KKD:2218,Jonas Wendlinger,Almere City FC,KKD,GK,100.0,5810.2,0.8,0.2,26.0
+KKD:2219,James Lawrence,Almere City FC,KKD,CB,64.7,11007.9,26.0,6.6,19.0
+KKD:2220,Enzo Cornelisse,Almere City FC,KKD,AM,85.3,12029.3,30.8,8.3,17.0
+KKD:2221,Hamza El Dahri,Almere City FC,KKD,DM,64.7,12886.4,37.9,12.3,7.0
+KKD:2222,Julian Rijkhoff,Almere City FC,KKD,AM,100.0,12000.3,36.6,12.7,29.0
+KKD:2223,Junior Kadile,Almere City FC,KKD,LW,70.6,10588.7,29.2,13.4,16.0
+KKD:2224,Ferdy Druijf,Almere City FC,KKD,CF,82.4,11087.7,31.4,10.1,23.0
+KKD:2225,Thomas Robinet,Almere City FC,KKD,CF,5.9,,,,
+KKD:2226,Ruben Providence,Almere City FC,KKD,LW,76.5,11455.3,38.4,14.1,10.0
+KKD:2227,,Almere City FC,KKD,,38.2,,,,
+KKD:2228,Amoah Sam,Almere City FC,KKD,RW,85.3,10840.7,24.7,10.9,16.0
+KKD:2229,Twan van der Zeeuw,Almere City FC,KKD,LB,38.2,10905.7,22.9,11.9,4.0
+KKD:2230,Tiziano Vianello,Almere City FC,KKD,LB,55.9,12123.5,38.7,17.1,8.0
+KKD:2231,,Almere City FC,KKD,,5.9,,,,
+KKD:2232,Emanuel Poku,Almere City FC,KKD,RW,94.1,10318.3,26.5,18.0,16.0
+KKD:2233,Gijs Besselink,Willem II,KKD,CM,96.9,11680.4,33.0,5.9,26.0
+KKD:2234,Luc Netten,Eindhoven,KKD,CB,9.1,,,,
+KKD:2235,Edoly Lukoki Mateso,Eindhoven,KKD,CM,87.9,11183.1,37.5,12.7,7.0
+KKD:2236,Björn Menzo,Jong FC Utrecht,KKD,CM,41.2,12209.6,46.6,17.5,2.0
+KKD:2237,,ADO Den Haag,KKD,,12.1,,,,
+KKD:2238,,ADO Den Haag,KKD,,9.1,,,,
+KKD:2239,Paul Reverson,Jong Ajax,KKD,GK,45.5,5140.6,1.3,0.3,15.0
+KKD:2240,Olivier de Nijs,Almere City FC,KKD,LW,82.4,12700.0,40.2,17.2,3.0
+KKD:2241,Jason Meerstadt,De Graafschap,KKD,DM,87.5,11129.4,22.5,6.1,25.0
+KKD:2242,Niek Munsters,Eindhoven,KKD,CF,57.6,11350.7,32.1,14.8,1.0
+KKD:2243,Tim van der Leij,RKC Waalwijk,KKD,CM,93.9,11684.8,39.8,9.6,8.0
+KKD:2244,John Hilton,FC Dordrecht,KKD,CM,63.6,10987.1,35.5,11.2,16.0
+KKD:2245,Bohao Wang,FC Den Bosch,KKD,DM,62.5,12500.6,39.0,10.0,5.0
+KKD:2246,Chahid El Allachi,De Graafschap,KKD,CM,65.6,11424.4,31.8,16.7,8.0
+KKD:2247,,FC Den Bosch,KKD,,3.1,,,,
+KKD:2248,,FC Den Bosch,KKD,,31.2,,,,
+KKD:2249,Nico Pinto,TOP Oss,KKD,CM,53.1,13790.5,51.0,15.0,1.0
+KKD:2250,,TOP Oss,KKD,,6.2,,,,
+KKD:2251,Sylian Mokono,VVV-Venlo,KKD,RB,51.5,10990.4,29.9,9.4,7.0
+KKD:2252,Daniel Lajud Martínez,Roda JC Kerkrade,KKD,RW,45.5,11986.7,38.0,12.7,2.0
+KKD:2253,Daniël Deen,Jong AZ,KKD,GK,18.8,5055.5,0.3,0.3,6.0
+KKD:2255,Jesper Zwart,Jong AZ,KKD,RB,81.2,11302.5,29.0,15.3,18.0
+KKD:2256,Ichem Ferrah,SC Cambuur,KKD,RW,93.8,11212.0,39.4,10.5,26.0
+KKD:2257,Markus Jensen,Jong FC Utrecht,KKD,CM,88.2,11569.8,35.0,15.6,25.0
+KKD:2258,Chiel Sunder,FC Emmen,KKD,AM,51.6,,,,
+KKD:2259,,FC Den Bosch,KKD,,3.1,,,,
+KKD:2260,Mark Verkuijl,Jong Ajax,KKD,DM,21.2,11679.3,32.3,7.2,5.0
+KKD:2261,Camil Mmaee,MVV Maastricht,KKD,RW,43.8,11562.9,37.9,12.0,12.0
+KKD:2263,Antoine Lejoly,ADO Den Haag,KKD,GK,36.4,6300.9,1.9,1.0,1.0
+KKD:2264,Jesse Bal,ADO Den Haag,KKD,CF,81.8,11281.5,38.7,14.7,5.0
+KKD:2265,Gino Verhulst,Jong PSV,KKD,LW,24.2,12684.0,33.6,10.8,1.0
+KKD:2266,,Jong AZ,KKD,,31.2,,,,
+KKD:2267,,Willem II,KKD,,9.4,,,,
+KKD:2268,Sanyika Bergtop,ADO Den Haag,KKD,CF,42.4,,,,
+KKD:2269,Alessandro Ciranni,Willem II,KKD,RB,59.4,11437.2,30.7,8.1,15.0
+KKD:2270,Armin Culum,Willem II,KKD,CM,75.0,11572.4,34.2,5.8,8.0
+KKD:2271,Samuel Bamba,Willem II,KKD,CM,78.1,9960.1,25.8,12.1,6.0
+KKD:2272,Mounir El Allouchi,Willem II,KKD,CM,75.0,12198.8,30.4,6.5,16.0
+KKD:2273,Daniël van Kaam,RKC Waalwijk,KKD,CM,81.8,11394.9,33.1,10.1,23.0
+KKD:2274,Owen Panneflek,RKC Waalwijk,KKD,DM,42.4,,,,
+KKD:2275,Filimon Gerezgiher,FC Emmen,KKD,RW,74.2,11172.0,32.1,15.6,14.0
+KKD:2276,Faissal Al Mazyani,RKC Waalwijk,KKD,RB,24.2,11672.5,40.6,13.2,5.0
+KKD:2277,,FC Emmen,KKD,,3.2,,,,
+KKD:2278,Siriné Doucouré,TOP Oss,KKD,CM,68.8,10547.2,29.0,5.9,5.0
+KKD:2279,Théo Mununga,Eindhoven,KKD,CF,42.4,,,,
+KKD:2280,Ilias Takidine,Roda JC Kerkrade,KKD,RW,51.5,10517.6,30.7,12.9,2.0
+KKD:2281,Lequincio Zeefuik,Jong AZ,KKD,CF,15.6,11504.4,36.0,13.5,1.0
+KKD:2282,Tijn Peters,Jong Ajax,KKD,DM,84.8,11679.5,32.2,6.0,22.0
+KKD:2283,Maximilian Brüll,Vitesse,KKD,GK,45.5,5175.7,0.5,0.0,15.0
+KKD:2284,Valon Zumberi,Vitesse,KKD,CB,93.9,9715.9,13.9,4.9,29.0
+KKD:2285,Ricardo-Felipe Schwarz,Vitesse,KKD,DM,72.7,12050.4,41.3,8.9,16.0
+KKD:2286,Adam Tahaui,Vitesse,KKD,AM,97.0,12285.2,37.2,5.6,29.0
+KKD:2287,Moustafa Ashraf Moustafa,Vitesse,KKD,DM,45.5,11516.5,38.0,6.3,3.0
+KKD:2288,Xiamaro Thenu,Vitesse,KKD,RW,63.6,10776.0,25.0,8.8,4.0
+KKD:2289,Dillon Hoogewerf,Vitesse,KKD,LW,97.0,10562.3,27.2,10.5,28.0
+KKD:2290,Maxwell Rodrigues,Vitesse,KKD,CF,24.2,12012.2,39.0,8.1,1.0
+KKD:2291,Mathijs Marschalk,Vitesse,KKD,DM,90.9,11916.7,32.1,6.0,24.0
+KKD:2292,Nathangelo Markelo,Vitesse,KKD,AM,69.7,10587.2,28.6,10.4,17.0
+KKD:2293,Marco Schikora,Vitesse,KKD,DM,93.9,10699.8,18.0,4.5,27.0
+KKD:2294,Elias Huth,Vitesse,KKD,CF,97.0,11347.9,29.9,7.1,21.0
+KKD:2295,Michel Driezen,Vitesse,KKD,CB,36.4,10021.0,19.6,3.7,2.0
+KKD:2296,Finn Dicke,MVV Maastricht,KKD,CB,50.0,10952.3,26.3,7.1,9.0
+KKD:2297,Rafi Wolters,FC Den Bosch,KKD,RW,28.1,11772.9,37.6,13.4,1.0
+KKD:2298,Lawson Sunderland,FC Dordrecht,KKD,CM,72.7,12003.5,33.8,7.9,16.0
+KKD:2299,,Vitesse,KKD,,6.1,,,,
+KKD:2300,Lion Semic,Helmond Sport,KKD,CF,59.4,11275.4,32.2,15.2,2.0
+KKD:2301,Austyn Jones,Jong PSV,KKD,CF,36.4,10123.8,28.2,7.7,2.0
+KKD:2302,Sinclair de Falco,Jong Ajax,KKD,LB,15.2,11682.4,32.8,10.0,2.0
+KKD:2303,Kennynho Kasanwirjo,Jong Ajax,KKD,RB,45.5,9440.9,21.1,10.4,4.0
+KKD:2304,Mylo van der Lans,Jong Ajax,KKD,CB,72.7,10641.3,26.4,5.6,17.0
+KKD:2305,Thijmen Romers,Jong Ajax,KKD,DM,18.2,,,,
+KKD:2306,,FC Dordrecht,KKD,,9.1,,,,
+KKD:2307,Mateo Chávez,Jong AZ,KKD,LB,3.1,11751.3,42.8,15.4,1.0
+KKD:2308,,RKC Waalwijk,KKD,,33.3,,,,
+KKD:2309,Yuval Ranon,Vitesse,KKD,AM,75.8,,,,
+KKD:2310,,VVV-Venlo,KKD,,6.1,,,,
+KKD:2311,,FC Emmen,KKD,,16.1,,,,
+KKD:2312,Marvyn Muzungu,Jong Ajax,KKD,CB,66.7,9747.3,19.0,6.1,17.0
+KKD:2313,,Jong Ajax,KKD,,3.0,,,,
+KKD:2314,Milan Hoek,Eindhoven,KKD,CM,9.1,,,,
+KKD:2315,Noah Ohio,Jong FC Utrecht,KKD,CF,23.5,10251.3,28.1,14.5,7.0
+KKD:2316,Genrich Sillé,FC Den Bosch,KKD,RW,46.9,13116.4,51.2,19.0,4.0
+KKD:2317,Marley Dors,Almere City FC,KKD,LW,29.4,,,,
+KKD:2318,,MVV Maastricht,KKD,,6.2,,,,
+KKD:2319,Amine Amgar,MVV Maastricht,KKD,CM,18.8,13248.0,44.3,12.6,3.0
+KKD:232,Alexander Büttner,Vitesse,KKD,LB,87.9,10104.7,20.8,5.9,28.0
+KKD:2320,Solomon Bonnah,Vitesse,KKD,RB,60.6,10295.2,29.6,11.9,14.0
+KKD:2321,Aymane Bais,Almere City FC,KKD,AM,2.9,,,,
+KKD:2322,Bjarn Zorgdrager,RKC Waalwijk,KKD,RB,27.3,,,,
+KKD:2323,,Jong Ajax,KKD,,3.0,,,,
+KKD:2324,Madi Monamay,Jong PSV,KKD,CB,75.8,10836.2,24.9,6.4,15.0
+KKD:2325,Thomas Janssen,VVV-Venlo,KKD,RW,33.3,12566.3,43.6,16.9,1.0
+KKD:2326,,TOP Oss,KKD,,3.1,,,,
+KKD:2327,,FC Den Bosch,KKD,,18.8,,,,
+KKD:2328,Adam Ouaziz,Jong AZ,KKD,AM,6.2,,,,
+KKD:2329,Pharell Nash,Jong Ajax,KKD,LB,45.5,10988.1,29.1,16.3,4.0
+KKD:2330,Kevin van Ouytsel,Jong AZ,KKD,RB,6.2,,,,
+KKD:2331,Joâo Arlete Pinto,Vitesse,KKD,RW,78.8,10292.7,28.9,7.6,15.0
+KKD:2332,,Jong FC Utrecht,KKD,,2.9,,,,
+KKD:2333,,Eindhoven,KKD,,6.1,,,,
+KKD:2334,,VVV-Venlo,KKD,,18.2,,,,
+KKD:2335,,Vitesse,KKD,,6.1,,,,
+KKD:2336,Immanuel Ghogli,Almere City FC,KKD,AM,5.9,,,,
+KKD:2337,,SC Cambuur,KKD,,3.1,,,,
+KKD:2338,,De Graafschap,KKD,,3.1,,,,
+KKD:2339,Emilio Kehrer,Willem II,KKD,CM,28.1,11733.6,36.3,12.9,2.0
+KKD:234,Devin Haen,Willem II,KKD,CF,87.5,10706.6,31.2,9.6,28.0
+KKD:2340,Andrea Natali,Jong AZ,KKD,CB,34.4,11032.2,23.5,7.2,11.0
+KKD:2341,,VVV-Venlo,KKD,,12.1,,,,
+KKD:2342,,FC Dordrecht,KKD,,12.1,,,,
+KKD:2343,Nnamdi Koka,Jong Ajax,KKD,AM,3.0,,,,
+KKD:2344,,Jong Ajax,KKD,,3.0,,,,
+KKD:2345,,Jong FC Utrecht,KKD,,5.9,,,,
+KKD:2346,Saviola Simons,Jong AZ,KKD,LB,21.9,10906.3,26.4,8.8,2.0
+KKD:2347,Silvan Broker,De Graafschap,KKD,CM,18.8,,,,
+KKD:2348,,FC Den Bosch,KKD,,3.1,,,,
+KKD:2349,,FC Den Bosch,KKD,,3.1,,,,
+KKD:2350,,VVV-Venlo,KKD,,3.0,,,,
+KKD:2351,,FC Den Bosch,KKD,,3.1,,,,
+KKD:2352,Jérôme Déom,Roda JC Kerkrade,KKD,RW,33.3,11710.2,40.6,8.2,3.0
+KKD:2353,Jessey Sneijder,Jong FC Utrecht,KKD,LB,26.5,12874.8,39.0,7.5,1.0
+KKD:2354,,Almere City FC,KKD,,5.9,,,,
+KKD:2355,Amir Bouhamdi,Jong PSV,KKD,AM,30.3,12639.3,36.4,12.4,6.0
+KKD:2356,Ro-Zangelo Daal,Jong AZ,KKD,LW,6.2,9827.9,23.7,6.6,1.0
+KKD:2357,Amani Imhangbe,Jong AZ,KKD,LB,6.2,,,,
+KKD:2358,,TOP Oss,KKD,,3.1,,,,
+KKD:2359,Sheddy Ezzeldin Daldom Hamad Barglan,FC Den Bosch,KKD,CM,46.9,11281.7,31.5,15.3,8.0
+KKD:2360,,Roda JC Kerkrade,KKD,,3.0,,,,
+KKD:2361,Eliav Adjedj,Jong AZ,KKD,LB,9.4,,,,1.0
+KKD:2362,Yordi van der Velde,Jong AZ,KKD,CM,12.5,11990.2,30.9,4.2,1.0
+KKD:2363,,Jong AZ,KKD,,3.1,,,,
+KKD:2364,Luuk Beekman,Jong Ajax,KKD,RB,6.1,,,,
+KKD:2365,,MVV Maastricht,KKD,,9.4,,,,
+KKD:2366,,Willem II,KKD,,3.1,,,,
+KKD:2367,,SC Cambuur,KKD,,3.1,,,,
+KKD:2369,,TOP Oss,KKD,,3.1,,,,
+KKD:2370,Nick Olij,Jong PSV,KKD,GK,3.0,5926.8,3.7,0.0,1.0
+KKD:2371,,Jong AZ,KKD,,3.1,,,,
+KKD:2373,,FC Emmen,KKD,,3.2,,,,
+KKD:2376,Jahyendrow Amour,Jong Ajax,KKD,CB,3.0,,,,1.0
+KKD:2378,Sébas Ditmer,Jong PSV,KKD,CM,3.0,,,,
+KKD:2379,Jorvimar Martina,Jong PSV,KKD,RB,3.0,,,,
+KKD:2383,Philip Holseter-Karlsen,Jong PSV,KKD,AM,3.0,,,,
+KKD:2384,Sebastian Karlsson Grach,FC Den Bosch,KKD,CF,37.5,10557.6,26.9,7.1,6.0
+KKD:2385,Sufyan van Daalen,FC Den Bosch,KKD,CF,3.1,,,,
+KKD:2386,Wiebe van der Heide,SC Cambuur,KKD,CM,3.1,,,,
+KKD:2389,Raf Vullers,VVV-Venlo,KKD,RB,18.2,,,,
+KKD:2390,Matej Sín,Jong AZ,KKD,AM,12.5,13204.4,43.6,9.3,4.0
+KKD:2392,Hyman Ali,Eindhoven,KKD,CB,18.2,10352.7,18.0,2.1,2.0
+KKD:2395,Bendegúz Kovács,Jong AZ,KKD,DM,31.2,12311.9,38.5,8.9,2.0
+KKD:2397,Benjamin Khaderi,Jong PSV,KKD,AM,9.1,,,,
+KKD:2398,Shuryjano Cornecion,Jong PSV,KKD,AM,3.0,,,,
+KKD:2399,Jack de Vries,FC Den Bosch,KKD,CM,34.4,12277.4,35.7,16.2,10.0
+KKD:24,Evan Rottier,ADO Den Haag,KKD,CF,100.0,11425.9,41.1,11.5,25.0
+KKD:2400,Ayoub Oufkir,Jong AZ,KKD,RW,15.6,11887.4,37.7,20.1,5.0
+KKD:2401,Mohamed Abdalla,Jong Ajax,KKD,DM,33.3,11432.8,37.1,13.7,7.0
+KKD:2402,Joël van den Berg,Jong PSV,KKD,DM,30.3,12352.9,39.7,11.2,10.0
+KKD:2404,Ethan Apkakou,SC Cambuur,KKD,CM,25.0,11597.3,27.2,5.8,2.0
+KKD:2405,Yousri Sbai,VVV-Venlo,KKD,RB,36.4,11170.8,34.9,8.3,10.0
+KKD:2407,Merijn van de Wiel,TOP Oss,KKD,CB,12.5,10943.3,33.7,7.2,3.0
+KKD:2408,Vicente Besuijen,FC Emmen,KKD,CF,35.5,10809.2,28.6,7.1,8.0
+KKD:2409,Niko Takahashi,Almere City FC,KKD,LB,23.5,11399.9,34.2,13.1,7.0
+KKD:2410,Argyris Darelas,FC Dordrecht,KKD,CM,36.4,12505.9,38.3,13.0,11.0
+KKD:2411,Björn Hardley,FC Dordrecht,KKD,CB,6.1,10723.1,31.1,3.3,2.0
+KKD:2412,Do-Young Yoon,FC Dordrecht,KKD,CF,30.3,12121.4,41.4,13.1,10.0
+KKD:2413,Maximilian Ibrahimovic,Jong Ajax,KKD,CF,6.1,,,,
+KKD:2414,Quentin van Beekveld,RKC Waalwijk,KKD,CF,3.0,,,,
+KKD:2415,Bryan Fiabema,ADO Den Haag,KKD,CF,33.3,11337.4,31.1,11.3,6.0
+KKD:2416,Bram van Driel,Jong AZ,KKD,CM,3.1,,,,
+KKD:2417,Alessandro Hojabrpour,FC Emmen,KKD,CM,16.1,,,,
+KKD:2421,Anton Martyniuk,Jong PSV,KKD,CM,3.0,,,,
+KKD:2422,Jan Plug,FC Dordrecht,KKD,CB,27.3,10731.5,24.4,9.6,9.0
+KKD:2423,Jaden Janssen,Helmond Sport,KKD,CM,3.1,,,,
+KKD:2424,Rasmus Wiedesheim-Paul,Roda JC Kerkrade,KKD,CM,15.2,,,,
+KKD:2425,Lirim Jashari,MVV Maastricht,KKD,CM,21.9,12191.2,41.2,6.4,4.0
+KKD:2426,Travis de Jong,MVV Maastricht,KKD,CM,25.0,12249.3,32.3,8.8,1.0
+KKD:2427,Calvin Twigt,Willem II,KKD,CM,25.0,12394.3,37.4,7.5,8.0
+KKD:2428,Kayen Scheepens,Willem II,KKD,RB,3.1,,,,
+KKD:2429,Ryan Fage,RKC Waalwijk,KKD,CM,21.2,12132.6,29.7,11.6,3.0
+KKD:2431,Frej Elkjær,Jong AZ,KKD,LB,21.9,11454.9,36.8,12.1,7.0
+KKD:2432,Daniël van Vianen,FC Dordrecht,KKD,CM,21.2,11597.0,30.6,10.2,5.0
+KKD:2433,Noah Bischof,FC Dordrecht,KKD,CF,15.2,10804.3,36.6,9.8,1.0
+KKD:2434,Rion Ichihara,Jong AZ,KKD,CB,15.6,10628.6,19.6,6.8,4.0
+KKD:2435,Sydney Osazuwa,Jong AZ,KKD,AM,6.2,,,,
+KKD:2436,Tómas Jóhannessen,Jong AZ,KKD,DM,3.1,,,,
+KKD:2438,Noam Emeran,FC Emmen,KKD,CM,16.1,10543.0,30.6,17.2,2.0
+KKD:2439,Philip Søndergaard,FC Emmen,KKD,CB,22.6,10282.8,30.5,6.2,6.0
+KKD:2440,Levi Acheampong,Jong Ajax,KKD,CM,12.1,,,,
+KKD:2441,Emeka Adiele,Jong FC Utrecht,KKD,LB,14.7,9392.6,26.0,6.5,1.0
+KKD:2442,Michael Pinto,FC Dordrecht,KKD,CM,9.1,11510.9,36.9,11.8,1.0
+KKD:2443,Fabian Kvam,SC Cambuur,KKD,LW,6.2,,,,
+KKD:2444,Driss Laaouina,Jong FC Utrecht,KKD,CF,2.9,,,,
+KKD:2446,Noël Beulens,Jong FC Utrecht,KKD,LB,5.9,,,,
+KKD:2452,Rayan Zekri,Jong AZ,KKD,AM,3.1,,,,
+KKD:2454,Paulo Da Silva,Jong Ajax,KKD,DM,6.1,,,,
+KKD:2455,Brent Jonkers,Jong PSV,KKD,CB,3.0,,,,
+KKD:2456,Jean-Paul Boëtius,RKC Waalwijk,KKD,CM,12.1,11287.3,33.0,1.5,1.0
+KKD:246,Sem Westerveld,MVV Maastricht,KKD,GK,100.0,4941.7,0.9,0.2,32.0
+KKD:2461,Mehdi Bouhekan,Vitesse,KKD,CF,3.0,,,,
+KKD:247,Misha Engel,Almere City FC,KKD,CB,52.9,10059.3,17.4,6.3,11.0
+KKD:248,Nick Twisk,Jong AZ,KKD,DM,81.2,11979.1,31.9,4.9,23.0
+KKD:249,Mexx Meerdink,Jong AZ,KKD,CF,3.1,,,,
+KKD:25,Naoufal Bannis,Vitesse,KKD,CF,81.8,11771.9,36.5,15.2,8.0
+KKD:253,Maxim Dekker,Jong AZ,KKD,CB,34.4,10425.4,20.0,5.8,8.0
+KKD:256,Iman Griffith,Roda JC Kerkrade,KKD,LW,97.0,12519.5,44.4,13.2,17.0
+KKD:259,Sem Dekkers,Helmond Sport,KKD,RB,46.9,11411.2,40.2,11.2,10.0
+KKD:263,Matteo Waem,ADO Den Haag,KKD,CB,100.0,10551.2,23.0,5.8,30.0
+KKD:264,Nicky Souren,SC Cambuur,KKD,CM,84.4,11548.4,27.1,6.4,17.0
+KKD:266,Mart Remans,TOP Oss,KKD,CM,93.8,11190.9,31.1,10.3,24.0
+KKD:270,Sven Blummel,Eindhoven,KKD,CM,90.9,11660.5,38.5,10.3,22.0
+KKD:275,,De Graafschap,KKD,,43.8,,,,
+KKD:297,Jay Kruiver,Roda JC Kerkrade,KKD,RB,97.0,11075.3,27.1,9.6,31.0
+KKD:302,Cain Seedorf,Roda JC Kerkrade,KKD,LW,78.8,10520.6,36.5,6.9,11.0
+KKD:305,,FC Emmen,KKD,,12.9,,,,
+KKD:307,Terrence Douglas,Eindhoven,KKD,LB,87.9,9665.7,22.9,8.7,29.0
+KKD:321,Mitchell van Rooijen,TOP Oss,KKD,CF,25.0,12113.1,42.8,8.7,6.0
+KKD:334,Fedde de Jong,De Graafschap,KKD,CM,90.6,12036.1,40.1,12.3,9.0
+KKD:336,Finn Stam,Willem II,KKD,RB,46.9,10960.0,23.0,7.2,10.0
+KKD:342,Teun van Grunsven,FC Den Bosch,KKD,CB,68.8,10331.1,21.8,6.7,22.0
+KKD:343,Stan Maas,FC Den Bosch,KKD,CB,90.6,10949.1,24.7,8.0,15.0
+KKD:353,Nabil El Basri,MVV Maastricht,KKD,CM,78.1,12235.7,36.0,13.6,14.0
+KKD:356,Jort van der Sande,SC Cambuur,KKD,CF,90.6,11287.6,31.5,4.6,18.0
+KKD:394,Thijs Jansen,SC Cambuur,KKD,GK,100.0,6085.2,2.0,0.1,32.0
+KKD:415,Dyon Dorenbosch,Eindhoven,KKD,CM,48.5,13002.3,46.6,8.5,6.0
+KKD:416,Daan Huisman,Eindhoven,KKD,CM,100.0,12415.9,35.6,7.4,29.0
+KKD:417,Tristan Dekker,TOP Oss,KKD,RB,3.1,,,,
+KKD:421,Niek Schiks,Jong PSV,KKD,GK,51.5,5861.0,1.3,0.1,17.0
+KKD:429,Lars Schenk,MVV Maastricht,KKD,LB,34.4,10862.0,31.1,11.9,9.0
+KKD:431,Teun Bijleveld,Almere City FC,KKD,LB,50.0,11099.8,33.5,9.1,10.0
+KKD:432,Lennerd Daneels,Helmond Sport,KKD,CF,78.1,10802.4,30.6,12.5,24.0
+KKD:434,Loek Postma,RKC Waalwijk,KKD,CM,84.8,10694.0,26.2,6.9,20.0
+KKD:436,Joshua Pynadath,FC Dordrecht,KKD,LB,54.5,11435.3,43.6,13.4,8.0
+KKD:437,Dave Kwakman,Jong AZ,KKD,DM,18.8,11333.8,27.7,5.5,3.0
+KKD:443,Amir Absalem,Helmond Sport,KKD,LB,78.1,11230.1,31.3,10.2,12.0
+KKD:462,Wessel Kooy,Jong FC Utrecht,KKD,CB,85.3,11528.6,27.7,7.3,24.0
+KKD:463,Reda Akmum,FC Den Bosch,KKD,CB,62.5,10508.2,23.8,6.1,18.0
+KKD:465,Lasse Wehmeyer,VVV-Venlo,KKD,DM,81.8,11988.6,40.9,13.0,8.0
+KKD:470,Emmanuel van de Blaak,Almere City FC,KKD,CB,73.5,10236.5,24.3,6.8,25.0
+KKD:480,Ringo Meerveld,Willem II,KKD,LW,3.1,10423.8,33.9,10.6,1.0
+KKD:483,Ilounga Pata,TOP Oss,KKD,RB,31.2,11442.9,36.7,13.0,2.0
+KKD:490,Rafik El Arguioui,Jong FC Utrecht,KKD,CF,67.6,11978.5,38.8,9.9,14.0
+KKD:503,Clint Essers,Eindhoven,KKD,RB,90.9,11253.4,27.5,8.1,21.0
+KKD:512,Pepijn van de Merbel,FC Den Bosch,KKD,GK,100.0,5119.9,0.8,0.4,32.0
+KKD:514,Niels van Berkel,Eindhoven,KKD,CB,3.0,,,,
+KKD:520,Tijn Smolenaars,Jong PSV,KKD,GK,60.6,5799.5,1.6,0.1,13.0
+KKD:528,,FC Emmen,KKD,,3.2,,,,
+KKD:531,Tomas Kalinauskas,Roda JC Kerkrade,KKD,LW,21.2,,,,
+KKD:535,Kevin Gadellaa,Jong FC Utrecht,KKD,GK,64.7,5531.4,1.3,0.1,22.0
+KKD:544,Chiel Olde Keizer,Vitesse,KKD,LB,18.2,11299.4,29.7,7.7,1.0
+KKD:545,Ivar Jenner,Jong FC Utrecht,KKD,CM,41.2,13126.6,49.1,9.0,4.0
+KKD:551,Thijs van Leeuwen,FC Den Bosch,KKD,CF,100.0,12361.4,42.0,11.8,27.0
+KKD:555,Joey de Bie,FC Dordrecht,KKD,CM,30.3,11102.7,30.9,13.9,6.0
+KKD:560,Enoch Mastoras,Jong AZ,KKD,DM,15.6,,,,
+KKD:561,Jeremiah Esajas,Jong AZ,KKD,LB,43.8,10273.4,24.7,12.4,9.0
+KKD:568,Job Kalisvaart,Almere City FC,KKD,DM,82.4,12335.5,37.5,6.8,14.0
+KKD:57,Boyd Reith,Almere City FC,KKD,RB,82.4,11222.5,30.8,11.9,18.0
+KKD:584,Hobie Verhulst,Jong AZ,KKD,GK,6.2,4607.5,0.9,0.5,2.0
+KKD:586,Levi Schoppema,De Graafschap,KKD,LB,100.0,10938.7,28.5,12.4,14.0
+KKD:59,Xander Lambrix,TOP Oss,KKD,CB,59.4,10041.2,21.8,5.8,18.0
+KKD:590,Jesper Uneken,RKC Waalwijk,KKD,CF,93.9,10420.2,30.9,7.7,28.0
+KKD:592,Luca Everink,FC Emmen,KKD,RB,74.2,10555.0,27.3,10.7,20.0
+KKD:596,Anthony Smits,Jong AZ,KKD,LW,78.1,11714.2,34.9,16.5,5.0
+KKD:598,,Roda JC Kerkrade,KKD,,6.1,,,,
+KKD:599,Jereno van Gom,Almere City FC,KKD,RB,17.6,,,,
+KKD:60,Arjen van der Heide,De Graafschap,KKD,RW,62.5,12116.0,40.2,12.9,9.0
+KKD:64,Michael Brouwer,Jong FC Utrecht,KKD,GK,2.9,6353.8,0.9,0.0,1.0
+KKD:66,Justin Hoogma,Willem II,KKD,CB,84.4,10024.7,24.1,5.6,25.0
+KKD:68,Navajo Bakboord,RKC Waalwijk,KKD,RB,3.0,,,,
+KKD:80,Hugo Wentges,Helmond Sport,KKD,GK,50.0,,,,
+KKD:86,Max de Waal,Willem II,KKD,AM,31.2,12258.8,58.2,0.0,1.0
+KKD:94,Lucas Woudenberg,FC Dordrecht,KKD,CM,54.5,10939.4,29.8,4.3,18.0
