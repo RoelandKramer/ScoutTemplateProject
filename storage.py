@@ -60,17 +60,9 @@ def save_draft(
 
     drafts = _drafts_dir(username)
 
-    # Save video files separately
-    video_refs = []
-    for i, vd in enumerate(video_data):
-        if vd is not None:
-            vbytes, vname = vd
-            ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-            vpath = drafts / f"{report_id}_video_{i}.{ext}"
-            vpath.write_bytes(vbytes)
-            video_refs.append({"filename": vname, "path": str(vpath.name)})
-        else:
-            video_refs.append(None)
+    # Videos are stored only inside the PPTX snapshot (upload_bytes); we no
+    # longer keep per-slide video files.  Extraction at load-time falls back
+    # to check_template_compatibility when video_refs is absent.
 
     # Save upload bytes if present
     upload_ref = None
@@ -97,7 +89,6 @@ def save_draft(
         "language": language,
         "star_values": star_values,
         "comments": comments,
-        "video_refs": video_refs,
         "source": source,
         "upload_ref": upload_ref,
         "player_data": player_data,
@@ -215,18 +206,7 @@ def save_finished(
         (finished / f"{report_id}_photo_circ.png").write_bytes(photo_circular)
         photo_refs["circular"] = f"{report_id}_photo_circ.png"
 
-    # Save video files separately
-    video_refs = []
-    if video_data:
-        for i, vd in enumerate(video_data):
-            if vd is not None:
-                vbytes, vname = vd
-                ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-                vpath = finished / f"{report_id}_video_{i}.{ext}"
-                vpath.write_bytes(vbytes)
-                video_refs.append({"filename": vname, "path": str(vpath.name)})
-            else:
-                video_refs.append(None)
+    # Videos are preserved inside the PPTX only; no per-slide video files.
 
     meta = {
         "report_id": report_id,
@@ -238,7 +218,6 @@ def save_finished(
         "player_data": player_data,
         "star_values": star_values or [],
         "comments": comments or [],
-        "video_refs": video_refs,
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
     }
@@ -366,18 +345,7 @@ def share_report(
 
     (received / f"{share_id}.pptx").write_bytes(pptx_bytes)
 
-    # Save video files separately (same pattern as drafts)
-    video_refs = []
-    if video_data:
-        for i, vd in enumerate(video_data):
-            if vd is not None:
-                vbytes, vname = vd
-                ext = vname.rsplit(".", 1)[-1] if "." in vname else "mp4"
-                vpath = received / f"{share_id}_video_{i}.{ext}"
-                vpath.write_bytes(vbytes)
-                video_refs.append({"filename": vname, "path": str(vpath.name)})
-            else:
-                video_refs.append(None)
+    # Videos live inside the PPTX; no per-slide files.
 
     # Save player photos
     photo_refs = {}
@@ -399,7 +367,6 @@ def share_report(
         "shared_at": time.time(),
         "star_values": star_values or [],
         "comments": comments or [],
-        "video_refs": video_refs,
         "player_data": player_data,
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,

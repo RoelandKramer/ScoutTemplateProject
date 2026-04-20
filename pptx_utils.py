@@ -6,8 +6,10 @@ import re
 from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.oxml.ns import qn
 from pptx.shapes.picture import Movie
+from pptx.util import Pt
 
 YELLOW = RGBColor(0xFF, 0xD9, 0x32)
 WHITE  = RGBColor(0xFF, 0xFF, 0xFF)
@@ -892,15 +894,40 @@ def _write_text_shape(shape, text: str) -> None:
         run.text = text
 
 
+_WELCOME_NAME_PT = 64.0
+
+
+def _fit_name_to_shape(shape, text: str) -> None:
+    """Write name at 64pt, shrinking only if it would overflow shape width."""
+    if not shape.has_text_frame:
+        return
+    tf = shape.text_frame
+    _write_text_shape(shape, text)
+    try:
+        tf.auto_size = MSO_AUTO_SIZE.NONE
+    except Exception:
+        pass
+
+    run = tf.paragraphs[0].runs[0] if tf.paragraphs and tf.paragraphs[0].runs else None
+    if run is None or not text:
+        return
+
+    base_pt = _WELCOME_NAME_PT
+    width_pt = shape.width * 72.0 / 914400.0
+    needed_pt = width_pt / (len(text) * 0.6)
+    final_pt = min(base_pt, needed_pt) if needed_pt < base_pt - 1.0 else base_pt
+    run.font.size = Pt(max(20.0, final_pt))
+
+
 def fill_player_info(prs, template_cfg: dict, player_data: dict) -> None:
     """Fill the player info fields on the rating slide + welcome slide name."""
     rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
 
-    # Fill welcome slide name (TextBox 28 on slide 1)
+    # Fill welcome slide name (TextBox 28 on slide 1), shrinking font if needed
     if len(prs.slides) > 0:
         for shape in prs.slides[0].shapes:
             if shape.name == "TextBox 28" and shape.has_text_frame:
-                _write_text_shape(shape, player_data.get("name", ""))
+                _fit_name_to_shape(shape, player_data.get("name", ""))
                 break
 
     # Fill the 9 left TextBox 11 fields

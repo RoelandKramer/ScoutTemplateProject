@@ -904,10 +904,11 @@ def _onedrive_upload(scout: str, report_id: str, pptx_bytes: bytes,
             if f.name in (f"{report_id}.json", f"{report_id}.pptx"):
                 continue
             ext = f.suffix.lower()
+            # Videos are embedded in the PPTX; no separate upload.
+            if ext in (".mp4", ".mov", ".webm"):
+                continue
             if ext == ".png":
                 ctype = "image/png"
-            elif ext in (".mp4", ".mov", ".webm"):
-                ctype = "video/mp4"
             else:
                 ctype = "application/octet-stream"
             upload_file(scout, f.name, f.read_bytes(), ctype)
@@ -942,10 +943,11 @@ def _onedrive_upload_draft(scout: str, report_id: str) -> None:
             if f.name in (f"{report_id}.json", f"{report_id}_upload.pptx"):
                 continue
             ext = f.suffix.lower()
+            # Videos are embedded in the PPTX; no separate upload.
+            if ext in (".mp4", ".mov", ".webm"):
+                continue
             if ext == ".png":
                 ctype = "image/png"
-            elif ext in (".mp4", ".mov", ".webm"):
-                ctype = "video/mp4"
             else:
                 ctype = "application/octet-stream"
             upload_file(scout, f.name, f.read_bytes(), ctype)
@@ -1905,8 +1907,7 @@ elif page == "New Report":
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
             _draft_pdata = st.session_state.get(NEW_PDATA_KEY)
             _draft_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_draft_pdata)
-            # Generate a PPTX snapshot so the draft can be resumed via Upload & Edit
-            with st.spinner(t("building_report", L)):
+            with st.spinner(t("saving_draft_wait", L)):
                 snapshot = fill_template(
                     template_cfg, s, c, v,
                     player_data=_draft_pdata,
@@ -1914,21 +1915,21 @@ elif page == "New Report":
                     player_photo=st.session_state.get("new_player_photo_full"),
                     player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
-            snapshot_bytes = snapshot.getvalue()
-            rid = storage.save_draft(
-                username,
-                st.session_state.get("active_report_id"),
-                template_name, club, lang, s, c, v,
-                source="empty",
-                upload_bytes=snapshot_bytes,
-                upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
-                player_data=_draft_pdata,
-                tm_stats=_draft_tm,
-                photo_full=st.session_state.get("new_player_photo_full"),
-                photo_circular=st.session_state.get("new_player_photo_circ"),
-            )
-            st.session_state["active_report_id"] = rid
-            _onedrive_upload_draft(username, rid)
+                snapshot_bytes = snapshot.getvalue()
+                rid = storage.save_draft(
+                    username,
+                    st.session_state.get("active_report_id"),
+                    template_name, club, lang, s, c, v,
+                    source="empty",
+                    upload_bytes=snapshot_bytes,
+                    upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
+                    player_data=_draft_pdata,
+                    tm_stats=_draft_tm,
+                    photo_full=st.session_state.get("new_player_photo_full"),
+                    photo_circular=st.session_state.get("new_player_photo_circ"),
+                )
+                st.session_state["active_report_id"] = rid
+                _onedrive_upload_draft(username, rid)
             st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
     with col_gen:
@@ -1936,7 +1937,7 @@ elif page == "New Report":
             s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
             _gen_pdata = st.session_state.get(NEW_PDATA_KEY)
             _gen_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_gen_pdata)
-            with st.spinner(t("building_report", L)):
+            with st.spinner(t("generating_report_wait", L)):
                 output = fill_template(
                     template_cfg, s, c, v,
                     player_data=_gen_pdata,
@@ -1944,21 +1945,21 @@ elif page == "New Report":
                     player_photo=st.session_state.get("new_player_photo_full"),
                     player_photo_circular=st.session_state.get("new_player_photo_circ"),
                 )
-            pptx_bytes = output.getvalue()
+                pptx_bytes = output.getvalue()
 
-            rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
-            _gen_pdata = st.session_state.get(NEW_PDATA_KEY)
-            _gen_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_gen_pdata)
-            storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
-                                  player_name=_current_player_name(NEW_PDATA_KEY),
-                                  player_data=_gen_pdata,
-                                  star_values=s, comments=c, video_data=v,
-                                  tm_stats=_gen_tm,
-                                  photo_full=st.session_state.get("new_player_photo_full"),
-                                  photo_circular=st.session_state.get("new_player_photo_circ"))
-            _onedrive_upload(username, rid, pptx_bytes,
-                             _current_player_name(NEW_PDATA_KEY), template_name)
-            st.session_state.pop("active_report_id", None)
+                rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
+                _gen_pdata = st.session_state.get(NEW_PDATA_KEY)
+                _gen_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_gen_pdata)
+                storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
+                                      player_name=_current_player_name(NEW_PDATA_KEY),
+                                      player_data=_gen_pdata,
+                                      star_values=s, comments=c, video_data=v,
+                                      tm_stats=_gen_tm,
+                                      photo_full=st.session_state.get("new_player_photo_full"),
+                                      photo_circular=st.session_state.get("new_player_photo_circ"))
+                _onedrive_upload(username, rid, pptx_bytes,
+                                 _current_player_name(NEW_PDATA_KEY), template_name)
+                st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))
             st.download_button(
@@ -2363,8 +2364,7 @@ elif page == "Upload & Edit":
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
                 _save_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
                 _save_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_save_pdata)
-                # Generate updated PPTX snapshot for the draft
-                with st.spinner(t("filling", L)):
+                with st.spinner(t("saving_draft_wait", L)):
                     _snap = fill_from_bytes(
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=_save_pdata,
@@ -2372,21 +2372,21 @@ elif page == "Upload & Edit":
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
-                _snap_bytes = _snap.getvalue()
-                rid = storage.save_draft(
-                    username,
-                    st.session_state.get("upload_active_report_id"),
-                    matched_name or "Unknown", detected_club, detected_lang, s, c, v,
-                    source="upload",
-                    upload_bytes=_snap_bytes,
-                    upload_filename=st.session_state.get("upload_filename"),
-                    player_data=_save_pdata,
-                    tm_stats=_save_tm,
-                    photo_full=st.session_state.get("upload_player_photo_full"),
-                    photo_circular=st.session_state.get("upload_player_photo_circ"),
-                )
-                st.session_state["upload_active_report_id"] = rid
-                _onedrive_upload_draft(username, rid)
+                    _snap_bytes = _snap.getvalue()
+                    rid = storage.save_draft(
+                        username,
+                        st.session_state.get("upload_active_report_id"),
+                        matched_name or "Unknown", detected_club, detected_lang, s, c, v,
+                        source="upload",
+                        upload_bytes=_snap_bytes,
+                        upload_filename=st.session_state.get("upload_filename"),
+                        player_data=_save_pdata,
+                        tm_stats=_save_tm,
+                        photo_full=st.session_state.get("upload_player_photo_full"),
+                        photo_circular=st.session_state.get("upload_player_photo_circ"),
+                    )
+                    st.session_state["upload_active_report_id"] = rid
+                    _onedrive_upload_draft(username, rid)
                 st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
         with col_gen:
@@ -2394,7 +2394,7 @@ elif page == "Upload & Edit":
                 s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
                 _upgen_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
                 _upgen_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upgen_pdata)
-                with st.spinner(t("filling", L)):
+                with st.spinner(t("generating_report_wait", L)):
                     output = fill_from_bytes(
                         st.session_state["upload_bytes"], template_cfg, s, c, v,
                         player_data=_upgen_pdata,
@@ -2402,30 +2402,30 @@ elif page == "Upload & Edit":
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                     )
-                pptx_bytes = output.getvalue()
-                pos = matched_name or "Unknown"
+                    pptx_bytes = output.getvalue()
+                    pos = matched_name or "Unknown"
 
-                rid = st.session_state.get("upload_active_report_id")
-                if not rid:
-                    rid = storage.save_draft(
-                        username, None, pos, detected_club, detected_lang, s, c, v,
-                        source="upload",
-                        upload_bytes=st.session_state.get("upload_bytes"),
-                        upload_filename=st.session_state.get("upload_filename"),
-                        player_data=_upgen_pdata,
-                        tm_stats=_upgen_tm,
-                    )
-                    _onedrive_upload_draft(username, rid)
-                storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
-                                      player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                      player_data=_upgen_pdata,
-                                      star_values=s, comments=c, video_data=v,
-                                      tm_stats=_upgen_tm,
-                                      photo_full=st.session_state.get("upload_player_photo_full"),
-                                      photo_circular=st.session_state.get("upload_player_photo_circ"))
-                _onedrive_upload(username, rid, pptx_bytes,
-                                 _current_player_name(UPLOAD_PDATA_KEY), pos)
-                st.session_state.pop("upload_active_report_id", None)
+                    rid = st.session_state.get("upload_active_report_id")
+                    if not rid:
+                        rid = storage.save_draft(
+                            username, None, pos, detected_club, detected_lang, s, c, v,
+                            source="upload",
+                            upload_bytes=st.session_state.get("upload_bytes"),
+                            upload_filename=st.session_state.get("upload_filename"),
+                            player_data=_upgen_pdata,
+                            tm_stats=_upgen_tm,
+                        )
+                        _onedrive_upload_draft(username, rid)
+                    storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
+                                          player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                          player_data=_upgen_pdata,
+                                          star_values=s, comments=c, video_data=v,
+                                          tm_stats=_upgen_tm,
+                                          photo_full=st.session_state.get("upload_player_photo_full"),
+                                          photo_circular=st.session_state.get("upload_player_photo_circ"))
+                    _onedrive_upload(username, rid, pptx_bytes,
+                                     _current_player_name(UPLOAD_PDATA_KEY), pos)
+                    st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))
                 st.download_button(
