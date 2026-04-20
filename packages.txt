@@ -1,3 +1,4 @@
 libreoffice
 libreoffice-impress
+poppler-utils
 fonts-dejavu

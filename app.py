@@ -14,7 +14,7 @@ from pptx_utils import (
     get_template_config, fill_template, fill_from_bytes,
     check_template_compatibility, extract_competency_descriptions,
     render_slide_as_image, render_slide_preview, get_last_preview_error,
-    TRANSFER_FIELD_ORDER,
+    warm_up_preview_engine, TRANSFER_FIELD_ORDER,
 )
 import storage
 from i18n import t, APP_LANGUAGES
@@ -1584,6 +1584,15 @@ def _slide_preview_button(
     under session_state[session_key] until regenerated.
     """
     L = _lang()
+    # Warm up LibreOffice the first time we render the preview button, so the
+    # first real click is a warm-start (~1–2s) instead of cold-start (~6–8s).
+    if not st.session_state.get("_preview_warmed"):
+        try:
+            warm_up_preview_engine()
+        except Exception:
+            pass
+        st.session_state["_preview_warmed"] = True
+
     if st.button(
         t("preview_slide_btn", L),
         key=f"{key_prefix}_preview_btn",
@@ -1689,10 +1698,6 @@ def _video_folder_setup_section(
     criteria = template_cfg.get("variables") or []
     if not criteria:
         return
-
-    with st.expander(t("video_folder_subfolders_preview", L)):
-        for c in criteria:
-            st.write(f"• {_sanitize_folder_component(c)}")
 
     try:
         zip_bytes = _build_video_folder_zip(player_name, criteria)

@@ -2,6 +2,7 @@
 
 import copy
 import io
+import os
 import re
 from lxml import etree
 from pptx import Presentation
@@ -1249,8 +1250,17 @@ def fill_from_bytes(
 
 # ─── Slide image export (for in-app preview) ─────────────────────────────
 
-# Module-level diagnostic for the last preview render attempt.
+# Module-level diagnostic + cache for the preview render.
 _last_preview_error: str = ""
+_preview_cache: "OrderedDict[str, tuple[str, bytes]]"  # populated lazily
+_PREVIEW_CACHE_MAX = 16
+_LO_PROFILE_DIR: str | None = None  # reused LibreOffice user profile (faster warm starts)
+
+try:  # keep OrderedDict import local-friendly but resolved at module load
+    from collections import OrderedDict as _OD
+    _preview_cache = _OD()
+except Exception:
+    _preview_cache = {}  # type: ignore
 
 
 def get_last_preview_error() -> str:
@@ -1258,16 +1268,91 @@ def get_last_preview_error() -> str:
     return _last_preview_error
 
 
+def _cache_key(pptx_bytes: bytes, slide_index: int, width: int, kind_hint: str = "") -> str:
+    import hashlib
+    h = hashlib.sha256(pptx_bytes).hexdigest()[:16]
+    return f"{h}-{slide_index}-{width}-{kind_hint}"
+
+
+def _cache_get(key: str) -> tuple[str, bytes] | None:
+    hit = _preview_cache.get(key)
+    if hit is not None:
+        try:
+            _preview_cache.move_to_end(key)  # LRU bump
+        except Exception:
+            pass
+    return hit
+
+
+def _cache_put(key: str, value: tuple[str, bytes]) -> None:
+    _preview_cache[key] = value
+    while len(_preview_cache) > _PREVIEW_CACHE_MAX:
+        try:
+            _preview_cache.popitem(last=False)  # drop oldest
+        except Exception:
+            _preview_cache.pop(next(iter(_preview_cache)))
+
+
+def _lo_profile() -> str:
+    """Persistent LibreOffice user profile dir — keeps warm-start caches."""
+    global _LO_PROFILE_DIR
+    if _LO_PROFILE_DIR and os.path.isdir(_LO_PROFILE_DIR):
+        return _LO_PROFILE_DIR
+    import os as _os
+    import tempfile as _tf
+    _LO_PROFILE_DIR = _tf.mkdtemp(prefix="lo_profile_")
+    return _LO_PROFILE_DIR
+
+
+def _pdf_page_to_png_via_pdftoppm(pdf_path: str, page_1based: int, out_dir: str,
+                                  width: int) -> bytes | None:
+    """Use poppler's pdftoppm (if installed) to rasterise a single PDF page to
+    PNG. Returns PNG bytes, or None if unavailable/failed."""
+    import shutil
+    import subprocess
+    import os as _os
+    import glob
+
+    tool = shutil.which("pdftoppm")
+    if not tool:
+        return None
+    out_base = _os.path.join(out_dir, "slide")
+    try:
+        # Use -scale-to-x for exact width; height auto.
+        proc = subprocess.run(
+            [tool, "-png", "-f", str(page_1based), "-l", str(page_1based),
+             "-scale-to-x", str(width), "-scale-to-y", "-1",
+             pdf_path, out_base],
+            capture_output=True, timeout=30,
+        )
+        if proc.returncode != 0:
+            return None
+    except Exception:
+        return None
+    # pdftoppm names output like slide-1.png (single-digit) or slide-01.png.
+    matches = sorted(glob.glob(out_base + "*.png"))
+    if not matches:
+        return None
+    try:
+        with open(matches[0], "rb") as f:
+            return f.read()
+    except Exception:
+        return None
+
+
 def _render_via_libreoffice(
     src_path: str,
     tmpdir: str,
     slide_index: int,
+    width: int = 1280,
 ) -> tuple[tuple[str, bytes] | None, str | None]:
     """Convert pptx → pdf via headless LibreOffice. Returns ((kind, bytes), None)
     on success or (None, error_msg) on failure.
 
-    If `pypdf` is available, extract just the target slide page so the preview
-    is single-page. Otherwise returns the whole-deck PDF.
+    Post-processing priority:
+      1. pdftoppm → single PNG of target page (fast display in browser)
+      2. pypdf    → single-page PDF of target page
+      3. fall back to whole-deck PDF
     """
     import os
     import shutil
@@ -1281,10 +1366,16 @@ def _render_via_libreoffice(
             "or brew install --cask libreoffice (macOS)."
         )
 
+    profile = _lo_profile()
     try:
         proc = subprocess.run(
-            [soffice, "--headless", "--norestore", "--nologo",
-             "--convert-to", "pdf", "--outdir", tmpdir, src_path],
+            [
+                soffice,
+                f"-env:UserInstallation=file://{profile}",
+                "--headless", "--norestore", "--nologo",
+                "--nolockcheck", "--nofirststartwizard",
+                "--convert-to", "pdf", "--outdir", tmpdir, src_path,
+            ],
             capture_output=True,
             timeout=180,
         )
@@ -1300,10 +1391,12 @@ def _render_via_libreoffice(
     if not os.path.exists(pdf_path) or os.path.getsize(pdf_path) == 0:
         return None, "LibreOffice produced no PDF"
 
-    with open(pdf_path, "rb") as f:
-        full_pdf = f.read()
+    # Strategy 1: fast PNG of just the target slide via pdftoppm
+    png_bytes = _pdf_page_to_png_via_pdftoppm(pdf_path, slide_index + 1, tmpdir, width)
+    if png_bytes:
+        return ("png", png_bytes), None
 
-    # Try to extract the single target page for a cleaner preview.
+    # Strategy 2: single-page PDF via pypdf
     try:
         from pypdf import PdfReader, PdfWriter  # type: ignore
         reader = PdfReader(pdf_path)
@@ -1317,7 +1410,9 @@ def _render_via_libreoffice(
     except Exception:
         pass
 
-    return ("pdf", full_pdf), None
+    # Strategy 3: whole-deck PDF
+    with open(pdf_path, "rb") as f:
+        return ("pdf", f.read()), None
 
 
 def render_slide_preview(
@@ -1327,16 +1422,22 @@ def render_slide_preview(
 ) -> tuple[str, bytes] | None:
     """Render one slide to a preview. Returns ("png", bytes) or ("pdf", bytes).
 
-    Cross-platform strategy order:
+    Results are cached by SHA-256 of pptx_bytes, so re-previewing the same
+    content is instant. Strategy order:
       1. PowerPoint COM (Windows, Office installed) → PNG then PDF
-      2. LibreOffice headless (Linux/Mac/Windows if installed) → PDF
+      2. LibreOffice headless (Linux/Mac/Windows if installed) → PNG via
+         pdftoppm, else single-page PDF via pypdf, else whole-deck PDF
       3. Returns None; call get_last_preview_error() for the reason
     """
     global _last_preview_error
     _last_preview_error = ""
     errors: list[str] = []
 
-    import os
+    cache_key = _cache_key(pptx_bytes, slide_index, width)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     import tempfile
 
     tmpdir = tempfile.mkdtemp(prefix="ppt_preview_")
@@ -1349,17 +1450,13 @@ def render_slide_preview(
             f.write(pptx_bytes)
     except Exception as exc:
         _last_preview_error = f"Could not write temp pptx: {exc}"
-        try:
-            import shutil
-            shutil.rmtree(tmpdir, ignore_errors=True)
-        except Exception:
-            pass
+        _cleanup_tmpdir(tmpdir)
         return None
 
     # ── Strategy A: PowerPoint COM (Windows-only) ─────────────────────
     try:
         import pythoncom  # type: ignore
-        import win32com.client  # type: ignore
+        import win32com.client  # type: ignore  # noqa: F401
         _pywin32_ok = True
     except Exception as exc:
         errors.append(f"pywin32 not available: {exc}")
@@ -1370,12 +1467,14 @@ def render_slide_preview(
             src_path, png_path, pdf_path, slide_index, width, errors,
         )
         if result is not None:
+            _cache_put(cache_key, result)
             _cleanup_tmpdir(tmpdir)
             return result
 
     # ── Strategy B: LibreOffice headless (any OS if installed) ────────
-    lo_result, lo_err = _render_via_libreoffice(src_path, tmpdir, slide_index)
+    lo_result, lo_err = _render_via_libreoffice(src_path, tmpdir, slide_index, width)
     if lo_result is not None:
+        _cache_put(cache_key, lo_result)
         _cleanup_tmpdir(tmpdir)
         return lo_result
     if lo_err:
@@ -1384,6 +1483,35 @@ def render_slide_preview(
     _last_preview_error = "; ".join(errors) or "unknown failure"
     _cleanup_tmpdir(tmpdir)
     return None
+
+
+def warm_up_preview_engine() -> None:
+    """Pre-start LibreOffice in the background so the first real preview is fast.
+
+    Non-blocking: spawns a detached soffice process that primes the user profile
+    and font cache, then exits. Safe to call many times.
+    """
+    try:
+        import shutil
+        import subprocess
+        soffice = shutil.which("soffice") or shutil.which("libreoffice")
+        if not soffice:
+            return
+        profile = _lo_profile()
+        # --terminate_after_init warms caches then quits immediately
+        subprocess.Popen(
+            [
+                soffice,
+                f"-env:UserInstallation=file://{profile}",
+                "--headless", "--norestore", "--nologo",
+                "--nolockcheck", "--nofirststartwizard",
+                "--terminate_after_init",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
 
 
 def _cleanup_tmpdir(tmpdir: str) -> None:
