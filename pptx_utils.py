@@ -1188,6 +1188,8 @@ def fill_template(
     player_photo: bytes | None = None,
     player_photo_circular: bytes | None = None,
     physical_data: dict | None = None,
+    transfer_details: dict | None = None,
+    scouting_dates: list | None = None,
 ) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
@@ -1197,6 +1199,10 @@ def fill_template(
         fill_player_stats(prs, template_cfg, tm_stats)
     if physical_data:
         fill_physical_data(prs, template_cfg, physical_data)
+    if transfer_details:
+        fill_transfer_details(prs, template_cfg, transfer_details)
+    if scouting_dates:
+        fill_scouting_dates(prs, template_cfg, scouting_dates)
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
@@ -1217,6 +1223,8 @@ def fill_from_bytes(
     player_photo: bytes | None = None,
     player_photo_circular: bytes | None = None,
     physical_data: dict | None = None,
+    transfer_details: dict | None = None,
+    scouting_dates: list | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
@@ -1226,6 +1234,10 @@ def fill_from_bytes(
         fill_player_stats(prs, template_cfg, tm_stats)
     if physical_data:
         fill_physical_data(prs, template_cfg, physical_data)
+    if transfer_details:
+        fill_transfer_details(prs, template_cfg, transfer_details)
+    if scouting_dates:
+        fill_scouting_dates(prs, template_cfg, scouting_dates)
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
@@ -1233,6 +1245,70 @@ def fill_from_bytes(
     prs.save(output)
     output.seek(0)
     return output
+
+
+# ─── Slide image export (for in-app preview) ─────────────────────────────
+
+def render_slide_as_image(pptx_bytes: bytes, slide_index: int, width: int = 1280) -> bytes | None:
+    """Render one slide of a PPTX to a PNG, returned as bytes.
+
+    Uses PowerPoint via win32com (Windows + Office required). The slide index
+    is 0-based. Returns None if rendering is unavailable or fails.
+    """
+    try:
+        import pythoncom  # type: ignore
+        import win32com.client  # type: ignore
+    except Exception:
+        return None
+
+    import os
+    import tempfile
+
+    tmpdir = tempfile.mkdtemp(prefix="ppt_preview_")
+    src_path = os.path.join(tmpdir, "src.pptx")
+    out_path = os.path.join(tmpdir, f"slide_{slide_index + 1}.png")
+
+    with open(src_path, "wb") as f:
+        f.write(pptx_bytes)
+
+    pythoncom.CoInitialize()
+    ppt_app = None
+    pres = None
+    try:
+        ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+        pres = ppt_app.Presentations.Open(
+            src_path, ReadOnly=True, Untitled=False, WithWindow=False
+        )
+        if slide_index + 1 > pres.Slides.Count:
+            return None
+        slide = pres.Slides(slide_index + 1)
+        # Preserve 16:9 (or the deck's ratio) by scaling height proportionally
+        height = int(width * (pres.PageSetup.SlideHeight / pres.PageSetup.SlideWidth))
+        slide.Export(out_path, "PNG", width, height)
+        with open(out_path, "rb") as f:
+            return f.read()
+    except Exception:
+        return None
+    finally:
+        try:
+            if pres is not None:
+                pres.Close()
+        except Exception:
+            pass
+        try:
+            if ppt_app is not None:
+                ppt_app.Quit()
+        except Exception:
+            pass
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+        try:
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
 
 
 # ─── Template detection & compatibility ─────────────────────────────────────
