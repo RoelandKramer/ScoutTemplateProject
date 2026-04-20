@@ -904,10 +904,11 @@ def _onedrive_upload(scout: str, report_id: str, pptx_bytes: bytes,
             if f.name in (f"{report_id}.json", f"{report_id}.pptx"):
                 continue
             ext = f.suffix.lower()
+            # Videos are embedded in the PPTX; no separate upload.
+            if ext in (".mp4", ".mov", ".webm"):
+                continue
             if ext == ".png":
                 ctype = "image/png"
-            elif ext in (".mp4", ".mov", ".webm"):
-                ctype = "video/mp4"
             else:
                 ctype = "application/octet-stream"
             upload_file(scout, f.name, f.read_bytes(), ctype)
@@ -942,10 +943,11 @@ def _onedrive_upload_draft(scout: str, report_id: str) -> None:
             if f.name in (f"{report_id}.json", f"{report_id}_upload.pptx"):
                 continue
             ext = f.suffix.lower()
+            # Videos are embedded in the PPTX; no separate upload.
+            if ext in (".mp4", ".mov", ".webm"):
+                continue
             if ext == ".png":
                 ctype = "image/png"
-            elif ext in (".mp4", ".mov", ".webm"):
-                ctype = "video/mp4"
             else:
                 ctype = "application/octet-stream"
             upload_file(scout, f.name, f.read_bytes(), ctype)
