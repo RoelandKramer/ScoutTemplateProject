@@ -18,7 +18,29 @@ import storage
 from i18n import t, APP_LANGUAGES
 
 # ─── Page config ────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Scouting Rapport Pro+", page_icon="", layout="wide")
+_PAGE_ICON = Path(__file__).parent / "Logo's" / "Logo-BFG-Black.png"
+st.set_page_config(
+    page_title="Scouting Rapport Pro+",
+    page_icon=str(_PAGE_ICON) if _PAGE_ICON.exists() else "⚽",
+    layout="wide",
+)
+
+st.markdown(
+    """
+    <style>
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        min-height: 42px;
+        height: 42px;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] input {
+        line-height: 42px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # (Flag CSS is emitted from _render_flags() — AFTER _apply_theme() — so it
 #  can override the theme's global button styles with higher specificity.)
@@ -204,6 +226,43 @@ def improve_text(text: str) -> str:
         return msg.content[0].text.strip()
     except Exception as exc:
         st.error(f"AI improvement failed: {exc}")
+        return text
+
+
+_LANG_NAME = {
+    "NL": "Dutch",
+    "EN": "English",
+    "IT": "Italian",
+    "ZH": "Chinese (Simplified)",
+}
+
+
+def translate_text(text: str, target_lang: str) -> str:
+    api_key = _get_anthropic_key()
+    if not api_key:
+        st.error("No Anthropic API key.")
+        return text
+    lang_name = _LANG_NAME.get(target_lang, target_lang)
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Translate the following scouting note into {lang_name}. "
+                    "Preserve tone and football terminology. "
+                    "Return ONLY the translated text with no introduction or explanation.\n\n"
+                    f"Input: {text}\n"
+                    "Output:"
+                ),
+            }],
+        )
+        return msg.content[0].text.strip()
+    except Exception as exc:
+        st.error(f"AI translation failed: {exc}")
         return text
 
 
@@ -738,19 +797,47 @@ def competency_sections(
             st.text_area(t("scouting_notes", L), key=comment_key, height=90, placeholder="…")
 
             improve_key    = f"{key_prefix}_{i}_improve"
+            translate_key  = f"{key_prefix}_{i}_translate"
+            lang_key       = f"{key_prefix}_{i}_translate_lang"
             suggestion_key = f"{key_prefix}_{i}_suggestion"
-            col_btn, _ = st.columns([1, 4])
-            with col_btn:
+            mode_key       = f"{key_prefix}_{i}_sug_mode"
+            col_imp, _sp, col_lang, col_tr = st.columns([1, 2.8, 1.2, 1])
+            with col_imp:
                 if st.button(f"✨ {t('improve', L)}", key=improve_key):
                     raw = st.session_state[comment_key]
                     if raw.strip():
                         with st.spinner(f"{t('improving', L)}"):
                             st.session_state[suggestion_key] = improve_text(raw)
+                            st.session_state[mode_key] = "improve"
                     else:
                         st.warning(t("nothing_to_improve", L))
+            _LANG_FULL = {"NL": "Nederlands", "EN": "English", "IT": "Italiano", "ZH": "中文"}
+            with col_lang:
+                st.selectbox(
+                    t("language_label", L),
+                    ["NL", "EN", "IT", "ZH"],
+                    index=None,
+                    placeholder=t("translate_placeholder", L),
+                    format_func=lambda c: _LANG_FULL[c],
+                    key=lang_key,
+                    label_visibility="collapsed",
+                )
+            with col_tr:
+                if st.button(f"🌐 {t('translate', L)}", key=translate_key):
+                    raw = st.session_state[comment_key]
+                    target = st.session_state.get(lang_key)
+                    if not raw.strip():
+                        st.warning(t("nothing_to_improve", L))
+                    elif not target:
+                        st.warning(t("select_target_language", L))
+                    else:
+                        with st.spinner(t("translating", L)):
+                            st.session_state[suggestion_key] = translate_text(raw, target)
+                            st.session_state[mode_key] = "translate"
             if st.session_state.get(suggestion_key):
                 suggestion = st.session_state[suggestion_key]
-                st.markdown(f"**{t('suggested_improvement', L)}**")
+                _heading_key = "translation_label" if st.session_state.get(mode_key) == "translate" else "suggested_improvement"
+                st.markdown(f"**{t(_heading_key, L)}**")
                 st.text_area("Suggested", value=suggestion, height=90, key=f"{key_prefix}_{i}_sug_display", label_visibility="collapsed")
                 _, col_accept, col_discard, _ = st.columns([1, 1.5, 1.5, 1])
                 with col_accept:
@@ -790,6 +877,136 @@ def _current_player_name(state_key: str = "player_data") -> str:
     if pd and isinstance(pd, dict):
         return pd.get("name", "")
     return ""
+
+
+# ─── OneDrive sync helpers ────────────────────────────────────────────────
+
+def _onedrive_upload(scout: str, report_id: str, pptx_bytes: bytes,
+                     player_name: str = "", position: str = "") -> None:
+    """Upload finished report (PPTX + JSON + photos + videos) to OneDrive. Silent."""
+    try:
+        from onedrive_sync import upload_pptx, upload_json, upload_file, is_configured
+        if not is_configured():
+            return
+        upload_pptx(scout, report_id, pptx_bytes)
+
+        from storage import _finished_dir
+        finished = _finished_dir(scout)
+        json_path = finished / f"{report_id}.json"
+        if json_path.exists():
+            import json as _json
+            meta = _json.loads(json_path.read_text(encoding="utf-8"))
+            upload_json(scout, report_id, meta)
+
+        for f in finished.iterdir():
+            if not f.is_file() or not f.name.startswith(report_id):
+                continue
+            if f.name in (f"{report_id}.json", f"{report_id}.pptx"):
+                continue
+            ext = f.suffix.lower()
+            if ext == ".png":
+                ctype = "image/png"
+            elif ext in (".mp4", ".mov", ".webm"):
+                ctype = "video/mp4"
+            else:
+                ctype = "application/octet-stream"
+            upload_file(scout, f.name, f.read_bytes(), ctype)
+    except Exception:
+        pass
+
+
+def _onedrive_upload_draft(scout: str, report_id: str) -> None:
+    """Upload a draft to OneDrive (silent). Same path as finished so saves overwrite."""
+    try:
+        from onedrive_sync import upload_json, upload_file, upload_pptx, is_configured
+        if not is_configured():
+            return
+
+        from storage import _drafts_dir
+        import json as _json
+        drafts = _drafts_dir(scout)
+        json_path = drafts / f"{report_id}.json"
+        if not json_path.exists():
+            return
+
+        meta = _json.loads(json_path.read_text(encoding="utf-8"))
+        upload_json(scout, report_id, meta)
+
+        snap = drafts / f"{report_id}_upload.pptx"
+        if snap.exists():
+            upload_pptx(scout, report_id, snap.read_bytes())
+
+        for f in drafts.iterdir():
+            if not f.is_file() or not f.name.startswith(report_id):
+                continue
+            if f.name in (f"{report_id}.json", f"{report_id}_upload.pptx"):
+                continue
+            ext = f.suffix.lower()
+            if ext == ".png":
+                ctype = "image/png"
+            elif ext in (".mp4", ".mov", ".webm"):
+                ctype = "video/mp4"
+            else:
+                ctype = "application/octet-stream"
+            upload_file(scout, f.name, f.read_bytes(), ctype)
+    except Exception:
+        pass
+
+
+def _onedrive_upload_share_ref(from_scout: str, to_scout: str,
+                               share_id: str, original_rid: str,
+                               meta: dict) -> None:
+    """Upload a share-reference JSON to the recipient's OneDrive folder (silent)."""
+    try:
+        from onedrive_sync import upload_json, is_configured
+        if not is_configured():
+            return
+
+        ref = dict(meta)
+        ref["report_id"] = share_id
+        ref["original_id"] = original_rid
+        ref["original_scout"] = from_scout
+        ref["shared_by"] = from_scout
+        ref["is_share_ref"] = True
+        upload_json(to_scout, share_id, ref)
+    except Exception:
+        pass
+
+
+def _onedrive_delete(scout: str, report_id: str,
+                     player_name: str = "", position: str = "") -> None:
+    """Delete a report from OneDrive (both finished and draft areas)."""
+    try:
+        from onedrive_sync import delete_report_files, is_configured
+        if not is_configured():
+            return
+        delete_report_files(scout, report_id)  # default: deletes from both
+    except Exception:
+        pass
+
+
+def _onedrive_restore_if_needed() -> None:
+    """On first run after a deploy, restore local cache from OneDrive."""
+    if st.session_state.get("_onedrive_restored"):
+        return
+    st.session_state["_onedrive_restored"] = True
+    try:
+        from onedrive_sync import is_configured, restore_all_scouts
+        from storage import DATA_DIR
+        if not is_configured():
+            return
+        # Only restore if local data looks empty (no finished reports at all)
+        has_any = False
+        if DATA_DIR.exists():
+            for user_dir in DATA_DIR.iterdir():
+                fin = user_dir / "finished"
+                if fin.exists() and any(fin.glob("*.json")):
+                    has_any = True
+                    break
+        if not has_any:
+            restore_all_scouts(DATA_DIR)
+    except Exception:
+        pass
 
 
 _POSITION_JERSEY = {
@@ -1084,14 +1301,30 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
         key=f"{state_key}_uploader",
     )
 
-    if uploaded is not None:
-        img_bytes = uploaded.getvalue()
-        img = Image.open(io.BytesIO(img_bytes))
+    _MAX_IMG_BYTES = 50 * 1024 * 1024
+    img_bytes: bytes | None = None
 
-        # Store original for zoom/pan
-        if f"{state_key}_orig" not in st.session_state or st.session_state.get(f"{state_key}_fname") != uploaded.name:
+    if uploaded is not None:
+        if uploaded.size > _MAX_IMG_BYTES:
+            st.error(t("image_too_large", L).format(mb=uploaded.size / 1024 / 1024))
+            return st.session_state.get(full_key), st.session_state.get(circ_key)
+        img_bytes = uploaded.getvalue()
+        # Store original for zoom/pan and reset crop/zoom sliders on new file
+        if st.session_state.get(f"{state_key}_fname") != uploaded.name:
+            for _sk in ("_ct", "_cb", "_cl", "_cr", "_zoom", "_ox", "_oy"):
+                st.session_state.pop(f"{state_key}{_sk}", None)
             st.session_state[f"{state_key}_orig"] = img_bytes
             st.session_state[f"{state_key}_fname"] = uploaded.name
+    elif st.session_state.get(f"{state_key}_orig"):
+        img_bytes = st.session_state[f"{state_key}_orig"]
+    elif st.session_state.get(full_key):
+        # Restored from received/finished/draft — only the cropped full exists.
+        # Promote it to the working original so the user can still adjust crop/zoom.
+        img_bytes = st.session_state[full_key]
+        st.session_state[f"{state_key}_orig"] = img_bytes
+
+    if img_bytes is not None:
+        img = Image.open(io.BytesIO(img_bytes))
 
         w, h = img.size
 
@@ -1189,16 +1422,6 @@ def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None
             _save_img.save(full_buf, format="PNG")
             st.session_state[full_key] = full_buf.getvalue()
 
-    elif st.session_state.get(full_key):
-        # Show previously accepted photos
-        st.caption(t("photo_set", L))
-        c1, c2 = st.columns(2)
-        with c1:
-            st.image(st.session_state[full_key], width=150, caption=t("original_image", L))
-        with c2:
-            if st.session_state.get(circ_key):
-                st.image(st.session_state[circ_key], width=150, caption=t("circular_preview", L))
-
     return st.session_state.get(full_key), st.session_state.get(circ_key)
 
 
@@ -1248,17 +1471,23 @@ def _scisports_section(
                 total, options = search_players(token, query)
                 st.session_state[f"{key_prefix}_token"] = token
                 st.session_state[f"{key_prefix}_options"] = options
+                # Bump a version counter so the selectbox below uses a fresh
+                # widget key and defaults back to the first result.
+                st.session_state[f"{key_prefix}_options_ver"] = (
+                    st.session_state.get(f"{key_prefix}_options_ver", 0) + 1
+                )
             except Exception as exc:
                 st.error(f"SciSports error: {exc}")
 
     options = st.session_state.get(f"{key_prefix}_options", [])
     if options:
         labels = [opt.label() for opt in options]
+        _ver = st.session_state.get(f"{key_prefix}_options_ver", 0)
         selected_idx = st.selectbox(
             t("select_player", L),
             range(len(labels)),
             format_func=lambda i: labels[i],
-            key=f"{key_prefix}_selected_idx",
+            key=f"{key_prefix}_selected_idx_v{_ver}",
         )
 
         if st.button(t("obtain_scisports", L), type="primary", use_container_width=True, key=f"{key_prefix}_obtain"):
@@ -1307,6 +1536,9 @@ if not st.session_state.get("authenticated"):
 
 username = st.session_state["username"]
 L = _lang()
+
+# ── Restore local cache from OneDrive if this is a fresh deploy ─────────────
+_onedrive_restore_if_needed()
 
 # ── Pre-load draft values BEFORE sidebar widgets render ─────────────────────
 # This prevents StreamlitAPIException when "Continue Editing" sets club/lang
@@ -1488,6 +1720,8 @@ if page == "Dashboard":
                 )
         with c3:
             if st.button(t("delete", L), key=f"del_{prefix}_{rid}", use_container_width=True):
+                _onedrive_delete(username, rid,
+                                 meta.get("player_name", ""), meta.get("position", ""))
                 delete_fn(username, rid)
                 st.rerun()
 
@@ -1694,6 +1928,7 @@ elif page == "New Report":
                 photo_circular=st.session_state.get("new_player_photo_circ"),
             )
             st.session_state["active_report_id"] = rid
+            _onedrive_upload_draft(username, rid)
             st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
     with col_gen:
@@ -1721,6 +1956,8 @@ elif page == "New Report":
                                   tm_stats=_gen_tm,
                                   photo_full=st.session_state.get("new_player_photo_full"),
                                   photo_circular=st.session_state.get("new_player_photo_circ"))
+            _onedrive_upload(username, rid, pptx_bytes,
+                             _current_player_name(NEW_PDATA_KEY), template_name)
             st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))
@@ -1747,10 +1984,10 @@ elif page == "New Report":
             c_send, c_cancel = st.columns(2)
             with c_send:
                 if st.button(t("send_report", L), type="primary", use_container_width=True, key="empty_share_send"):
-                    s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
-                    _share_pdata = st.session_state.get(NEW_PDATA_KEY)
-                    _share_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_share_pdata)
-                    with st.spinner(t("building_report", L)):
+                    with st.spinner(t("sharing_report", L)):
+                        s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
+                        _share_pdata = st.session_state.get(NEW_PDATA_KEY)
+                        _share_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_share_pdata)
                         output = fill_template(
                             template_cfg, s, c, v,
                             player_data=_share_pdata,
@@ -1758,53 +1995,67 @@ elif page == "New Report":
                             player_photo=st.session_state.get("new_player_photo_full"),
                             player_photo_circular=st.session_state.get("new_player_photo_circ"),
                         )
-                    pptx_bytes = output.getvalue()
-                    rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
-                    player = _current_player_name(NEW_PDATA_KEY) or template_name
-                    storage.share_report(
-                        from_username=username,
-                        to_username=sel_scout,
-                        report_id=rid,
-                        position=template_name,
-                        club=club,
-                        language=lang,
-                        pptx_bytes=pptx_bytes,
-                        player_name=_current_player_name(NEW_PDATA_KEY),
-                        star_values=s,
-                        comments=c,
-                        video_data=v,
-                        player_data=_share_pdata,
-                        tm_stats=_share_tm,
-                        photo_full=st.session_state.get("new_player_photo_full"),
-                        photo_circular=st.session_state.get("new_player_photo_circ"),
-                    )
-                    # Also save as finished + mark shared
-                    storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
-                                          player_name=_current_player_name(NEW_PDATA_KEY),
-                                          player_data=_share_pdata,
-                                          star_values=s, comments=c, video_data=v,
-                                          tm_stats=_share_tm,
-                                          photo_full=st.session_state.get("new_player_photo_full"),
-                                          photo_circular=st.session_state.get("new_player_photo_circ"))
-                    storage.mark_shared(username, rid, sel_scout)
-                    st.session_state.pop("_share_pending", None)
-                    # Auto-send notification emails (receiver gets platform link)
-                    try:
-                        from email_utils import send_share_emails
-                        sender_email = all_users.get(username, {}).get("email", "")
-                        receiver_email = all_users.get(sel_scout, {}).get("email", "")
-                        mail_results = send_share_emails(
-                            sender_name=username,
-                            sender_email=sender_email,
-                            receiver_name=sel_scout,
-                            receiver_email=receiver_email,
-                            player_name=player,
+                        pptx_bytes = output.getvalue()
+                        rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
+                        player = _current_player_name(NEW_PDATA_KEY) or template_name
+                        share_id = storage.share_report(
+                            from_username=username,
+                            to_username=sel_scout,
+                            report_id=rid,
+                            position=template_name,
+                            club=club,
+                            language=lang,
+                            pptx_bytes=pptx_bytes,
+                            player_name=_current_player_name(NEW_PDATA_KEY),
+                            star_values=s,
+                            comments=c,
+                            video_data=v,
+                            player_data=_share_pdata,
+                            tm_stats=_share_tm,
+                            photo_full=st.session_state.get("new_player_photo_full"),
+                            photo_circular=st.session_state.get("new_player_photo_circ"),
                         )
-                        for side, (ok, err) in mail_results.items():
-                            if not ok and err and "no " not in err:
-                                st.warning(f"Email to {side} not sent: {err}")
-                    except Exception as exc:
-                        st.warning(f"Email sending failed: {exc}")
+                        storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
+                                              player_name=_current_player_name(NEW_PDATA_KEY),
+                                              player_data=_share_pdata,
+                                              star_values=s, comments=c, video_data=v,
+                                              tm_stats=_share_tm,
+                                              photo_full=st.session_state.get("new_player_photo_full"),
+                                              photo_circular=st.session_state.get("new_player_photo_circ"))
+                        _onedrive_upload(username, rid, pptx_bytes,
+                                         _current_player_name(NEW_PDATA_KEY), template_name)
+                        _onedrive_upload_share_ref(
+                            username, sel_scout, share_id, rid,
+                            {
+                                "position": template_name,
+                                "club": club,
+                                "language": lang,
+                                "player_name": _current_player_name(NEW_PDATA_KEY),
+                                "star_values": s,
+                                "comments": c,
+                                "player_data": _share_pdata,
+                                "tm_stats": _share_tm,
+                                "shared_at": time.time(),
+                            },
+                        )
+                        storage.mark_shared(username, rid, sel_scout)
+                        st.session_state.pop("_share_pending", None)
+                        try:
+                            from email_utils import send_share_emails
+                            sender_email = all_users.get(username, {}).get("email", "")
+                            receiver_email = all_users.get(sel_scout, {}).get("email", "")
+                            mail_results = send_share_emails(
+                                sender_name=username,
+                                sender_email=sender_email,
+                                receiver_name=sel_scout,
+                                receiver_email=receiver_email,
+                                player_name=player,
+                            )
+                            for side, (ok, err) in mail_results.items():
+                                if not ok and err and "no " not in err:
+                                    st.warning(f"Email to {side} not sent: {err}")
+                        except Exception as exc:
+                            st.warning(f"Email sending failed: {exc}")
                     st.success(t("report_shared", L).format(name=sel_scout))
             with c_cancel:
                 if st.button("Cancel", use_container_width=True, key="empty_share_cancel"):
@@ -2135,6 +2386,7 @@ elif page == "Upload & Edit":
                     photo_circular=st.session_state.get("upload_player_photo_circ"),
                 )
                 st.session_state["upload_active_report_id"] = rid
+                _onedrive_upload_draft(username, rid)
                 st.success(f"{t('draft_saved', L)} (ID: {rid[:8]})")
 
         with col_gen:
@@ -2153,14 +2405,17 @@ elif page == "Upload & Edit":
                 pptx_bytes = output.getvalue()
                 pos = matched_name or "Unknown"
 
-                rid = st.session_state.get("upload_active_report_id") or storage.save_draft(
-                    username, None, pos, detected_club, detected_lang, s, c, v,
-                    source="upload",
-                    upload_bytes=st.session_state.get("upload_bytes"),
-                    upload_filename=st.session_state.get("upload_filename"),
-                    player_data=_upgen_pdata,
-                    tm_stats=_upgen_tm,
-                )
+                rid = st.session_state.get("upload_active_report_id")
+                if not rid:
+                    rid = storage.save_draft(
+                        username, None, pos, detected_club, detected_lang, s, c, v,
+                        source="upload",
+                        upload_bytes=st.session_state.get("upload_bytes"),
+                        upload_filename=st.session_state.get("upload_filename"),
+                        player_data=_upgen_pdata,
+                        tm_stats=_upgen_tm,
+                    )
+                    _onedrive_upload_draft(username, rid)
                 storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                       player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                       player_data=_upgen_pdata,
@@ -2168,6 +2423,8 @@ elif page == "Upload & Edit":
                                       tm_stats=_upgen_tm,
                                       photo_full=st.session_state.get("upload_player_photo_full"),
                                       photo_circular=st.session_state.get("upload_player_photo_circ"))
+                _onedrive_upload(username, rid, pptx_bytes,
+                                 _current_player_name(UPLOAD_PDATA_KEY), pos)
                 st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))
@@ -2194,10 +2451,10 @@ elif page == "Upload & Edit":
                 c_send, c_cancel = st.columns(2)
                 with c_send:
                     if st.button(t("send_report", L), type="primary", use_container_width=True, key="upload_share_send"):
-                        s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
-                        _upshare_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
-                        _upshare_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upshare_pdata)
-                        with st.spinner(t("filling", L)):
+                        with st.spinner(t("sharing_report", L)):
+                            s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
+                            _upshare_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
+                            _upshare_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upshare_pdata)
                             output = fill_from_bytes(
                                 st.session_state["upload_bytes"], template_cfg, s, c, v,
                                 player_data=_upshare_pdata,
@@ -2205,58 +2462,70 @@ elif page == "Upload & Edit":
                                 player_photo=st.session_state.get("upload_player_photo_full"),
                                 player_photo_circular=st.session_state.get("upload_player_photo_circ"),
                             )
-                        pptx_bytes = output.getvalue()
-                        pos = matched_name or "Unknown"
-                        rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
-                        player = _current_player_name(UPLOAD_PDATA_KEY) or pos
-                        _upshare_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
-                        _upshare_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upshare_pdata)
-                        storage.share_report(
-                            from_username=username,
-                            to_username=sel_scout,
-                            report_id=rid,
-                            position=pos,
-                            club=detected_club,
-                            language=detected_lang,
-                            pptx_bytes=pptx_bytes,
-                            player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                            star_values=s,
-                            comments=c,
-                            video_data=v,
-                            player_data=_upshare_pdata,
-                            tm_stats=_upshare_tm,
-                            photo_full=st.session_state.get("upload_player_photo_full"),
-                            photo_circular=st.session_state.get("upload_player_photo_circ"),
-                        )
-                        # Also save as finished + mark shared
-                        storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
-                                              player_name=_current_player_name(UPLOAD_PDATA_KEY),
-                                              player_data=_upshare_pdata,
-                                              star_values=s,
-                                              comments=c,
-                                              video_data=v,
-                                              tm_stats=_upshare_tm,
-                                              photo_full=st.session_state.get("upload_player_photo_full"),
-                                              photo_circular=st.session_state.get("upload_player_photo_circ"))
-                        storage.mark_shared(username, rid, sel_scout)
-                        st.session_state.pop("_share_pending", None)
-                        # Auto-send notification emails (receiver gets platform link)
-                        try:
-                            from email_utils import send_share_emails
-                            sender_email = all_users.get(username, {}).get("email", "")
-                            receiver_email = all_users.get(sel_scout, {}).get("email", "")
-                            mail_results = send_share_emails(
-                                sender_name=username,
-                                sender_email=sender_email,
-                                receiver_name=sel_scout,
-                                receiver_email=receiver_email,
-                                player_name=player,
+                            pptx_bytes = output.getvalue()
+                            pos = matched_name or "Unknown"
+                            rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
+                            player = _current_player_name(UPLOAD_PDATA_KEY) or pos
+                            share_id = storage.share_report(
+                                from_username=username,
+                                to_username=sel_scout,
+                                report_id=rid,
+                                position=pos,
+                                club=detected_club,
+                                language=detected_lang,
+                                pptx_bytes=pptx_bytes,
+                                player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                star_values=s,
+                                comments=c,
+                                video_data=v,
+                                player_data=_upshare_pdata,
+                                tm_stats=_upshare_tm,
+                                photo_full=st.session_state.get("upload_player_photo_full"),
+                                photo_circular=st.session_state.get("upload_player_photo_circ"),
                             )
-                            for side, (ok, err) in mail_results.items():
-                                if not ok and err and "no " not in err:
-                                    st.warning(f"Email to {side} not sent: {err}")
-                        except Exception as exc:
-                            st.warning(f"Email sending failed: {exc}")
+                            storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
+                                                  player_name=_current_player_name(UPLOAD_PDATA_KEY),
+                                                  player_data=_upshare_pdata,
+                                                  star_values=s,
+                                                  comments=c,
+                                                  video_data=v,
+                                                  tm_stats=_upshare_tm,
+                                                  photo_full=st.session_state.get("upload_player_photo_full"),
+                                                  photo_circular=st.session_state.get("upload_player_photo_circ"))
+                            _onedrive_upload(username, rid, pptx_bytes,
+                                             _current_player_name(UPLOAD_PDATA_KEY), pos)
+                            _onedrive_upload_share_ref(
+                                username, sel_scout, share_id, rid,
+                                {
+                                    "position": pos,
+                                    "club": detected_club,
+                                    "language": detected_lang,
+                                    "player_name": _current_player_name(UPLOAD_PDATA_KEY),
+                                    "star_values": s,
+                                    "comments": c,
+                                    "player_data": _upshare_pdata,
+                                    "tm_stats": _upshare_tm,
+                                    "shared_at": time.time(),
+                                },
+                            )
+                            storage.mark_shared(username, rid, sel_scout)
+                            st.session_state.pop("_share_pending", None)
+                            try:
+                                from email_utils import send_share_emails
+                                sender_email = all_users.get(username, {}).get("email", "")
+                                receiver_email = all_users.get(sel_scout, {}).get("email", "")
+                                mail_results = send_share_emails(
+                                    sender_name=username,
+                                    sender_email=sender_email,
+                                    receiver_name=sel_scout,
+                                    receiver_email=receiver_email,
+                                    player_name=player,
+                                )
+                                for side, (ok, err) in mail_results.items():
+                                    if not ok and err and "no " not in err:
+                                        st.warning(f"Email to {side} not sent: {err}")
+                            except Exception as exc:
+                                st.warning(f"Email sending failed: {exc}")
                         st.success(t("report_shared", L).format(name=sel_scout))
                 with c_cancel:
                     if st.button("Cancel", use_container_width=True, key="upload_share_cancel"):
