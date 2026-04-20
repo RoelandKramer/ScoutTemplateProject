@@ -1005,45 +1005,23 @@ def fill_player_stats(prs, template_cfg: dict, tm_stats: dict) -> None:
                 idx += 1
 
 
-# ─── Physical data (rating slide, bottom-right "xxxx" column) ─────────────
+# ─── Transfer Details (rating slide, bottom-right "xxxx" column) ──────────
 
-# The 5 textboxes named "xxxx" on the rating slide, sorted top→bottom, are filled:
-#   0: Total Distance      e.g. "10.5 km"
-#   1: HI Runs             e.g. "45"
-#   2: Sprint Efforts      e.g. "18"
-#   3: Top Speed           e.g. "32.1 km/h"
-#   4: Availability        e.g. "87%"
-# The "xx%" circle (if present) is also set to the availability value.
-_PHYSICAL_FIELD_ORDER = [
-    "total_distance", "hi_runs", "sprint_efforts", "top_speed", "availability",
+# The 5 textboxes named "xxxx" on the rating slide, sorted top→bottom:
+#   0: End of contract     e.g. "Jun 2026"
+#   1: Transfer value      e.g. "€750K"
+#   2: Prediction year 1   e.g. "Top KKD"
+#   3: Prediction year 2   e.g. "Eredivisie"
+#   4: Next step           e.g. "FC Den Bosch"
+TRANSFER_FIELD_ORDER = [
+    "end_of_contract", "transfer_value", "prediction_year_1",
+    "prediction_year_2", "next_step",
 ]
 
 
-def _format_physical_value(field: str, raw) -> str:
-    if raw is None or raw == "":
-        return ""
-    try:
-        num = float(raw)
-    except (TypeError, ValueError):
-        return str(raw)
-    if field == "total_distance":
-        return f"{num / 1000:.2f} km" if num > 200 else f"{num:.2f} km"
-    if field == "availability":
-        return f"{num:.0f}%"
-    if field == "top_speed":
-        return f"{num:.1f} km/h"
-    # hi_runs, sprint_efforts → integer count
-    return f"{int(round(num))}"
-
-
-def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
-    """Fill the 5 'xxxx' placeholders + 'xx%' circle on the rating slide.
-
-    `physical_data` is a dict with keys:
-        total_distance (meters), hi_runs, sprint_efforts, top_speed, availability
-    Missing/empty values leave the placeholder as-is.
-    """
-    if not physical_data:
+def fill_transfer_details(prs, template_cfg: dict, transfer_details: dict) -> None:
+    """Fill the 5 'xxxx' placeholders on the rating slide with transfer details."""
+    if not transfer_details:
         return
     rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
 
@@ -1053,19 +1031,52 @@ def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
     ]
     xxxx_shapes.sort(key=lambda s: s.top or 0)
 
-    for i, shape in enumerate(xxxx_shapes[: len(_PHYSICAL_FIELD_ORDER)]):
-        field = _PHYSICAL_FIELD_ORDER[i]
-        text = _format_physical_value(field, physical_data.get(field))
-        if text:
-            _write_text_shape(shape, text)
+    for i, shape in enumerate(xxxx_shapes[: len(TRANSFER_FIELD_ORDER)]):
+        field = TRANSFER_FIELD_ORDER[i]
+        val = transfer_details.get(field)
+        if val:
+            _write_text_shape(shape, str(val))
 
-    # Mirror availability into the big "xx%" circle when present.
-    avail_text = _format_physical_value("availability", physical_data.get("availability"))
-    if avail_text:
-        for shape in rating_slide.shapes:
-            if shape.name == "xx%" and shape.has_text_frame:
-                _write_text_shape(shape, avail_text)
-                break
+
+# ─── Scouting dates (rating slide, top-right "TextBox 23") ────────────────
+
+def fill_scouting_dates(prs, template_cfg: dict, scouting_dates: list) -> None:
+    """Fill 'TextBox 23' on the rating slide with one line per scouting entry.
+
+    Each entry is a dict {"date": "DD/MM/YYYY", "type": "Game"|"Training"}.
+    """
+    if not scouting_dates:
+        return
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+
+    target = None
+    for shape in rating_slide.shapes:
+        if shape.name == "TextBox 23" and shape.has_text_frame:
+            target = shape
+            break
+    if target is None:
+        return
+
+    lines = []
+    for entry in scouting_dates:
+        d = (entry or {}).get("date", "").strip()
+        ttype = (entry or {}).get("type", "").strip()
+        if d and ttype:
+            lines.append(f"{d}: {ttype}")
+        elif d:
+            lines.append(d)
+    if lines:
+        _write_text_shape(target, "\n".join(lines))
+
+
+# ─── Physical data (no template placeholder yet — kept for app preview) ───
+
+def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
+    """No-op: the slide template currently has no physical-data placeholders.
+    Kept so that callers can pass `physical_data=` without errors. Once the
+    template gets dedicated placeholders, fill them here.
+    """
+    return
 
 
 def fill_player_photo(
