@@ -1281,6 +1281,152 @@ def _transfermarkt_section(
     return st.session_state.get(state_key)
 
 
+# ─── Physical data section (Eredivisie / KKD only) ─────────────────────────
+
+_PHYSICAL_CSV_URL = (
+    "https://raw.githubusercontent.com/RoelandKramer/ScoutTemplateProject/main/"
+    "physical_stats_players.csv"
+)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_physical_stats_df():
+    """Load physical_stats_players.csv. Prefer local repo copy, fall back to GitHub raw."""
+    import pandas as pd
+    local = Path(__file__).parent / "physical_stats_players.csv"
+    if local.exists():
+        return pd.read_csv(local)
+    import requests
+    resp = requests.get(_PHYSICAL_CSV_URL, timeout=15)
+    resp.raise_for_status()
+    return pd.read_csv(io.StringIO(resp.text))
+
+
+def _is_kkd_or_eredivisie(player_data: dict | None) -> bool:
+    if not player_data:
+        return False
+    blob = " ".join(
+        str(player_data.get(k, "")).lower()
+        for k in ("league", "division", "club")
+    )
+    return any(
+        key in blob
+        for key in ("eredivisie", "kkd", "keuken kampioen", "keuken-kampioen")
+    )
+
+
+def _physical_data_section(
+    player_data: dict | None,
+    key_prefix: str = "phys",
+    state_key: str = "physical_data",
+) -> dict | None:
+    """Render the 'Obtain physical data' section for Eredivisie/KKD players.
+
+    Populates st.session_state[state_key] with a dict containing:
+      availability (pct), total_distance (meters), hi_runs, sprint_efforts,
+      top_speed (user-entered), n_matches_60plus.
+    Returns that dict, or None if nothing fetched.
+    """
+    L = _lang()
+    if not _is_kkd_or_eredivisie(player_data):
+        st.session_state.pop(state_key, None)
+        return None
+
+    st.markdown(f"**{t('physical_data_heading', L)}**")
+    st.caption(t("physical_data_note", L))
+
+    player_name = (player_data or {}).get("name", "").strip()
+
+    if st.button(
+        t("obtain_physical_data", L),
+        use_container_width=True,
+        key=f"{key_prefix}_fetch",
+    ):
+        if not player_name:
+            st.warning(t("physical_data_no_name", L))
+        else:
+            try:
+                import pandas as pd
+                df = _load_physical_stats_df()
+                name_col = "player_name"
+                mask = df[name_col].astype(str).str.strip().str.lower() == player_name.lower()
+                matches = df[mask]
+                if matches.empty:
+                    st.warning(t("physical_data_not_found", L))
+                    st.session_state.pop(state_key, None)
+                else:
+                    row = matches.iloc[0]
+
+                    def _num(v):
+                        try:
+                            if pd.isna(v):
+                                return None
+                        except Exception:
+                            pass
+                        try:
+                            return float(v)
+                        except (TypeError, ValueError):
+                            return None
+
+                    prev = st.session_state.get(state_key) or {}
+                    st.session_state[state_key] = {
+                        "availability": _num(row.get("availability_pct")),
+                        "total_distance": _num(row.get("total_distance_per90")),
+                        "hi_runs": _num(row.get("hi_runs_per90")),
+                        "sprint_efforts": _num(row.get("sprint_runs_per90")),
+                        "top_speed": prev.get("top_speed"),
+                        "n_matches_60plus": int(_num(row.get("n_matches_60plus")) or 0),
+                        "_source_name": str(row.get(name_col)),
+                    }
+            except Exception as exc:
+                st.error(f"{t('physical_fetch_error', L)}: {exc}")
+
+    data = st.session_state.get(state_key)
+    if data:
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
+            av = data.get("availability")
+            st.metric(
+                t("availability_label", L),
+                f"{av:.0f}%" if av is not None else "—",
+            )
+        with c2:
+            td = data.get("total_distance")
+            st.metric(
+                t("total_distance_label", L),
+                f"{td / 1000:.2f} km" if td else "—",
+            )
+        with c3:
+            hi = data.get("hi_runs")
+            st.metric(
+                t("hi_runs_label", L),
+                f"{int(round(hi))}" if hi else "—",
+            )
+        with c4:
+            sp = data.get("sprint_efforts")
+            st.metric(
+                t("sprint_efforts_label", L),
+                f"{int(round(sp))}" if sp else "—",
+            )
+        with c5:
+            ts_key = f"{key_prefix}_top_speed"
+            ts_val = st.text_input(
+                t("top_speed_label", L),
+                value=str(data.get("top_speed") or ""),
+                key=ts_key,
+                placeholder="km/h",
+            )
+            if (ts_val or "") != (data.get("top_speed") or ""):
+                data["top_speed"] = ts_val
+                st.session_state[state_key] = data
+        if data.get("n_matches_60plus"):
+            st.caption(
+                t("physical_based_on_matches", L).format(n=data["n_matches_60plus"])
+            )
+
+    return st.session_state.get(state_key)
+
+
 # ─── Player photo section ─────────────────────────────────────────────────
 
 def _player_photo_section(state_key: str = "player_photo") -> tuple[bytes | None, bytes | None]:
@@ -1673,12 +1819,15 @@ if page == "Dashboard":
         pf = draft.get("photo_full")
         pc = draft.get("photo_circular")
         ub = draft.get("upload_bytes")
+        phys = draft.get("physical_data")
         if ub:
             out = fill_from_bytes(ub, cfg, sv, cm, vd, player_data=pd_,
-                                  tm_stats=tm, player_photo=pf, player_photo_circular=pc)
+                                  tm_stats=tm, player_photo=pf, player_photo_circular=pc,
+                                  physical_data=phys)
         else:
             out = fill_template(cfg, sv, cm, vd, player_data=pd_,
-                                tm_stats=tm, player_photo=pf, player_photo_circular=pc)
+                                tm_stats=tm, player_photo=pf, player_photo_circular=pc,
+                                physical_data=phys)
         return out.getvalue()
 
     def _report_actions(meta: dict, prefix: str, load_pptx_fn, delete_fn, edit_mode: str = "draft"):
@@ -1850,6 +1999,11 @@ elif page == "New Report":
     else:
         tm_stats = st.session_state.get(NEW_TM_KEY)
 
+    # ── Physical data (Eredivisie / KKD only) ─────────────────────────────
+    _physical_data_section(
+        player_data, key_prefix="new_phys", state_key="new_physical_data",
+    )
+
     # ── Player photo ──────────────────────────────────────────────────────
     _new_photo_full, _new_photo_circ = _player_photo_section(state_key="new_player_photo")
 
@@ -1914,6 +2068,7 @@ elif page == "New Report":
                     tm_stats=_draft_tm,
                     player_photo=st.session_state.get("new_player_photo_full"),
                     player_photo_circular=st.session_state.get("new_player_photo_circ"),
+                    physical_data=st.session_state.get("new_physical_data"),
                 )
                 snapshot_bytes = snapshot.getvalue()
                 rid = storage.save_draft(
@@ -1944,6 +2099,7 @@ elif page == "New Report":
                     tm_stats=_gen_tm,
                     player_photo=st.session_state.get("new_player_photo_full"),
                     player_photo_circular=st.session_state.get("new_player_photo_circ"),
+                    physical_data=st.session_state.get("new_physical_data"),
                 )
                 pptx_bytes = output.getvalue()
 
@@ -1995,6 +2151,7 @@ elif page == "New Report":
                             tm_stats=_share_tm,
                             player_photo=st.session_state.get("new_player_photo_full"),
                             player_photo_circular=st.session_state.get("new_player_photo_circ"),
+                            physical_data=st.session_state.get("new_physical_data"),
                         )
                         pptx_bytes = output.getvalue()
                         rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
@@ -2096,6 +2253,7 @@ elif page == "Upload & Edit":
                         tm_stats=draft.get("tm_stats"),
                         player_photo=draft.get("photo_full"),
                         player_photo_circular=draft.get("photo_circular"),
+                        physical_data=draft.get("physical_data"),
                     )
                     file_bytes = _snap.getvalue()
                 except Exception:
@@ -2340,6 +2498,13 @@ elif page == "Upload & Edit":
                     key_prefix="upload_tm_card", state_key=UPLOAD_TM_KEY,
                 )
 
+        # ── Physical data (Eredivisie / KKD only) ─────────────────────
+        _physical_data_section(
+            upload_player_data,
+            key_prefix="upload_phys",
+            state_key="upload_physical_data",
+        )
+
         # ── Player photo ──────────────────────────────────────────────
         _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
 
@@ -2371,6 +2536,7 @@ elif page == "Upload & Edit":
                         tm_stats=_save_tm,
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
+                        physical_data=st.session_state.get("upload_physical_data"),
                     )
                     _snap_bytes = _snap.getvalue()
                     rid = storage.save_draft(
@@ -2401,6 +2567,7 @@ elif page == "Upload & Edit":
                         tm_stats=_upgen_tm,
                         player_photo=st.session_state.get("upload_player_photo_full"),
                         player_photo_circular=st.session_state.get("upload_player_photo_circ"),
+                        physical_data=st.session_state.get("upload_physical_data"),
                     )
                     pptx_bytes = output.getvalue()
                     pos = matched_name or "Unknown"
@@ -2461,6 +2628,7 @@ elif page == "Upload & Edit":
                                 tm_stats=_upshare_tm,
                                 player_photo=st.session_state.get("upload_player_photo_full"),
                                 player_photo_circular=st.session_state.get("upload_player_photo_circ"),
+                                physical_data=st.session_state.get("upload_physical_data"),
                             )
                             pptx_bytes = output.getvalue()
                             pos = matched_name or "Unknown"

@@ -1005,6 +1005,69 @@ def fill_player_stats(prs, template_cfg: dict, tm_stats: dict) -> None:
                 idx += 1
 
 
+# ─── Physical data (rating slide, bottom-right "xxxx" column) ─────────────
+
+# The 5 textboxes named "xxxx" on the rating slide, sorted top→bottom, are filled:
+#   0: Total Distance      e.g. "10.5 km"
+#   1: HI Runs             e.g. "45"
+#   2: Sprint Efforts      e.g. "18"
+#   3: Top Speed           e.g. "32.1 km/h"
+#   4: Availability        e.g. "87%"
+# The "xx%" circle (if present) is also set to the availability value.
+_PHYSICAL_FIELD_ORDER = [
+    "total_distance", "hi_runs", "sprint_efforts", "top_speed", "availability",
+]
+
+
+def _format_physical_value(field: str, raw) -> str:
+    if raw is None or raw == "":
+        return ""
+    try:
+        num = float(raw)
+    except (TypeError, ValueError):
+        return str(raw)
+    if field == "total_distance":
+        return f"{num / 1000:.2f} km" if num > 200 else f"{num:.2f} km"
+    if field == "availability":
+        return f"{num:.0f}%"
+    if field == "top_speed":
+        return f"{num:.1f} km/h"
+    # hi_runs, sprint_efforts → integer count
+    return f"{int(round(num))}"
+
+
+def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
+    """Fill the 5 'xxxx' placeholders + 'xx%' circle on the rating slide.
+
+    `physical_data` is a dict with keys:
+        total_distance (meters), hi_runs, sprint_efforts, top_speed, availability
+    Missing/empty values leave the placeholder as-is.
+    """
+    if not physical_data:
+        return
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+
+    xxxx_shapes = [
+        s for s in rating_slide.shapes
+        if s.name == "xxxx" and s.has_text_frame
+    ]
+    xxxx_shapes.sort(key=lambda s: s.top or 0)
+
+    for i, shape in enumerate(xxxx_shapes[: len(_PHYSICAL_FIELD_ORDER)]):
+        field = _PHYSICAL_FIELD_ORDER[i]
+        text = _format_physical_value(field, physical_data.get(field))
+        if text:
+            _write_text_shape(shape, text)
+
+    # Mirror availability into the big "xx%" circle when present.
+    avail_text = _format_physical_value("availability", physical_data.get("availability"))
+    if avail_text:
+        for shape in rating_slide.shapes:
+            if shape.name == "xx%" and shape.has_text_frame:
+                _write_text_shape(shape, avail_text)
+                break
+
+
 def fill_player_photo(
     prs,
     template_cfg: dict,
@@ -1113,6 +1176,7 @@ def fill_template(
     tm_stats: dict | None = None,
     player_photo: bytes | None = None,
     player_photo_circular: bytes | None = None,
+    physical_data: dict | None = None,
 ) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
@@ -1120,6 +1184,8 @@ def fill_template(
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:
         fill_player_stats(prs, template_cfg, tm_stats)
+    if physical_data:
+        fill_physical_data(prs, template_cfg, physical_data)
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
@@ -1139,6 +1205,7 @@ def fill_from_bytes(
     tm_stats: dict | None = None,
     player_photo: bytes | None = None,
     player_photo_circular: bytes | None = None,
+    physical_data: dict | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
@@ -1146,6 +1213,8 @@ def fill_from_bytes(
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:
         fill_player_stats(prs, template_cfg, tm_stats)
+    if physical_data:
+        fill_physical_data(prs, template_cfg, physical_data)
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
