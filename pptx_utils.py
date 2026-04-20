@@ -1249,11 +1249,17 @@ def fill_from_bytes(
 
 # ─── Slide image export (for in-app preview) ─────────────────────────────
 
-def render_slide_as_image(pptx_bytes: bytes, slide_index: int, width: int = 1280) -> bytes | None:
-    """Render one slide of a PPTX to a PNG, returned as bytes.
+def render_slide_preview(
+    pptx_bytes: bytes,
+    slide_index: int,
+    width: int = 1280,
+) -> tuple[str, bytes] | None:
+    """Render one slide to a preview. Returns ("png", bytes) or ("pdf", bytes).
 
-    Uses PowerPoint via win32com (Windows + Office required). The slide index
-    is 0-based. Returns None if rendering is unavailable or fails.
+    Tries three strategies, in order:
+      1. PowerPoint COM → Slide.Export PNG          (best: image of that slide only)
+      2. PowerPoint COM → Presentation.SaveAs PDF   (fallback: whole deck as PDF)
+      3. Returns None                               (no preview available)
     """
     try:
         import pythoncom  # type: ignore
@@ -1266,7 +1272,8 @@ def render_slide_as_image(pptx_bytes: bytes, slide_index: int, width: int = 1280
 
     tmpdir = tempfile.mkdtemp(prefix="ppt_preview_")
     src_path = os.path.join(tmpdir, "src.pptx")
-    out_path = os.path.join(tmpdir, f"slide_{slide_index + 1}.png")
+    png_path = os.path.join(tmpdir, f"slide_{slide_index + 1}.png")
+    pdf_path = os.path.join(tmpdir, "preview.pdf")
 
     with open(src_path, "wb") as f:
         f.write(pptx_bytes)
@@ -1276,17 +1283,39 @@ def render_slide_as_image(pptx_bytes: bytes, slide_index: int, width: int = 1280
     pres = None
     try:
         ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+        # Some COM operations fail on a fully-hidden window — keep it minimised
+        try:
+            ppt_app.Visible = 1
+            ppt_app.WindowState = 2  # minimised
+        except Exception:
+            pass
+
         pres = ppt_app.Presentations.Open(
             src_path, ReadOnly=True, Untitled=False, WithWindow=False
         )
-        if slide_index + 1 > pres.Slides.Count:
-            return None
-        slide = pres.Slides(slide_index + 1)
-        # Preserve 16:9 (or the deck's ratio) by scaling height proportionally
-        height = int(width * (pres.PageSetup.SlideHeight / pres.PageSetup.SlideWidth))
-        slide.Export(out_path, "PNG", width, height)
-        with open(out_path, "rb") as f:
-            return f.read()
+
+        # Strategy 1 — single-slide PNG export
+        try:
+            if slide_index + 1 <= pres.Slides.Count:
+                slide = pres.Slides(slide_index + 1)
+                height = int(width * (pres.PageSetup.SlideHeight / pres.PageSetup.SlideWidth))
+                slide.Export(png_path, "PNG", width, height)
+                if os.path.exists(png_path):
+                    with open(png_path, "rb") as f:
+                        return ("png", f.read())
+        except Exception:
+            pass
+
+        # Strategy 2 — whole-deck PDF export (ppSaveAsPDF = 32)
+        try:
+            pres.SaveAs(pdf_path, 32)
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    return ("pdf", f.read())
+        except Exception:
+            pass
+
+        return None
     except Exception:
         return None
     finally:
@@ -1309,6 +1338,14 @@ def render_slide_as_image(pptx_bytes: bytes, slide_index: int, width: int = 1280
             shutil.rmtree(tmpdir, ignore_errors=True)
         except Exception:
             pass
+
+
+def render_slide_as_image(pptx_bytes: bytes, slide_index: int, width: int = 1280) -> bytes | None:
+    """Back-compat wrapper — returns PNG bytes only (or None)."""
+    result = render_slide_preview(pptx_bytes, slide_index, width)
+    if result and result[0] == "png":
+        return result[1]
+    return None
 
 
 # ─── Template detection & compatibility ─────────────────────────────────────

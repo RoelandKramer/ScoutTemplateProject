@@ -13,7 +13,7 @@ from pptx_utils import (
     TEMPLATES, CLUBS, CLUB_LANGUAGES,
     get_template_config, fill_template, fill_from_bytes,
     check_template_compatibility, extract_competency_descriptions,
-    render_slide_as_image, TRANSFER_FIELD_ORDER,
+    render_slide_as_image, render_slide_preview, TRANSFER_FIELD_ORDER,
 )
 import storage
 from i18n import t, APP_LANGUAGES
@@ -958,10 +958,17 @@ def _onedrive_upload_draft(scout: str, report_id: str) -> None:
 
 def _onedrive_upload_share_ref(from_scout: str, to_scout: str,
                                share_id: str, original_rid: str,
-                               meta: dict) -> None:
-    """Upload a share-reference JSON to the recipient's OneDrive folder (silent)."""
+                               meta: dict,
+                               pptx_bytes: bytes | None = None,
+                               photo_full: bytes | None = None,
+                               photo_circular: bytes | None = None) -> None:
+    """Store a shared report independently in the recipient's OneDrive folder.
+
+    Uploads the full PPTX (and photos) under share_id so the recipient keeps
+    an independent copy even if the sender later deletes theirs.
+    """
     try:
-        from onedrive_sync import upload_json, is_configured
+        from onedrive_sync import upload_json, upload_pptx, upload_file, is_configured
         if not is_configured():
             return
 
@@ -972,6 +979,13 @@ def _onedrive_upload_share_ref(from_scout: str, to_scout: str,
         ref["shared_by"] = from_scout
         ref["is_share_ref"] = True
         upload_json(to_scout, share_id, ref)
+
+        if pptx_bytes:
+            upload_pptx(to_scout, share_id, pptx_bytes)
+        if photo_full:
+            upload_file(to_scout, f"{share_id}_photo_full.png", photo_full, "image/png")
+        if photo_circular:
+            upload_file(to_scout, f"{share_id}_photo_circ.png", photo_circular, "image/png")
     except Exception:
         pass
 
@@ -1555,16 +1569,133 @@ def _slide_preview_button(
                 return
             # Determine rating slide index from the currently active template
             rating_idx = st.session_state.get("_active_rating_slide_idx", 3)
-            img = render_slide_as_image(pptx_bytes, rating_idx, width=1280)
-            if img is None:
+            result = render_slide_preview(pptx_bytes, rating_idx, width=1280)
+            if result is None:
                 st.session_state.pop(session_key, None)
                 st.error(t("preview_unavailable", L))
             else:
-                st.session_state[session_key] = img
+                st.session_state[session_key] = result
 
-    img = st.session_state.get(session_key)
-    if img:
-        st.image(img, caption=t("preview_caption", L), use_container_width=True)
+    preview = st.session_state.get(session_key)
+    if preview:
+        # Back-compat: older cached value could be raw bytes (PNG)
+        if isinstance(preview, tuple) and len(preview) == 2:
+            kind, data = preview
+        else:
+            kind, data = "png", preview
+        if kind == "png":
+            st.image(data, caption=t("preview_caption", L), use_container_width=True)
+        elif kind == "pdf":
+            import base64 as _b64
+            b64 = _b64.b64encode(data).decode("ascii")
+            st.markdown(
+                f'<iframe src="data:application/pdf;base64,{b64}" '
+                f'width="100%" height="720" style="border:none;"></iframe>',
+                unsafe_allow_html=True,
+            )
+            st.caption(t("preview_caption", L))
+            st.download_button(
+                label=t("preview_download_pdf", L),
+                data=data,
+                file_name="slide_preview.pdf",
+                mime="application/pdf",
+                key=f"{key_prefix}_preview_pdf_dl",
+            )
+
+
+# ─── Video folder setup ──────────────────────────────────────────────────
+
+def _sanitize_folder_component(name: str) -> str:
+    """Strip characters that Windows disallows in folder/file names."""
+    bad = '<>:"/\\|?*'
+    cleaned = "".join(ch for ch in (name or "") if ch not in bad).strip().rstrip(".")
+    return cleaned or "Unnamed"
+
+
+def _video_folder_setup_section(
+    template_cfg: dict,
+    player_name: str,
+    key_prefix: str,
+) -> None:
+    """Render the 'Create folder set-up for putting videos in' block.
+
+    Creates <parent>/<player_name> videos/<criterion>/ for each criterion in the
+    selected role. User confirms the parent folder and then verifies before
+    folders are created.
+    """
+    import os
+
+    L = _lang()
+    st.markdown(f"#### {t('video_folder_setup_title', L)}")
+    st.info(t("video_folder_save_draft_advice", L))
+
+    if not player_name:
+        st.caption(t("video_folder_need_player", L))
+        return
+
+    criteria = template_cfg.get("variables") or []
+    if not criteria:
+        return
+
+    default_parent = os.path.join(os.path.expanduser("~"), "Desktop")
+    parent_key = f"{key_prefix}_video_folder_parent"
+    parent = st.text_input(
+        t("video_folder_parent_label", L),
+        value=st.session_state.get(parent_key, default_parent),
+        key=parent_key,
+        help=t("video_folder_parent_help", L),
+    )
+
+    safe_player = _sanitize_folder_component(f"{player_name} videos")
+    target_root = os.path.join(parent, safe_player)
+
+    st.caption(f"{t('video_folder_target', L)}: `{target_root}`")
+    with st.expander(t("video_folder_subfolders_preview", L)):
+        for c in criteria:
+            st.write(f"• {_sanitize_folder_component(c)}")
+
+    confirm_key = f"{key_prefix}_video_folder_confirm"
+    trigger_key = f"{key_prefix}_video_folder_trigger"
+
+    if st.button(
+        t("video_folder_setup_btn", L),
+        key=trigger_key,
+        use_container_width=True,
+    ):
+        st.session_state[confirm_key] = True
+
+    if st.session_state.get(confirm_key):
+        st.warning(t("video_folder_confirm_prompt", L).format(path=target_root))
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button(
+                t("video_folder_confirm_yes", L),
+                key=f"{key_prefix}_video_folder_yes",
+                use_container_width=True,
+                type="primary",
+            ):
+                try:
+                    os.makedirs(target_root, exist_ok=True)
+                    created = []
+                    for c in criteria:
+                        sub = os.path.join(target_root, _sanitize_folder_component(c))
+                        os.makedirs(sub, exist_ok=True)
+                        created.append(sub)
+                    st.session_state[confirm_key] = False
+                    st.success(
+                        t("video_folder_created", L).format(
+                            count=len(created), path=target_root
+                        )
+                    )
+                except Exception as exc:
+                    st.error(f"{t('video_folder_error', L)}: {exc}")
+        with c2:
+            if st.button(
+                t("video_folder_confirm_no", L),
+                key=f"{key_prefix}_video_folder_no",
+                use_container_width=True,
+            ):
+                st.session_state[confirm_key] = False
 
 
 # ─── Player photo section ─────────────────────────────────────────────────
@@ -2185,6 +2316,13 @@ elif page == "New Report":
         st.session_state.pop("_loaded_draft", None)
 
     st.markdown("---")
+    _video_folder_setup_section(
+        template_cfg=template_cfg,
+        player_name=_current_player_name(NEW_PDATA_KEY),
+        key_prefix="new_scout",
+    )
+
+    st.markdown("---")
     _scouting_session_section(
         key_prefix="new_scout",
         transfer_state_key="new_transfer_details",
@@ -2373,6 +2511,9 @@ elif page == "New Report":
                                 "tm_stats": _share_tm,
                                 "shared_at": time.time(),
                             },
+                            pptx_bytes=pptx_bytes,
+                            photo_full=st.session_state.get("new_player_photo_full"),
+                            photo_circular=st.session_state.get("new_player_photo_circ"),
                         )
                         storage.mark_shared(username, rid, sel_scout)
                         st.session_state.pop("_share_pending", None)
@@ -2689,6 +2830,13 @@ elif page == "Upload & Edit":
         st.session_state["_active_rating_slide_idx"] = template_cfg.get("rating_slide_idx", 3)
 
         st.markdown("---")
+        _video_folder_setup_section(
+            template_cfg=template_cfg,
+            player_name=_current_player_name(UPLOAD_PDATA_KEY),
+            key_prefix="upload_scout",
+        )
+
+        st.markdown("---")
         _scouting_session_section(
             key_prefix="upload_scout",
             transfer_state_key="upload_transfer_details",
@@ -2892,6 +3040,9 @@ elif page == "Upload & Edit":
                                     "tm_stats": _upshare_tm,
                                     "shared_at": time.time(),
                                 },
+                                pptx_bytes=pptx_bytes,
+                                photo_full=st.session_state.get("upload_player_photo_full"),
+                                photo_circular=st.session_state.get("upload_player_photo_circ"),
                             )
                             storage.mark_shared(username, rid, sel_scout)
                             st.session_state.pop("_share_pending", None)
