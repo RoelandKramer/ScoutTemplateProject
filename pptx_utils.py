@@ -895,27 +895,38 @@ def _write_text_shape(shape, text: str) -> None:
 
 
 def _fit_name_to_shape(shape, text: str) -> None:
-    """Write name into shape and shrink font so it fits the shape width."""
+    """Write name; only shrink font if it would clearly overflow shape width.
+
+    Preserves the template's designed font size when the name fits. Avoids
+    PowerPoint's native auto-shrink (too aggressive for this narrow bar).
+    """
     if not shape.has_text_frame:
         return
     tf = shape.text_frame
     _write_text_shape(shape, text)
+    # Explicitly disable PowerPoint's auto-shrink so template size is kept.
     try:
-        tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_SHAPE_ON_SHRINK
+        tf.auto_size = MSO_AUTO_SIZE.NONE
     except Exception:
         pass
 
     run = tf.paragraphs[0].runs[0] if tf.paragraphs and tf.paragraphs[0].runs else None
     if run is None or not text:
         return
-    base_pt = run.font.size.pt if run.font.size else 40.0
-    # Width in points (EMU → pt: 914400 EMU/in, 72 pt/in)
+    # Resolve base size from run, then paragraph (template inheritance).
+    base_pt = None
+    if run.font.size:
+        base_pt = run.font.size.pt
+    elif tf.paragraphs[0].font.size:
+        base_pt = tf.paragraphs[0].font.size.pt
+    if base_pt is None:
+        return  # Let template-defined size stand; don't guess.
+
     width_pt = shape.width * 72.0 / 914400.0
-    # Empirical average glyph width ≈ 0.55 × font size for this display font.
-    max_pt_by_width = width_pt / (len(text) * 0.55) if len(text) else base_pt
-    new_pt = min(base_pt, max_pt_by_width)
-    if new_pt < base_pt - 0.1:
-        run.font.size = Pt(max(12.0, new_pt))
+    # Uppercase bold display font avg glyph ≈ 0.6 × font size.
+    needed_pt = width_pt / (len(text) * 0.6)
+    if needed_pt < base_pt - 1.0:
+        run.font.size = Pt(max(20.0, needed_pt))
 
 
 def fill_player_info(prs, template_cfg: dict, player_data: dict) -> None:
