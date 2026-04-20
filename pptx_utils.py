@@ -1425,6 +1425,8 @@ def _render_via_libreoffice(
     import shutil
     import subprocess
 
+    _ensure_font_aliases()
+
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
         return None, (
@@ -1552,6 +1554,42 @@ def render_slide_preview(
     return None
 
 
+_FONT_ALIASES_WRITTEN = False
+
+
+def _ensure_font_aliases() -> None:
+    """Install a user fontconfig file that aliases the template's Mac/Adobe fonts
+    (Helvetica Neue, Avenir Next) to closest-metric Linux substitutes so the
+    LibreOffice preview doesn't fall back to DejaVu (wider glyphs → oversized
+    white letters in the rendered image). Safe to call many times.
+    """
+    global _FONT_ALIASES_WRITTEN
+    if _FONT_ALIASES_WRITTEN:
+        return
+    try:
+        home = os.path.expanduser("~")
+        cfg_dir = os.path.join(home, ".config", "fontconfig")
+        os.makedirs(cfg_dir, exist_ok=True)
+        cfg_path = os.path.join(cfg_dir, "fonts.conf")
+        fonts_conf = """<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <alias binding="strong"><family>Helvetica Neue</family><prefer><family>Nimbus Sans</family><family>Liberation Sans</family><family>Arial</family></prefer></alias>
+  <alias binding="strong"><family>Helvetica Neue Medium</family><prefer><family>Nimbus Sans</family><family>Liberation Sans</family><family>Arial</family></prefer></alias>
+  <alias binding="strong"><family>Helvetica</family><prefer><family>Nimbus Sans</family><family>Liberation Sans</family><family>Arial</family></prefer></alias>
+  <alias binding="strong"><family>Avenir Next Condensed</family><prefer><family>Nimbus Sans Narrow</family><family>Liberation Sans Narrow</family><family>Nimbus Sans</family></prefer></alias>
+  <alias binding="strong"><family>Avenir Next Condensed Regular</family><prefer><family>Nimbus Sans Narrow</family><family>Liberation Sans Narrow</family><family>Nimbus Sans</family></prefer></alias>
+  <alias binding="strong"><family>Avenir Next</family><prefer><family>Nimbus Sans</family><family>Liberation Sans</family></prefer></alias>
+  <alias binding="strong"><family>Avenir</family><prefer><family>Nimbus Sans</family><family>Liberation Sans</family></prefer></alias>
+</fontconfig>
+"""
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(fonts_conf)
+        _FONT_ALIASES_WRITTEN = True
+    except Exception:
+        pass
+
+
 def warm_up_preview_engine() -> None:
     """Pre-start LibreOffice in the background so the first real preview is fast.
 
@@ -1561,6 +1599,7 @@ def warm_up_preview_engine() -> None:
     try:
         import shutil
         import subprocess
+        _ensure_font_aliases()
         soffice = shutil.which("soffice") or shutil.which("libreoffice")
         if not soffice:
             return
