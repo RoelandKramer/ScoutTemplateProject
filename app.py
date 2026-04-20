@@ -1469,32 +1469,58 @@ def _scouting_session_section(
     st.markdown(f"**{t('transfer_details_heading', L)}**")
     td = st.session_state.get(transfer_state_key) or {}
 
-    # Use key-only state (no value=) to avoid Streamlit's
+    # Text fields: use key-only state (no value=) to avoid Streamlit's
     # "Press Enter to submit / apply" helper. Pre-seed state from td once.
-    _fields = [
-        ("end_of_contract",   f"{key_prefix}_end_contract", "end_of_contract_label"),
+    _text_fields = [
         ("transfer_value",    f"{key_prefix}_tvalue",       "transfer_value_label"),
         ("prediction_year_1", f"{key_prefix}_pred_1",       "prediction_year_1_label"),
         ("prediction_year_2", f"{key_prefix}_pred_2",       "prediction_year_2_label"),
         ("next_step",         f"{key_prefix}_next_step",    "next_step_label"),
     ]
-    for td_field, widget_key, _ in _fields:
+    for td_field, widget_key, _ in _text_fields:
         if widget_key not in st.session_state:
             st.session_state[widget_key] = td.get(td_field, "")
 
+    # End-of-contract: date picker, default 30 June 2026
+    eoc_key = f"{key_prefix}_end_contract_date"
+    _default_eoc = _dt.date(2026, 6, 30)
+    if eoc_key not in st.session_state:
+        _prev = td.get("end_of_contract", "")
+        parsed: _dt.date | None = None
+        if isinstance(_prev, _dt.date):
+            parsed = _prev
+        elif isinstance(_prev, str) and _prev:
+            for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+                try:
+                    parsed = _dt.datetime.strptime(_prev, fmt).date()
+                    break
+                except ValueError:
+                    pass
+        st.session_state[eoc_key] = parsed or _default_eoc
+
     def _sync_td():
-        for td_field, widget_key, _ in _fields:
+        for td_field, widget_key, _ in _text_fields:
             td[td_field] = st.session_state.get(widget_key, "")
+        eoc = st.session_state.get(eoc_key)
+        if isinstance(eoc, _dt.date):
+            td["end_of_contract"] = eoc.strftime("%d/%m/%Y")
+        else:
+            td["end_of_contract"] = str(eoc) if eoc else ""
         st.session_state[transfer_state_key] = td
 
     c1, c2 = st.columns(2)
     with c1:
-        st.text_input(t("end_of_contract_label", L),   key=f"{key_prefix}_end_contract", label_visibility="visible", on_change=_sync_td)
-        st.text_input(t("prediction_year_1_label", L), key=f"{key_prefix}_pred_1",       label_visibility="visible", on_change=_sync_td)
-        st.text_input(t("next_step_label", L),         key=f"{key_prefix}_next_step",    label_visibility="visible", on_change=_sync_td)
+        st.date_input(
+            t("end_of_contract_label", L),
+            key=eoc_key,
+            format="DD/MM/YYYY",
+            on_change=_sync_td,
+        )
+        st.text_input(t("prediction_year_1_label", L), key=f"{key_prefix}_pred_1",    on_change=_sync_td)
+        st.text_input(t("next_step_label", L),         key=f"{key_prefix}_next_step", on_change=_sync_td)
     with c2:
-        st.text_input(t("transfer_value_label", L),    key=f"{key_prefix}_tvalue",       label_visibility="visible", on_change=_sync_td)
-        st.text_input(t("prediction_year_2_label", L), key=f"{key_prefix}_pred_2",       label_visibility="visible", on_change=_sync_td)
+        st.text_input(t("transfer_value_label", L),    key=f"{key_prefix}_tvalue",    on_change=_sync_td)
+        st.text_input(t("prediction_year_2_label", L), key=f"{key_prefix}_pred_2",    on_change=_sync_td)
 
     # Always sync latest widget state into td (covers initial render too)
     _sync_td()
@@ -1618,38 +1644,28 @@ def _sanitize_folder_component(name: str) -> str:
     return cleaned or "Unnamed"
 
 
-def _browse_for_directory(initial: str = "") -> str | None:
-    """Open a native Windows 'pick a folder' dialog via tkinter.
+def _build_video_folder_zip(player_name: str, criteria: list[str]) -> bytes:
+    """Build an in-memory ZIP containing `<player> videos/` with one empty
+    subfolder per criterion. Unzipping reproduces the tree anywhere."""
+    import io
+    import zipfile
+    import time
 
-    Returns the selected path, or None if the user cancelled or tkinter failed.
-    Runs inline on the Streamlit server process (this app runs locally on the
-    scout's machine, so the dialog appears on their screen).
-    """
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-    except Exception:
-        return None
-    try:
-        root = tk.Tk()
-        try:
-            root.withdraw()
-            root.attributes("-topmost", True)
-        except Exception:
-            pass
-        path = filedialog.askdirectory(
-            master=root,
-            initialdir=initial or None,
-            title="Select parent folder",
-            mustexist=True,
-        )
-        try:
-            root.destroy()
-        except Exception:
-            pass
-        return path or None
-    except Exception:
-        return None
+    root = _sanitize_folder_component(f"{player_name} videos")
+    buf = io.BytesIO()
+    now = time.localtime()[:6]
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Root folder entry (trailing slash marks it as a directory)
+        info = zipfile.ZipInfo(f"{root}/", date_time=now)
+        info.external_attr = (0o040775 << 16) | 0x10
+        zf.writestr(info, "")
+        for c in criteria:
+            sub = _sanitize_folder_component(c)
+            info = zipfile.ZipInfo(f"{root}/{sub}/", date_time=now)
+            info.external_attr = (0o040775 << 16) | 0x10
+            zf.writestr(info, "")
+    buf.seek(0)
+    return buf.getvalue()
 
 
 def _video_folder_setup_section(
@@ -1657,15 +1673,11 @@ def _video_folder_setup_section(
     player_name: str,
     key_prefix: str,
 ) -> None:
-    """Render the 'Create folder set-up for putting videos in' block.
+    """Render the 'Download empty folder set-up' block.
 
-    Two targets supported:
-      - Local: uses a native folder picker to choose the parent directory.
-      - OneDrive / SharePoint: creates the folder tree on the configured
-        OneDrive under the current scout's area.
+    Generates a zip with `<player> videos/<criterion>/` empty folders; the
+    scout unzips it wherever they like.
     """
-    import os
-
     L = _lang()
     st.markdown(f"#### {t('video_folder_setup_title', L)}")
     st.info(t("video_folder_save_draft_advice", L))
@@ -1678,143 +1690,25 @@ def _video_folder_setup_section(
     if not criteria:
         return
 
-    # ── Target selector ─────────────────────────────────────────────────
-    try:
-        from onedrive_sync import is_configured as _od_configured
-        onedrive_available = _od_configured()
-    except Exception:
-        onedrive_available = False
-
-    target_key = f"{key_prefix}_video_folder_target"
-    target_options = [t("video_folder_target_local", L)]
-    if onedrive_available:
-        target_options.append(t("video_folder_target_onedrive", L))
-    target = st.radio(
-        t("video_folder_target_label", L),
-        options=target_options,
-        horizontal=True,
-        key=target_key,
-    )
-    is_onedrive = (target == t("video_folder_target_onedrive", L))
-
-    safe_player = _sanitize_folder_component(f"{player_name} videos")
-
-    if is_onedrive:
-        # ── OneDrive / SharePoint target ─────────────────────────────
-        base_sub_key = f"{key_prefix}_video_folder_od_base"
-        if base_sub_key not in st.session_state:
-            st.session_state[base_sub_key] = "Videos"
-        st.text_input(
-            t("video_folder_od_base_label", L),
-            key=base_sub_key,
-            help=t("video_folder_od_base_help", L),
-        )
-        base_sub = st.session_state.get(base_sub_key, "Videos")
-        _scout_user = st.session_state.get("username", "")
-        od_target_desc = f"OneDrive › {_scout_user} › {base_sub} › {safe_player}"
-        st.caption(f"{t('video_folder_target', L)}: `{od_target_desc}`")
-    else:
-        # ── Local target with native folder picker ───────────────────
-        parent_key = f"{key_prefix}_video_folder_parent"
-        default_parent = os.path.join(os.path.expanduser("~"), "Desktop")
-        if parent_key not in st.session_state:
-            st.session_state[parent_key] = default_parent
-
-        col_path, col_browse = st.columns([4, 1])
-        with col_path:
-            st.text_input(
-                t("video_folder_parent_label", L),
-                key=parent_key,
-                help=t("video_folder_parent_help", L),
-            )
-        with col_browse:
-            st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-            if st.button(
-                t("video_folder_browse", L),
-                key=f"{key_prefix}_video_folder_browse",
-                use_container_width=True,
-            ):
-                picked = _browse_for_directory(st.session_state.get(parent_key, ""))
-                if picked:
-                    st.session_state[parent_key] = picked
-                    st.rerun()
-                else:
-                    st.info(t("video_folder_browse_cancelled", L))
-
-        parent = st.session_state.get(parent_key, default_parent)
-        target_root = os.path.join(parent, safe_player)
-        st.caption(f"{t('video_folder_target', L)}: `{target_root}`")
-
-    # ── Subfolder preview ────────────────────────────────────────────
     with st.expander(t("video_folder_subfolders_preview", L)):
         for c in criteria:
             st.write(f"• {_sanitize_folder_component(c)}")
 
-    # ── Trigger + confirm ────────────────────────────────────────────
-    confirm_key = f"{key_prefix}_video_folder_confirm"
-    trigger_key = f"{key_prefix}_video_folder_trigger"
+    try:
+        zip_bytes = _build_video_folder_zip(player_name, criteria)
+    except Exception as exc:
+        st.error(f"{t('video_folder_error', L)}: {exc}")
+        return
 
-    if st.button(
-        t("video_folder_setup_btn", L),
-        key=trigger_key,
+    zip_name = _sanitize_folder_component(f"{player_name} videos") + ".zip"
+    st.download_button(
+        label=t("video_folder_download_btn", L),
+        data=zip_bytes,
+        file_name=zip_name,
+        mime="application/zip",
+        key=f"{key_prefix}_video_folder_download",
         use_container_width=True,
-    ):
-        st.session_state[confirm_key] = True
-
-    if st.session_state.get(confirm_key):
-        prompt_path = od_target_desc if is_onedrive else target_root
-        st.warning(t("video_folder_confirm_prompt", L).format(path=prompt_path))
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button(
-                t("video_folder_confirm_yes", L),
-                key=f"{key_prefix}_video_folder_yes",
-                use_container_width=True,
-                type="primary",
-            ):
-                if is_onedrive:
-                    try:
-                        from onedrive_sync import create_folder_tree
-                        ok, err, created = create_folder_tree(
-                            scout=st.session_state.get("username", ""),
-                            main_folder=safe_player,
-                            subfolders=[_sanitize_folder_component(c) for c in criteria],
-                            base_subfolder=base_sub,
-                        )
-                        if ok:
-                            st.session_state[confirm_key] = False
-                            st.success(
-                                t("video_folder_created", L).format(
-                                    count=len(criteria), path=od_target_desc
-                                )
-                            )
-                        else:
-                            st.error(f"{t('video_folder_error', L)}: {err}")
-                    except Exception as exc:
-                        st.error(f"{t('video_folder_error', L)}: {exc}")
-                else:
-                    try:
-                        os.makedirs(target_root, exist_ok=True)
-                        created = []
-                        for c in criteria:
-                            sub = os.path.join(target_root, _sanitize_folder_component(c))
-                            os.makedirs(sub, exist_ok=True)
-                            created.append(sub)
-                        st.session_state[confirm_key] = False
-                        st.success(
-                            t("video_folder_created", L).format(
-                                count=len(created), path=target_root
-                            )
-                        )
-                    except Exception as exc:
-                        st.error(f"{t('video_folder_error', L)}: {exc}")
-        with c2:
-            if st.button(
-                t("video_folder_confirm_no", L),
-                key=f"{key_prefix}_video_folder_no",
-                use_container_width=True,
-            ):
-                st.session_state[confirm_key] = False
+    )
 
 
 # ─── Player photo section ─────────────────────────────────────────────────

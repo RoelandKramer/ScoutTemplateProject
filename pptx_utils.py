@@ -1258,6 +1258,68 @@ def get_last_preview_error() -> str:
     return _last_preview_error
 
 
+def _render_via_libreoffice(
+    src_path: str,
+    tmpdir: str,
+    slide_index: int,
+) -> tuple[tuple[str, bytes] | None, str | None]:
+    """Convert pptx → pdf via headless LibreOffice. Returns ((kind, bytes), None)
+    on success or (None, error_msg) on failure.
+
+    If `pypdf` is available, extract just the target slide page so the preview
+    is single-page. Otherwise returns the whole-deck PDF.
+    """
+    import os
+    import shutil
+    import subprocess
+
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        return None, (
+            "LibreOffice not found on PATH. Install with: "
+            "apt-get install -y libreoffice-impress  (Linux) "
+            "or brew install --cask libreoffice (macOS)."
+        )
+
+    try:
+        proc = subprocess.run(
+            [soffice, "--headless", "--norestore", "--nologo",
+             "--convert-to", "pdf", "--outdir", tmpdir, src_path],
+            capture_output=True,
+            timeout=180,
+        )
+    except Exception as exc:
+        return None, f"LibreOffice subprocess failed: {exc}"
+
+    if proc.returncode != 0:
+        err = (proc.stderr or b"").decode("utf-8", "ignore")[:400]
+        return None, f"LibreOffice exited {proc.returncode}: {err}"
+
+    base = os.path.splitext(os.path.basename(src_path))[0]
+    pdf_path = os.path.join(tmpdir, base + ".pdf")
+    if not os.path.exists(pdf_path) or os.path.getsize(pdf_path) == 0:
+        return None, "LibreOffice produced no PDF"
+
+    with open(pdf_path, "rb") as f:
+        full_pdf = f.read()
+
+    # Try to extract the single target page for a cleaner preview.
+    try:
+        from pypdf import PdfReader, PdfWriter  # type: ignore
+        reader = PdfReader(pdf_path)
+        if 0 <= slide_index < len(reader.pages):
+            writer = PdfWriter()
+            writer.add_page(reader.pages[slide_index])
+            import io
+            buf = io.BytesIO()
+            writer.write(buf)
+            return ("pdf", buf.getvalue()), None
+    except Exception:
+        pass
+
+    return ("pdf", full_pdf), None
+
+
 def render_slide_preview(
     pptx_bytes: bytes,
     slide_index: int,
@@ -1265,22 +1327,14 @@ def render_slide_preview(
 ) -> tuple[str, bytes] | None:
     """Render one slide to a preview. Returns ("png", bytes) or ("pdf", bytes).
 
-    Tries strategies in order:
-      1. PowerPoint COM → Slide.Export PNG          (best: image of that slide only)
-      2. PowerPoint COM → Presentation.SaveAs PDF   (fallback: whole deck as PDF)
-      3. comtypes fallback (if pywin32 missing)
-      4. Returns None; call get_last_preview_error() for the reason
+    Cross-platform strategy order:
+      1. PowerPoint COM (Windows, Office installed) → PNG then PDF
+      2. LibreOffice headless (Linux/Mac/Windows if installed) → PDF
+      3. Returns None; call get_last_preview_error() for the reason
     """
     global _last_preview_error
     _last_preview_error = ""
     errors: list[str] = []
-
-    try:
-        import pythoncom  # type: ignore
-        import win32com.client  # type: ignore
-    except Exception as exc:
-        _last_preview_error = f"pywin32 not available: {exc}"
-        return None
 
     import os
     import tempfile
@@ -1295,7 +1349,63 @@ def render_slide_preview(
             f.write(pptx_bytes)
     except Exception as exc:
         _last_preview_error = f"Could not write temp pptx: {exc}"
+        try:
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
         return None
+
+    # ── Strategy A: PowerPoint COM (Windows-only) ─────────────────────
+    try:
+        import pythoncom  # type: ignore
+        import win32com.client  # type: ignore
+        _pywin32_ok = True
+    except Exception as exc:
+        errors.append(f"pywin32 not available: {exc}")
+        _pywin32_ok = False
+
+    if _pywin32_ok:
+        result = _render_via_powerpoint_com(
+            src_path, png_path, pdf_path, slide_index, width, errors,
+        )
+        if result is not None:
+            _cleanup_tmpdir(tmpdir)
+            return result
+
+    # ── Strategy B: LibreOffice headless (any OS if installed) ────────
+    lo_result, lo_err = _render_via_libreoffice(src_path, tmpdir, slide_index)
+    if lo_result is not None:
+        _cleanup_tmpdir(tmpdir)
+        return lo_result
+    if lo_err:
+        errors.append(lo_err)
+
+    _last_preview_error = "; ".join(errors) or "unknown failure"
+    _cleanup_tmpdir(tmpdir)
+    return None
+
+
+def _cleanup_tmpdir(tmpdir: str) -> None:
+    try:
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    except Exception:
+        pass
+
+
+def _render_via_powerpoint_com(
+    src_path: str,
+    png_path: str,
+    pdf_path: str,
+    slide_index: int,
+    width: int,
+    errors: list[str],
+) -> tuple[str, bytes] | None:
+    """Render via PowerPoint COM (Windows only). Appends diagnostics to `errors`."""
+    import os
+    import pythoncom  # type: ignore
+    import win32com.client  # type: ignore
 
     pythoncom.CoInitialize()
     ppt_app = None
@@ -1305,7 +1415,6 @@ def render_slide_preview(
             ppt_app = win32com.client.Dispatch("PowerPoint.Application")
         except Exception as exc:
             errors.append(f"PowerPoint not available (COM Dispatch failed: {exc})")
-            _last_preview_error = "; ".join(errors)
             return None
 
         # PowerPoint requires a visible window for many COM operations.
@@ -1325,7 +1434,6 @@ def render_slide_preview(
             )
         except Exception as exc:
             errors.append(f"Presentations.Open failed: {exc}")
-            _last_preview_error = "; ".join(errors)
             return None
 
         # Strategy 1 — single-slide PNG export
@@ -1359,11 +1467,9 @@ def render_slide_preview(
         except Exception as exc:
             errors.append(f"Presentation.SaveAs PDF failed: {exc}")
 
-        _last_preview_error = "; ".join(errors) or "unknown failure"
         return None
     except Exception as exc:
         errors.append(f"Unexpected: {exc}")
-        _last_preview_error = "; ".join(errors)
         return None
     finally:
         try:
@@ -1378,11 +1484,6 @@ def render_slide_preview(
             pass
         try:
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
-        try:
-            import shutil
-            shutil.rmtree(tmpdir, ignore_errors=True)
         except Exception:
             pass
 
