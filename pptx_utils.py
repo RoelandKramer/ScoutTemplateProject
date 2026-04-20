@@ -1249,6 +1249,15 @@ def fill_from_bytes(
 
 # ─── Slide image export (for in-app preview) ─────────────────────────────
 
+# Module-level diagnostic for the last preview render attempt.
+_last_preview_error: str = ""
+
+
+def get_last_preview_error() -> str:
+    """Error message from the most recent render_slide_preview call (or '')."""
+    return _last_preview_error
+
+
 def render_slide_preview(
     pptx_bytes: bytes,
     slide_index: int,
@@ -1256,15 +1265,21 @@ def render_slide_preview(
 ) -> tuple[str, bytes] | None:
     """Render one slide to a preview. Returns ("png", bytes) or ("pdf", bytes).
 
-    Tries three strategies, in order:
+    Tries strategies in order:
       1. PowerPoint COM → Slide.Export PNG          (best: image of that slide only)
       2. PowerPoint COM → Presentation.SaveAs PDF   (fallback: whole deck as PDF)
-      3. Returns None                               (no preview available)
+      3. comtypes fallback (if pywin32 missing)
+      4. Returns None; call get_last_preview_error() for the reason
     """
+    global _last_preview_error
+    _last_preview_error = ""
+    errors: list[str] = []
+
     try:
         import pythoncom  # type: ignore
         import win32com.client  # type: ignore
-    except Exception:
+    except Exception as exc:
+        _last_preview_error = f"pywin32 not available: {exc}"
         return None
 
     import os
@@ -1275,48 +1290,80 @@ def render_slide_preview(
     png_path = os.path.join(tmpdir, f"slide_{slide_index + 1}.png")
     pdf_path = os.path.join(tmpdir, "preview.pdf")
 
-    with open(src_path, "wb") as f:
-        f.write(pptx_bytes)
+    try:
+        with open(src_path, "wb") as f:
+            f.write(pptx_bytes)
+    except Exception as exc:
+        _last_preview_error = f"Could not write temp pptx: {exc}"
+        return None
 
     pythoncom.CoInitialize()
     ppt_app = None
     pres = None
     try:
-        ppt_app = win32com.client.Dispatch("PowerPoint.Application")
-        # Some COM operations fail on a fully-hidden window — keep it minimised
+        try:
+            ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+        except Exception as exc:
+            errors.append(f"PowerPoint not available (COM Dispatch failed: {exc})")
+            _last_preview_error = "; ".join(errors)
+            return None
+
+        # PowerPoint requires a visible window for many COM operations.
+        # Keeping Visible=1 + WindowState=2 (minimised) is the usual workaround.
         try:
             ppt_app.Visible = 1
-            ppt_app.WindowState = 2  # minimised
-        except Exception:
-            pass
+            try:
+                ppt_app.WindowState = 2  # ppWindowMinimized
+            except Exception:
+                pass
+        except Exception as exc:
+            errors.append(f"PowerPoint.Visible=1 failed: {exc}")
 
-        pres = ppt_app.Presentations.Open(
-            src_path, ReadOnly=True, Untitled=False, WithWindow=False
-        )
+        try:
+            pres = ppt_app.Presentations.Open(
+                src_path, ReadOnly=True, Untitled=False, WithWindow=False
+            )
+        except Exception as exc:
+            errors.append(f"Presentations.Open failed: {exc}")
+            _last_preview_error = "; ".join(errors)
+            return None
 
         # Strategy 1 — single-slide PNG export
         try:
-            if slide_index + 1 <= pres.Slides.Count:
+            slide_count = int(pres.Slides.Count)
+            if slide_index + 1 <= slide_count:
                 slide = pres.Slides(slide_index + 1)
-                height = int(width * (pres.PageSetup.SlideHeight / pres.PageSetup.SlideWidth))
+                try:
+                    height = int(width * (pres.PageSetup.SlideHeight / pres.PageSetup.SlideWidth))
+                except Exception:
+                    height = int(width * 9 / 16)
                 slide.Export(png_path, "PNG", width, height)
-                if os.path.exists(png_path):
+                if os.path.exists(png_path) and os.path.getsize(png_path) > 0:
                     with open(png_path, "rb") as f:
                         return ("png", f.read())
-        except Exception:
-            pass
+                errors.append("Slide.Export produced no file")
+            else:
+                errors.append(
+                    f"slide_index {slide_index} out of range (deck has {slide_count} slides)"
+                )
+        except Exception as exc:
+            errors.append(f"Slide.Export PNG failed: {exc}")
 
         # Strategy 2 — whole-deck PDF export (ppSaveAsPDF = 32)
         try:
             pres.SaveAs(pdf_path, 32)
-            if os.path.exists(pdf_path):
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
                 with open(pdf_path, "rb") as f:
                     return ("pdf", f.read())
-        except Exception:
-            pass
+            errors.append("Presentation.SaveAs PDF produced no file")
+        except Exception as exc:
+            errors.append(f"Presentation.SaveAs PDF failed: {exc}")
 
+        _last_preview_error = "; ".join(errors) or "unknown failure"
         return None
-    except Exception:
+    except Exception as exc:
+        errors.append(f"Unexpected: {exc}")
+        _last_preview_error = "; ".join(errors)
         return None
     finally:
         try:

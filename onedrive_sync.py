@@ -99,6 +99,83 @@ def _folder_path(cfg: dict, scout: str, subfolder: str = "") -> str:
     return f"{base}/{_safe(subfolder)}" if subfolder else base
 
 
+# ─── Folder creation ──────────────────────────────────────────────────────
+
+def _create_folder_raw(cfg: dict, token: str, parent_path: str, name: str) -> tuple[bool, str | None]:
+    """Create a single folder named `name` under `parent_path` (relative to drive root).
+
+    If `parent_path` is empty, creates at drive root. Uses Graph's conflict
+    resolution 'replace' so existing folders are kept (no error).
+    """
+    safe_name = _safe(name)
+    if parent_path:
+        url = f"{_drive_prefix(cfg)}/root:/{parent_path}:/children"
+    else:
+        url = f"{_drive_prefix(cfg)}/root/children"
+    body = {
+        "name": safe_name,
+        "folder": {},
+        "@microsoft.graph.conflictBehavior": "replace",
+    }
+    try:
+        resp = requests.post(
+            url,
+            headers={**_auth_headers(token), "Content-Type": "application/json"},
+            json=body,
+            timeout=30,
+        )
+        # 201 = created, 200 = replaced/exists
+        if resp.status_code in (200, 201):
+            return True, None
+        return False, f"HTTP {resp.status_code}: {resp.text[:200]}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def create_folder_tree(
+    scout: str,
+    main_folder: str,
+    subfolders: list[str],
+    base_subfolder: str = "Videos",
+) -> tuple[bool, str | None, list[str]]:
+    """Create <scout>/<base_subfolder>/<main_folder>/<sub>/ on the configured OneDrive.
+
+    Returns (ok, error, created_paths).
+    Idempotent: existing folders are reused.
+    """
+    cfg = _get_config()
+    if not cfg:
+        return False, "OneDrive not configured", []
+    try:
+        token = _get_token(cfg)
+    except Exception as exc:
+        return False, f"Auth error: {exc}", []
+
+    # Build up the parent tree: base_folder / scout / base_subfolder / main_folder
+    parts = [_safe(cfg["base_folder"]), _safe(scout)]
+    if base_subfolder:
+        parts.append(_safe(base_subfolder))
+    parts.append(_safe(main_folder))
+
+    # Walk the path, creating each segment under its parent.
+    current = ""
+    for seg in parts:
+        ok, err = _create_folder_raw(cfg, token, current, seg)
+        if not ok:
+            return False, f"Failed creating '{current}/{seg}': {err}", []
+        current = f"{current}/{seg}" if current else seg
+
+    main_path = current
+    created: list[str] = [main_path]
+    for sub in subfolders:
+        ok, err = _create_folder_raw(cfg, token, main_path, sub)
+        if not ok:
+            return False, f"Failed creating subfolder '{sub}': {err}", created
+        created.append(f"{main_path}/{_safe(sub)}")
+
+    return True, None, created
+
+
 # ─── Upload ────────────────────────────────────────────────────────────────
 
 def upload_pptx(
