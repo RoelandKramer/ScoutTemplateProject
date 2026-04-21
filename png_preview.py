@@ -3,8 +3,10 @@
 Draws app data on top of a role-specific PNG screenshot of the PowerPoint
 template. Returns PNG bytes that the app can show with st.image().
 
-The template image is 1920x1080 (16:9). Coordinates below were measured from
-the Deep Lying Playmaker #06 screenshot in PNG-player Info/.
+Templates are 1920x1080. Layout (gray boxes, circles, dark-navy box,
+transfer column) is identical across roles — only the right-side competency
+labels differ. Competency-row y-positions are detected per template and
+cached at first use.
 """
 
 from __future__ import annotations
@@ -12,73 +14,85 @@ from __future__ import annotations
 import io
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Iterable
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
 PNG_DIR = Path(__file__).parent / "PNG-player Info"
 
-# role / template name -> filename inside PNG_DIR
+# role / template name (TEMPLATES key) -> filename inside PNG_DIR
 ROLE_TO_PNG: dict[str, str] = {
-    "Deep Lying Playmaker": "nr#6 DLP.001.png",
+    "Goalkeeper":              "nr#1 GK.001.png",
+    "Wingback":                "nr#25 WB.001.png",
+    "Centerback":              "nr#34 CB.001.png",
+    "Deep Lying Playmaker":    "nr#6 DLP.001.png",
+    "Box-to-Box Midfielder":   "nr#8 BTB.001.png",
+    "Scoring 10":              "nr#10 scoring 10.001.png",
+    "Dribbling Winger":        "nr#7 DW.001.png",
+    "Fast Winger":             "nr#7 FW.001.png",
+    "Finisher":                "nr#9 finisher.001.png",
 }
 
 
-# ─── Field coordinate map (1920x1080, DLP template) ──────────────────────
-# Each entry: (x, y, w, h, anchor) where anchor is one of
-#   "lm" left-middle, "mm" center-middle, "rm" right-middle.
-# For multi-line wrapped text use box-shaped entries with anchor "tl".
+# ─── Field coordinate map (1920x1080) ────────────────────────────────────
+# (x_left, y_top, w, h, anchor)  anchor in {"lm","mm","rm","tl"}
 FIELDS: dict[str, tuple[int, int, int, int, str]] = {
-    # Left column — player info (gray boxes), left-padded
-    "date_of_birth":     (298, 187, 270, 43, "lm"),
-    "city_of_birth":     (298, 247, 270, 42, "lm"),
-    "nationality":       (298, 306, 270, 43, "lm"),
-    "height":            (298, 366, 270, 42, "lm"),
-    "preferred_foot":    (298, 425, 270, 43, "lm"),
-    "club":              (298, 484, 270, 42, "lm"),
-    "league":            (298, 543, 270, 42, "lm"),
-    "agency":            (298, 601, 270, 42, "lm"),
-    "agent":             (298, 659, 270, 42, "lm"),
+    # Player info — left column gray boxes (text BLACK, centered vertically)
+    "date_of_birth":     (293, 166, 274, 43, "mm"),
+    "city_of_birth":     (293, 226, 274, 42, "mm"),
+    "nationality":       (293, 285, 274, 43, "mm"),
+    "height":            (293, 345, 274, 42, "mm"),
+    "preferred_foot":    (293, 404, 274, 43, "mm"),
+    "club":              (293, 463, 274, 42, "mm"),
+    "league":            (293, 522, 274, 42, "mm"),
+    "agency":            (293, 580, 274, 42, "mm"),
+    "agent":             (293, 638, 274, 42, "mm"),
 
-    # Stats grid (centered in each gray cell)
-    "season_matches":    (885, 100, 162, 42, "mm"),
-    "career_matches":    (1073, 100, 162, 42, "mm"),
-    "season_minutes":    (885, 158, 162, 43, "mm"),
-    "career_minutes":    (1073, 158, 162, 43, "mm"),
-    "season_goals":      (885, 220, 162, 43, "mm"),
-    "career_goals":      (1073, 220, 162, 43, "mm"),
-    "season_assists":    (885, 281, 162, 43, "mm"),
-    "career_assists":    (1073, 281, 162, 43, "mm"),
+    # Stats grid — centered in each gray cell (text BLACK)
+    "season_matches":    (885, 79, 162, 42, "mm"),
+    "career_matches":    (1073, 79, 162, 42, "mm"),
+    "season_minutes":    (885, 136, 162, 43, "mm"),
+    "career_minutes":    (1073, 136, 162, 43, "mm"),
+    "season_goals":      (885, 198, 162, 43, "mm"),
+    "career_goals":      (1073, 198, 162, 43, "mm"),
+    "season_assists":    (885, 259, 162, 43, "mm"),
+    "career_assists":    (1073, 259, 162, 43, "mm"),
 
-    # Circles — rating & availability (white circles)
+    # Circles — rating & availability (white circle, NAVY text)
     "rating":            (660, 404, 222, 222, "mm"),
     "availability":      (1001, 404, 222, 223, "mm"),
 
-    # Transfer details — right column (left-aligned)
-    "end_of_contract":   (1565, 776, 270, 44, "lm"),
-    "transfer_value":    (1565, 836, 270, 44, "lm"),
-    "prediction_year_1": (1565, 895, 270, 44, "lm"),
-    "prediction_year_2": (1565, 954, 270, 44, "lm"),
-    "next_step":         (1565, 1011, 270, 44, "lm"),
+    # Transfer details — right column gray boxes (text BLACK, centered)
+    "end_of_contract":   (1554, 754, 283, 44, "mm"),
+    "transfer_value":    (1554, 814, 283, 44, "mm"),
+    "prediction_year_1": (1554, 873, 283, 44, "mm"),
+    "prediction_year_2": (1554, 932, 283, 44, "mm"),
+    "next_step":         (1554, 989, 283, 44, "mm"),
 
-    # Physical stats — appended after the bullet labels in PLAYERS PROFILE box
-    "total_distance":    (137, 915, 200, 26, "lm"),
-    "hi_runs":           (123, 948, 200, 26, "lm"),
-    "sprints":           (127, 981, 200, 26, "lm"),
-    "top_speed":         (146, 1014, 200, 26, "lm"),
+    # Physical stats — values aligned in a column to the right of the longest
+    # label ("Total Distance:" ends at x≈169). All four start at the same x
+    # so the values stack directly under each other.
+    "total_distance":    (180, 916, 135, 24, "lm"),
+    "hi_runs":           (180, 949, 135, 24, "lm"),
+    "sprints":           (180, 982, 135, 24, "lm"),
+    "top_speed":         (180, 1015, 135, 24, "lm"),
 
-    # Summary scouting (multiline, top-left, wraps within box)
+    # Summary scouting (multiline wrapped text, white on blue)
     "summary":           (660, 760, 830, 285, "tl"),
 
-    # Player name (welcome bar) — currently NOT shown on this slide PNG.
+    # Player photo — circle in top-left
+    "player_photo":      (37, 24, 110, 110, "tl"),
+
+    # Player name — to the right of photo, above the gold divider line at y≈141
+    "player_name":       (160, 50, 400, 80, "lm"),
 }
 
 
 # ─── Font resolution ──────────────────────────────────────────────────────
-# The PowerPoint uses Helvetica Neue / Avenir Next Condensed. On Windows we
-# fall back to Arial; on Linux (Streamlit Cloud) to Nimbus Sans / DejaVu.
+# PowerPoint uses Helvetica Neue; we fall back through Arial / Nimbus Sans.
 _FONT_CANDIDATES_REGULAR = [
     "C:/Windows/Fonts/HelveticaNeue.ttf",
     "C:/Windows/Fonts/arial.ttf",
@@ -135,15 +149,15 @@ def _draw_anchored(
     if not text:
         return
     x, y, w, h = box
-    font, tw, th = _fit_one_line(draw, text, w - 4, h - 2, start_size, bold)
+    font, tw, th = _fit_one_line(draw, text, w - 6, h - 4, start_size, bold)
     if anchor == "lm":
-        tx = x
+        tx = x + 2
         ty = y + (h - th) // 2 - 2
     elif anchor == "mm":
         tx = x + (w - tw) // 2
         ty = y + (h - th) // 2 - 2
     elif anchor == "rm":
-        tx = x + w - tw
+        tx = x + w - tw - 2
         ty = y + (h - th) // 2 - 2
     else:  # tl
         tx, ty = x, y
@@ -171,7 +185,7 @@ def _wrap_text(text: str, font, draw, max_w: int) -> list[str]:
 
 def _draw_multiline(
     draw: ImageDraw.ImageDraw, text: str, box: tuple[int, int, int, int],
-    color, start_size: int = 22,
+    color, start_size: int = 24,
 ) -> None:
     if not text:
         return
@@ -195,13 +209,112 @@ def _draw_multiline(
             break
 
 
+def _paste_circular_photo(canvas: Image.Image, photo_bytes: bytes,
+                          box: tuple[int, int, int, int]) -> None:
+    """Crop photo to a circle and paste into the given square box."""
+    if not photo_bytes:
+        return
+    x, y, w, h = box
+    size = min(w, h)
+    try:
+        src = Image.open(io.BytesIO(photo_bytes)).convert("RGBA")
+    except Exception:
+        return
+    src = ImageOps.fit(src, (size, size), method=Image.LANCZOS)
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    src.putalpha(mask)
+    canvas.paste(src, (x, y), src)
+
+
+# ─── Per-template competency row detection (cached) ──────────────────────
+
+_COMP_ROWS_CACHE: dict[str, list[int]] = {}
+_COMP_ROWS_LOCK = threading.Lock()
+
+
+def _detect_competency_rows(png_path: Path) -> list[int]:
+    """Return list of mid-y positions (px) for each competency label row."""
+    key = str(png_path)
+    with _COMP_ROWS_LOCK:
+        cached = _COMP_ROWS_CACHE.get(key)
+        if cached is not None:
+            return cached
+    import numpy as np
+    im = np.array(Image.open(png_path).convert("RGB"))
+    r, g, b = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+    white = (r > 220) & (g > 220) & (b > 220)
+    bands: list[int] = []
+    in_run = False
+    band_start = 0
+    for y in range(340, 700):
+        n = white[y, 1280:1900].sum()
+        if n > 5 and not in_run:
+            band_start = y
+            in_run = True
+        elif n <= 5 and in_run:
+            if y - band_start > 5:
+                bands.append((band_start + y) // 2)
+            in_run = False
+    with _COMP_ROWS_LOCK:
+        _COMP_ROWS_CACHE[key] = bands
+    return bands
+
+
+def _draw_competency_stars(
+    draw: ImageDraw.ImageDraw, png_path: Path, star_values: list[float],
+) -> None:
+    """Render a 5-star bar at the right of each competency row (0–10 → 5★)."""
+    if not star_values:
+        return
+    rows = _detect_competency_rows(png_path)
+    if not rows:
+        return
+    n = min(len(rows), len(star_values))
+    star_size = 22
+    gap = 4
+    star_full = (240, 200, 60)     # gold
+    star_empty = (90, 100, 130)    # muted
+
+    for i in range(n):
+        ymid = rows[i]
+        val = star_values[i] or 0
+        # Map 0–10 to 0–5 stars (rounded to nearest half)
+        n_half = round((val / 10.0) * 10)  # 0..10 half-stars
+        # Right-align star bar near the right edge of the scouting box (~1900)
+        bar_w = 5 * star_size + 4 * gap
+        bx = 1900 - bar_w - 8
+        by = ymid - star_size // 2
+        for s in range(5):
+            cx = bx + s * (star_size + gap)
+            half_idx = s * 2
+            if n_half >= half_idx + 2:
+                fill = star_full
+            elif n_half == half_idx + 1:
+                fill = star_full  # treat half as full for simplicity
+            else:
+                fill = star_empty
+            _draw_star(draw, cx + star_size // 2, by + star_size // 2,
+                       star_size // 2, fill)
+
+
+def _draw_star(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, fill) -> None:
+    """Draw a 5-pointed star centered at (cx, cy) with outer radius r."""
+    import math
+    pts = []
+    for i in range(10):
+        ang = -math.pi / 2 + i * math.pi / 5
+        rr = r if i % 2 == 0 else r * 0.45
+        pts.append((cx + rr * math.cos(ang), cy + rr * math.sin(ang)))
+    draw.polygon(pts, fill=fill)
+
+
 # ─── Public renderer ──────────────────────────────────────────────────────
 
 def get_template_png_path(role: str) -> Path | None:
     """Resolve the PNG file for a given role/template name."""
     fname = ROLE_TO_PNG.get(role)
     if not fname:
-        # Fallback: try fuzzy match by lowercase token
         target = role.lower().replace(" ", "")
         for k, v in ROLE_TO_PNG.items():
             if k.lower().replace(" ", "") == target:
@@ -219,57 +332,72 @@ def render_png_preview(
     *,
     debug: bool = False,
 ) -> bytes | None:
-    """Render the preview PNG by overlaying app data on the role template.
-
-    `data` keys map to FIELDS keys above. Missing values are skipped.
-    Returns PNG bytes, or None if no template image exists for the role.
-    """
+    """Render the preview PNG by overlaying app data on the role template."""
     png_path = get_template_png_path(role)
     if png_path is None:
         return None
 
-    img = Image.open(png_path).convert("RGB")
+    img = Image.open(png_path).convert("RGBA")
+
+    # Player photo first (so circular alpha shows the dot through if no photo)
+    photo = data.get("player_photo_bytes") or data.get("player_photo")
+    if photo:
+        _paste_circular_photo(img, photo, FIELDS["player_photo"])
+
     draw = ImageDraw.Draw(img)
 
-    white = (255, 255, 255)
-    navy = (12, 35, 92)
+    BLACK = (0, 0, 0)
+    WHITE = (255, 255, 255)
+    NAVY = (12, 35, 92)
 
-    # Field-specific defaults
+    # Field-specific render rules
     long_text_keys = {"summary"}
-    circle_keys = {"rating", "availability"}
-    on_white_keys = {"rating", "availability", "total_distance",
-                     "hi_runs", "sprints", "top_speed"}
+    on_white_keys = {"rating", "availability"}
+    on_dark_keys = {"total_distance", "hi_runs", "sprints", "top_speed",
+                    "summary", "player_name"}
 
     for key, val in data.items():
         if val is None or val == "":
             continue
         if key not in FIELDS:
             continue
+        if key in {"player_photo_bytes", "player_photo"}:
+            continue
         x, y, w, h, anchor = FIELDS[key]
         text = str(val)
         if key == "availability" and not text.endswith("%"):
-            text = f"{text}%"
+            try:
+                text = f"{int(round(float(text)))}%"
+            except Exception:
+                text = f"{text}%"
         if key in long_text_keys:
-            _draw_multiline(draw, text, (x, y, w, h), white)
+            _draw_multiline(draw, text, (x, y, w, h), WHITE, start_size=24)
             continue
-        # Color: white text on blue, navy on white circles, white on dark band
-        if key in circle_keys:
-            color = navy
-            start = 110
-        elif key in on_white_keys:
-            color = white
-            start = 26
+        if key in on_white_keys:
+            color = NAVY
+            start = 96 if key in {"rating", "availability"} else 26
+        elif key in on_dark_keys:
+            color = WHITE
+            start = 36 if key == "player_name" else 22
         else:
-            color = white
-            start = 32
-        _draw_anchored(draw, text, (x, y, w, h), anchor, color, start)
+            color = BLACK
+            start = 28
+        bold = key == "player_name"
+        _draw_anchored(draw, text, (x, y, w, h), anchor, color, start, bold=bold)
+
+    # Scouting stars (per-template detected rows)
+    stars = data.get("star_values")
+    if stars:
+        _draw_competency_stars(draw, png_path, stars)
 
     if debug:
         for key, (x, y, w, h, _a) in FIELDS.items():
             draw.rectangle([x, y, x + w, y + h], outline=(255, 0, 0), width=2)
+        for ymid in _detect_competency_rows(png_path):
+            draw.line([(1280, ymid), (1900, ymid)], fill=(0, 255, 0), width=1)
 
     out = io.BytesIO()
-    img.save(out, format="PNG", optimize=True)
+    img.convert("RGB").save(out, format="PNG", optimize=True)
     return out.getvalue()
 
 
@@ -281,8 +409,10 @@ def collect_preview_data(
     physical_data: dict | None,
     rating_value: float | None,
     summary_text: str | None,
+    star_values: list[float] | None = None,
+    player_photo_bytes: bytes | None = None,
 ) -> dict:
-    """Gather the bits scattered across session_state into one flat dict."""
+    """Gather session_state pieces into one flat dict for render_png_preview."""
     out: dict = {}
 
     if player_data:
@@ -291,6 +421,9 @@ def collect_preview_data(
             v = player_data.get(k)
             if v:
                 out[k] = v
+        name = player_data.get("name")
+        if name:
+            out["player_name"] = name
 
     if tm_stats:
         for k in ("season_matches", "career_matches", "season_minutes",
@@ -332,6 +465,12 @@ def collect_preview_data(
     if summary_text:
         out["summary"] = summary_text
 
+    if star_values:
+        out["star_values"] = list(star_values)
+
+    if player_photo_bytes:
+        out["player_photo_bytes"] = player_photo_bytes
+
     return out
 
 
@@ -339,40 +478,39 @@ def collect_preview_data(
 
 if __name__ == "__main__":
     sample = {
-        "date_of_birth": "12-05-2003",
-        "city_of_birth": "Amsterdam",
-        "nationality": "Dutch",
-        "height": "182 cm",
+        "player_name": "Aaron Bouwman",
+        "date_of_birth": "28/07/2000",
+        "city_of_birth": "Pontoise",
+        "nationality": "Congo, France",
+        "height": "1.85 M",
         "preferred_foot": "Right",
         "club": "FC Den Bosch",
-        "league": "KKD",
+        "league": "Keuken Kampioen Divisie",
         "agency": "ProSoccer",
         "agent": "Jan Jansen",
-        "season_matches": "21",
-        "career_matches": "84",
-        "season_minutes": "1842",
-        "career_minutes": "6710",
-        "season_goals": "2",
-        "career_goals": "11",
-        "season_assists": "5",
-        "career_assists": "23",
-        "rating": "7.8",
+        "season_matches": 66, "career_matches": 100,
+        "season_minutes": 5860, "career_minutes": 7936,
+        "season_goals": 30, "career_goals": 32,
+        "season_assists": 20, "career_assists": 22,
+        "rating": "7.4",
         "availability": "92%",
-        "end_of_contract": "Jun 2026",
-        "transfer_value": "€750K",
+        "end_of_contract": "30/06/2026",
+        "transfer_value": "€150K",
         "prediction_year_1": "Top KKD",
         "prediction_year_2": "Eredivisie",
-        "next_step": "FC Den Bosch",
+        "next_step": "Barcelona",
         "total_distance": "11.4 km",
         "hi_runs": "62",
         "sprints": "21",
         "top_speed": "32.1 km/h",
         "summary": "Goed positiespel, schakelt snel om. Leesvermogen op niveau "
                    "voor de KKD; technisch in nauwe ruimtes nog wisselvallig.",
+        "star_values": [8.0, 7.0, 6.5, 9.0, 7.5, 6.0, 8.5, 7.0, 5.5],
     }
-    out = render_png_preview(sample, "Deep Lying Playmaker", debug="--debug" in sys.argv)
+    role = sys.argv[1] if len(sys.argv) > 1 else "Deep Lying Playmaker"
+    out = render_png_preview(sample, role, debug="--debug" in sys.argv)
     if not out:
-        print("No PNG template found for role.")
+        print(f"No PNG template for {role}")
         sys.exit(1)
     Path("png_preview_smoke.png").write_bytes(out)
-    print("wrote png_preview_smoke.png")
+    print(f"wrote png_preview_smoke.png ({role})")

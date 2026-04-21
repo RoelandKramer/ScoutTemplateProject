@@ -277,16 +277,10 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
     # We need to find all rows for the target season and sum them up
     _parse_detailed_stats(soup, result, season_short)
 
-    # Availability: % of club matches this season the player was in the squad.
-    try:
-        m2 = re.match(r"(\d{4})/", target_season_label)
-        season_year = int(m2.group(1)) if m2 else 2025
-        pct, in_squad, total = _fetch_availability(player.url, season_year)
-        result["availability_pct"] = pct
-        result["availability_in_squad"] = in_squad
-        result["availability_total"] = total
-    except Exception:
-        pass
+    # Availability is computed elsewhere when the user fetches physical data
+    # (so it lines up with the same trigger and isn't re-scraped on every TM
+    # call). The result keys are still populated so downstream readers see a
+    # consistent shape.
 
     return result
 

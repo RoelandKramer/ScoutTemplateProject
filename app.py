@@ -1285,17 +1285,6 @@ def _transfermarkt_section(
             st.session_state[state_key] = stats
             if not any(stats.get(k, 0) for k in ["season_matches", "career_matches"]):
                 st.warning(t("tm_not_found", L))
-            # Availability feedback (scraped alongside season/career stats)
-            pct = stats.get("availability_pct")
-            if pct is not None:
-                st.success(t(
-                    "availability_scraped", L,
-                    pct=f"{pct:g}",
-                    in_squad=stats.get("availability_in_squad", 0),
-                    total=stats.get("availability_total", 0),
-                ))
-            else:
-                st.info(t("availability_scrape_failed", L))
         except Exception as exc:
             st.error(f"Transfermarkt error: {exc}")
 
@@ -1354,13 +1343,16 @@ def _physical_data_section(
     player_data: dict | None,
     key_prefix: str = "phys",
     state_key: str = "physical_data",
+    tm_state_key: str | None = None,
 ) -> dict | None:
     """Render the 'Obtain physical data' section for Eredivisie/KKD players.
 
     Populates st.session_state[state_key] with a dict containing:
-      availability (pct), total_distance (meters), hi_runs, sprint_efforts,
-      top_speed (user-entered), n_matches_60plus.
-    Returns that dict, or None if nothing fetched.
+      total_distance (meters), hi_runs, sprint_efforts, top_speed (user),
+      n_matches_60plus.
+    Also computes the player's availability (% of team matches in squad
+    this season) and writes it onto st.session_state[tm_state_key] under
+    availability_pct / _in_squad / _total. Returns the physical dict.
     """
     L = _lang()
     if not _is_kkd_or_eredivisie(player_data):
@@ -1371,6 +1363,7 @@ def _physical_data_section(
     st.caption(t("physical_data_note", L))
 
     player_name = (player_data or {}).get("name", "").strip()
+    player_club = (player_data or {}).get("club", "").strip()
 
     if st.button(
         t("obtain_physical_data", L),
@@ -1381,37 +1374,52 @@ def _physical_data_section(
             st.warning(t("physical_data_no_name", L))
         else:
             try:
-                import pandas as pd
-                df = _load_physical_stats_df()
-                name_col = "player_name"
-                mask = df[name_col].astype(str).str.strip().str.lower() == player_name.lower()
-                matches = df[mask]
-                if matches.empty:
-                    st.warning(t("physical_data_not_found", L))
-                    st.session_state.pop(state_key, None)
-                else:
-                    row = matches.iloc[0]
-
-                    def _num(v):
+                with st.spinner(t("calculating_avail_and_phys", L)):
+                    # Availability (Sofascore — not surfaced in UI by name)
+                    if tm_state_key:
                         try:
-                            if pd.isna(v):
-                                return None
+                            from sofascore import get_player_availability
+                            avail = get_player_availability(player_name, player_club)
+                            tm = dict(st.session_state.get(tm_state_key) or {})
+                            tm["availability_pct"] = avail.get("availability_pct")
+                            tm["availability_in_squad"] = avail.get("availability_in_squad", 0)
+                            tm["availability_total"] = avail.get("availability_total", 0)
+                            st.session_state[tm_state_key] = tm
                         except Exception:
                             pass
-                        try:
-                            return float(v)
-                        except (TypeError, ValueError):
-                            return None
 
-                    prev = st.session_state.get(state_key) or {}
-                    st.session_state[state_key] = {
-                        "total_distance": _num(row.get("total_distance_per90")),
-                        "hi_runs": _num(row.get("hi_runs_per90")),
-                        "sprint_efforts": _num(row.get("sprint_runs_per90")),
-                        "top_speed": prev.get("top_speed"),
-                        "n_matches_60plus": int(_num(row.get("n_matches_60plus")) or 0),
-                        "_source_name": str(row.get(name_col)),
-                    }
+                    # Physical CSV lookup
+                    import pandas as pd
+                    df = _load_physical_stats_df()
+                    name_col = "player_name"
+                    mask = df[name_col].astype(str).str.strip().str.lower() == player_name.lower()
+                    matches = df[mask]
+                    if matches.empty:
+                        st.warning(t("physical_data_not_found", L))
+                        st.session_state.pop(state_key, None)
+                    else:
+                        row = matches.iloc[0]
+
+                        def _num(v):
+                            try:
+                                if pd.isna(v):
+                                    return None
+                            except Exception:
+                                pass
+                            try:
+                                return float(v)
+                            except (TypeError, ValueError):
+                                return None
+
+                        prev = st.session_state.get(state_key) or {}
+                        st.session_state[state_key] = {
+                            "total_distance": _num(row.get("total_distance_per90")),
+                            "hi_runs": _num(row.get("hi_runs_per90")),
+                            "sprint_efforts": _num(row.get("sprint_runs_per90")),
+                            "top_speed": prev.get("top_speed"),
+                            "n_matches_60plus": int(_num(row.get("n_matches_60plus")) or 0),
+                            "_source_name": str(row.get(name_col)),
+                        }
             except Exception as exc:
                 st.error(f"{t('physical_fetch_error', L)}: {exc}")
 
@@ -2328,6 +2336,7 @@ elif page == "New Report":
     # ── Physical data (Eredivisie / KKD only) ─────────────────────────────
     _physical_data_section(
         player_data, key_prefix="new_phys", state_key="new_physical_data",
+        tm_state_key=NEW_TM_KEY,
     )
 
     # ── Player photo ──────────────────────────────────────────────────────
@@ -2421,7 +2430,7 @@ elif page == "New Report":
         if s_:
             filled = [v for v in s_ if v]
             if filled:
-                rating_val = round(sum(filled) / len(filled) * 2, 1)  # 0–5★ → 0–10
+                rating_val = round(sum(filled) / len(filled), 1)  # already 0–10
         return collect_preview_data(
             player_data=_pd,
             tm_stats=_tm,
@@ -2429,6 +2438,9 @@ elif page == "New Report":
             physical_data=st.session_state.get("new_physical_data"),
             rating_value=rating_val,
             summary_text=None,
+            star_values=s_,
+            player_photo_bytes=(st.session_state.get("new_player_photo_circ")
+                                or st.session_state.get("new_player_photo_full")),
         )
 
     _slide_preview_button(
@@ -2940,6 +2952,7 @@ elif page == "Upload & Edit":
             upload_player_data,
             key_prefix="upload_phys",
             state_key="upload_physical_data",
+            tm_state_key=UPLOAD_TM_KEY,
         )
 
         # ── Player photo ──────────────────────────────────────────────
@@ -3003,7 +3016,7 @@ elif page == "Upload & Edit":
             if s_:
                 filled = [v for v in s_ if v]
                 if filled:
-                    rating_val = round(sum(filled) / len(filled) * 2, 1)
+                    rating_val = round(sum(filled) / len(filled), 1)  # already 0–10
             return collect_preview_data(
                 player_data=_pd,
                 tm_stats=_tm,
@@ -3011,6 +3024,9 @@ elif page == "Upload & Edit":
                 physical_data=st.session_state.get("upload_physical_data"),
                 rating_value=rating_val,
                 summary_text=None,
+                star_values=s_,
+                player_photo_bytes=(st.session_state.get("upload_player_photo_circ")
+                                    or st.session_state.get("upload_player_photo_full")),
             )
 
         _slide_preview_button(
