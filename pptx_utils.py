@@ -1074,11 +1074,10 @@ def _write_multiline_text_shape(shape, lines: list) -> None:
 
 
 def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
-    """Fill the physical-data placeholders on the rating slide.
+    """Fill the physical-data placeholders (bottom-left stack) on the rating slide.
 
-    * ``TextBox 31`` (bottom-left stack, top~12.64″, left~2.85″) — 4 lines:
-      Total Distance / HI-runs / Sprints / Top speed
-    * ``xx%`` shape (top~5.60″, left~13.88″) — player availability %
+    ``TextBox 31`` (top~12.64″, left~2.85″) — 4 lines:
+    Total Distance / HI-runs / Sprints / Top speed.
     """
     if not physical_data:
         return
@@ -1110,21 +1109,12 @@ def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
         except ValueError:
             return s
 
-    def _fmt_pct(v):
-        try:
-            return f"{float(v):.0f}%"
-        except (TypeError, ValueError):
-            return ""
-
     total_distance = physical_data.get("total_distance")
     hi_runs = physical_data.get("hi_runs")
     sprints = physical_data.get("sprint_efforts")
     top_speed = physical_data.get("top_speed")
-    availability = physical_data.get("availability")
 
     EMU = 914400
-    # Bottom-left 4-line TextBox 31 (the slide has another TextBox 31 at top~10
-    # that's a separator — filter on position).
     for shape in rating_slide.shapes:
         if (shape.name == "TextBox 31"
                 and shape.has_text_frame
@@ -1138,12 +1128,20 @@ def fill_physical_data(prs, template_cfg: dict, physical_data: dict) -> None:
             ])
             break
 
-    # Big "PLAYER AVAILABILITY" box (right-hand side)
+
+def fill_availability(prs, template_cfg: dict, availability_pct) -> None:
+    """Fill the big ``xx%`` box (PLAYER AVAILABILITY, top~5.60″, left~13.88″)
+    with the scraped Transfermarkt availability percentage."""
+    if availability_pct is None:
+        return
+    try:
+        pct_text = f"{float(availability_pct):.0f}%"
+    except (TypeError, ValueError):
+        return
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
     for shape in rating_slide.shapes:
         if shape.name == "xx%" and shape.has_text_frame:
-            pct = _fmt_pct(availability)
-            if pct:
-                _write_text_shape(shape, pct)
+            _write_text_shape(shape, pct_text)
             break
 
 
@@ -1246,6 +1244,47 @@ def fill_player_photo(
             pic = rating_slide.shapes.add_picture(img_stream, left, top, width, height)
             pic.name = "player_photo_rating"
 
+def _today_ddmmyyyy() -> str:
+    import datetime as _dt
+    return _dt.date.today().strftime("%d-%m-%Y")
+
+
+def extract_report_date(pptx_bytes: bytes, rating_slide_idx: int = 3) -> str | None:
+    """Return the current 'DATE:' value from an existing pptx, or None if the
+    field is still the placeholder (DD-MM-JJJJ) or cannot be found."""
+    try:
+        prs = Presentation(io.BytesIO(pptx_bytes))
+    except Exception:
+        return None
+    if rating_slide_idx >= len(prs.slides):
+        return None
+    for shape in prs.slides[rating_slide_idx].shapes:
+        if not shape.has_text_frame:
+            continue
+        txt = (shape.text_frame.text or "").strip()
+        if txt.upper().startswith("DATE:"):
+            val = txt.split(":", 1)[1].strip()
+            if not val or "JJJJ" in val.upper() or "YYYY" in val.upper():
+                return None
+            return val
+    return None
+
+
+def fill_report_date(prs, template_cfg: dict, date_str: str) -> None:
+    """Replace the 'DATE: DD-MM-JJJJ' placeholder on the rating slide with the
+    given date string (formatted as DD-MM-YYYY by the caller)."""
+    if not date_str:
+        return
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+    for shape in rating_slide.shapes:
+        if not shape.has_text_frame:
+            continue
+        txt = shape.text_frame.text or ""
+        if "DD-MM-JJJJ" in txt or "DATE:" in txt.upper():
+            _write_text_shape(shape, f"DATE: {date_str}")
+            return
+
+
 def fill_template(
     template_cfg: dict,
     star_values: list,
@@ -1258,6 +1297,7 @@ def fill_template(
     physical_data: dict | None = None,
     transfer_details: dict | None = None,
     scouting_dates: list | None = None,
+    report_date: str | None = None,
 ) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
@@ -1265,12 +1305,14 @@ def fill_template(
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:
         fill_player_stats(prs, template_cfg, tm_stats)
+        fill_availability(prs, template_cfg, tm_stats.get("availability_pct"))
     if physical_data:
         fill_physical_data(prs, template_cfg, physical_data)
     if transfer_details:
         fill_transfer_details(prs, template_cfg, transfer_details)
     if scouting_dates:
         fill_scouting_dates(prs, template_cfg, scouting_dates)
+    fill_report_date(prs, template_cfg, report_date or _today_ddmmyyyy())
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)
@@ -1293,6 +1335,7 @@ def fill_from_bytes(
     physical_data: dict | None = None,
     transfer_details: dict | None = None,
     scouting_dates: list | None = None,
+    report_date: str | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
@@ -1300,12 +1343,14 @@ def fill_from_bytes(
         fill_player_info(prs, template_cfg, player_data)
     if tm_stats:
         fill_player_stats(prs, template_cfg, tm_stats)
+        fill_availability(prs, template_cfg, tm_stats.get("availability_pct"))
     if physical_data:
         fill_physical_data(prs, template_cfg, physical_data)
     if transfer_details:
         fill_transfer_details(prs, template_cfg, transfer_details)
     if scouting_dates:
         fill_scouting_dates(prs, template_cfg, scouting_dates)
+    fill_report_date(prs, template_cfg, report_date or _today_ddmmyyyy())
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
     _apply_ratings(prs, template_cfg, star_values, comments, video_data)

@@ -227,6 +227,9 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
     Returns a dict with keys:
         season_matches, season_minutes, season_goals, season_assists,
         career_matches, career_minutes, career_goals, career_assists,
+        availability_pct (% of club matches this season the player was in the squad,
+            or None if it couldn't be determined),
+        availability_in_squad, availability_total (integers backing the %),
         tm_url (the Transfermarkt profile URL),
         tm_image (raw image bytes of player portrait, or None)
     """
@@ -235,6 +238,9 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
         "season_goals": 0, "season_assists": 0,
         "career_matches": 0, "career_minutes": 0,
         "career_goals": 0, "career_assists": 0,
+        "availability_pct": None,
+        "availability_in_squad": 0,
+        "availability_total": 0,
         "tm_url": "",
         "tm_image": None,
     }
@@ -271,7 +277,100 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
     # We need to find all rows for the target season and sum them up
     _parse_detailed_stats(soup, result, season_short)
 
+    # Availability: % of club matches this season the player was in the squad.
+    try:
+        m2 = re.match(r"(\d{4})/", target_season_label)
+        season_year = int(m2.group(1)) if m2 else 2025
+        pct, in_squad, total = _fetch_availability(player.url, season_year)
+        result["availability_pct"] = pct
+        result["availability_in_squad"] = in_squad
+        result["availability_total"] = total
+    except Exception:
+        pass
+
     return result
+
+
+# ─── Availability (% of club matches in squad) ─────────────────────────────
+
+def _fetch_availability(profile_url: str, season_year: int) -> tuple[float | None, int, int]:
+    """Scrape the season match log and return (availability_pct, in_squad, total).
+
+    Availability = matches the player was in the team's matchday squad
+    (starter OR on the bench, used or not) divided by total club matches
+    that season. Returns (None, 0, 0) if parsing fails.
+    """
+    m = re.search(r"/spieler/(\d+)", profile_url)
+    if not m:
+        return None, 0, 0
+    pid = m.group(1)
+    slug_m = re.match(r"^/?([^/]+)/", profile_url)
+    slug = slug_m.group(1) if slug_m else "player"
+
+    # TM match log: "leistungsdaten" with plus/1 lists every game including
+    # unused bench appearances and 'not in squad' rows.
+    url = (
+        f"{_BASE}/{slug}/leistungsdaten/spieler/{pid}/plus/1"
+        f"?saison={season_year}"
+    )
+    try:
+        time.sleep(_DELAY)
+        resp = requests.get(url, headers=_HEADERS, timeout=15)
+        resp.raise_for_status()
+    except Exception:
+        return None, 0, 0
+
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    # Markers Transfermarkt uses for "not in squad" (various locales):
+    NOT_IN_SQUAD_TOKENS = (
+        "n.i.k.",           # German: nicht im Kader
+        "nicht im kader",
+        "not in squad",
+        "not in matchday squad",
+        "n.e.c.",           # English: not even on bench
+        "no convocato",     # Italian
+        "non convocato",
+        "niet in selectie",
+        "niet in de wedstrijdselectie",
+    )
+
+    in_squad = 0
+    total = 0
+    seen_rows: set[tuple[str, str]] = set()  # dedupe (matchday, opponent) across tables
+
+    for table in soup.select("table.items"):
+        rows = table.select("tbody tr")
+        for row in rows:
+            if "bg_blau_20" in (row.get("class") or []):
+                continue  # separator / header row
+            tds = row.select("td")
+            if len(tds) < 4:
+                continue
+            row_text = row.get_text(" ", strip=True)
+            low = row_text.lower()
+
+            # Skip headings / summary rows that lack a date-like column.
+            # A real match row typically has a date cell (dd/mm/yy or dd.mm.yy).
+            if not re.search(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b", row_text):
+                continue
+
+            # Dedupe across tables using (date, opponent-fragment)
+            date_m = re.search(r"\b(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b", row_text)
+            key = (date_m.group(1) if date_m else "", row_text[:60])
+            if key in seen_rows:
+                continue
+            seen_rows.add(key)
+
+            total += 1
+            if any(tok in low for tok in NOT_IN_SQUAD_TOKENS):
+                continue
+            in_squad += 1
+
+    if total == 0:
+        return None, 0, 0
+    pct = round(100.0 * in_squad / total, 1)
+    return pct, in_squad, total
 
 
 def _parse_detailed_stats(soup: BeautifulSoup, result: dict, season_short: str) -> None:

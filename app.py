@@ -14,7 +14,7 @@ from pptx_utils import (
     get_template_config, fill_template, fill_from_bytes,
     check_template_compatibility, extract_competency_descriptions,
     render_slide_as_image, render_slide_preview, get_last_preview_error,
-    warm_up_preview_engine, TRANSFER_FIELD_ORDER,
+    warm_up_preview_engine, TRANSFER_FIELD_ORDER, extract_report_date,
 )
 import storage
 from i18n import t, APP_LANGUAGES
@@ -305,6 +305,11 @@ def _login_page():
             <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">{t('login_title', L)}</h1>
             <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">{t('login_subtitle', L)}</p>
         </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:0.5rem 0 1.25rem 0;">
+            <div style="width:18px;height:18px;border:3px solid #d1dff0;border-top-color:#1a3370;border-radius:50%;animation:tlspin 1s linear infinite;"></div>
+            <span style="color:#1a3370;font-size:.9rem;">{t('app_loading_note', L)}</span>
+        </div>
+        <style>@keyframes tlspin {{ to {{ transform: rotate(360deg); }} }}</style>
         """,
         unsafe_allow_html=True,
     )
@@ -1277,6 +1282,17 @@ def _transfermarkt_section(
             st.session_state[state_key] = stats
             if not any(stats.get(k, 0) for k in ["season_matches", "career_matches"]):
                 st.warning(t("tm_not_found", L))
+            # Availability feedback (scraped alongside season/career stats)
+            pct = stats.get("availability_pct")
+            if pct is not None:
+                st.success(t(
+                    "availability_scraped", L,
+                    pct=f"{pct:g}",
+                    in_squad=stats.get("availability_in_squad", 0),
+                    total=stats.get("availability_total", 0),
+                ))
+            else:
+                st.info(t("availability_scrape_failed", L))
         except Exception as exc:
             st.error(f"Transfermarkt error: {exc}")
 
@@ -1386,7 +1402,6 @@ def _physical_data_section(
 
                     prev = st.session_state.get(state_key) or {}
                     st.session_state[state_key] = {
-                        "availability": _num(row.get("availability_pct")),
                         "total_distance": _num(row.get("total_distance_per90")),
                         "hi_runs": _num(row.get("hi_runs_per90")),
                         "sprint_efforts": _num(row.get("sprint_runs_per90")),
@@ -1399,32 +1414,26 @@ def _physical_data_section(
 
     data = st.session_state.get(state_key)
     if data:
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
-            av = data.get("availability")
-            st.metric(
-                t("availability_label", L),
-                f"{av:.0f}%" if av is not None else "—",
-            )
-        with c2:
             td = data.get("total_distance")
             st.metric(
                 t("total_distance_label", L),
                 f"{td / 1000:.2f} km" if td else "—",
             )
-        with c3:
+        with c2:
             hi = data.get("hi_runs")
             st.metric(
                 t("hi_runs_label", L),
                 f"{int(round(hi))}" if hi else "—",
             )
-        with c4:
+        with c3:
             sp = data.get("sprint_efforts")
             st.metric(
                 t("sprint_efforts_label", L),
                 f"{int(round(sp))}" if sp else "—",
             )
-        with c5:
+        with c4:
             ts_key = f"{key_prefix}_top_speed"
             ts_val = st.text_input(
                 t("top_speed_label", L),
@@ -1640,6 +1649,7 @@ def _slide_preview_button(
                 mime="application/pdf",
                 key=f"{key_prefix}_preview_pdf_dl",
             )
+        st.info(t("preview_disclaimer", L))
 
 
 # ─── Video folder setup ──────────────────────────────────────────────────
@@ -2808,6 +2818,49 @@ elif page == "Upload & Edit":
             f"Rating {'found ✓' if check_result['has_rating_placeholder'] else 'not found ✗'}"
         )
 
+        # ── Report-date popup: if the draft already has a date baked in and ───
+        # it's not today, offer to refresh it. By default we keep the existing
+        # date so the user has to opt in before it's overwritten with today's.
+        import datetime as _dt_date
+        _today_str = _dt_date.date.today().strftime("%d-%m-%Y")
+        _upload_bytes_for_date = st.session_state.get("upload_bytes")
+        _dated_rid = st.session_state.get("upload_active_report_id") or st.session_state.get("upload_file_key") or ""
+        _seen_key = f"_date_prompt_seen::{_dated_rid}"
+        # Drop stale upload_report_date when switching to a different draft.
+        if st.session_state.get("_upload_report_date_rid") != _dated_rid:
+            st.session_state.pop("upload_report_date", None)
+            st.session_state["_upload_report_date_rid"] = _dated_rid
+        _existing_date = None
+        if _upload_bytes_for_date:
+            _existing_date = extract_report_date(
+                _upload_bytes_for_date,
+                template_cfg.get("rating_slide_idx", 3),
+            )
+            # Default: preserve the date currently baked into the pptx so
+            # fill_from_bytes doesn't silently rewrite it to today.
+            if _existing_date and "upload_report_date" not in st.session_state:
+                st.session_state["upload_report_date"] = _existing_date
+
+        if (_existing_date and _existing_date != _today_str
+                and not st.session_state.get(_seen_key)):
+            st.info(t("adjust_date_prompt", L,
+                      old_date=_existing_date, new_date=_today_str))
+            _c_yes, _c_no = st.columns(2)
+            with _c_yes:
+                if st.button(t("adjust_date_yes", L),
+                             type="primary", use_container_width=True,
+                             key="upload_date_yes"):
+                    st.session_state["upload_report_date"] = _today_str
+                    st.session_state[_seen_key] = True
+                    st.rerun()
+            with _c_no:
+                if st.button(t("adjust_date_no", L, old_date=_existing_date),
+                             use_container_width=True,
+                             key="upload_date_no"):
+                    st.session_state["upload_report_date"] = _existing_date
+                    st.session_state[_seen_key] = True
+                    st.rerun()
+
         # ── Player info (editable card, no search — player already selected) ──
         st.markdown("---")
         upload_player_data = st.session_state.get(UPLOAD_PDATA_KEY)
@@ -2888,6 +2941,7 @@ elif page == "Upload & Edit":
                 physical_data=st.session_state.get("upload_physical_data"),
                 transfer_details=st.session_state.get("upload_transfer_details"),
                 scouting_dates=st.session_state.get("upload_scouting_dates"),
+                report_date=st.session_state.get("upload_report_date"),
             )
             return out.getvalue()
 
@@ -2914,6 +2968,7 @@ elif page == "Upload & Edit":
                         physical_data=st.session_state.get("upload_physical_data"),
                         transfer_details=st.session_state.get("upload_transfer_details"),
                         scouting_dates=st.session_state.get("upload_scouting_dates"),
+                        report_date=st.session_state.get("upload_report_date"),
                     )
                     _snap_bytes = _snap.getvalue()
                     rid = storage.save_draft(
@@ -2947,6 +3002,7 @@ elif page == "Upload & Edit":
                         physical_data=st.session_state.get("upload_physical_data"),
                         transfer_details=st.session_state.get("upload_transfer_details"),
                         scouting_dates=st.session_state.get("upload_scouting_dates"),
+                        report_date=st.session_state.get("upload_report_date"),
                     )
                     pptx_bytes = output.getvalue()
                     pos = matched_name or "Unknown"
@@ -3010,6 +3066,7 @@ elif page == "Upload & Edit":
                                 physical_data=st.session_state.get("upload_physical_data"),
                                 transfer_details=st.session_state.get("upload_transfer_details"),
                                 scouting_dates=st.session_state.get("upload_scouting_dates"),
+                                report_date=st.session_state.get("upload_report_date"),
                             )
                             pptx_bytes = output.getvalue()
                             pos = matched_name or "Unknown"
