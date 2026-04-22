@@ -91,9 +91,9 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
     # Player name — to the right of photo, above the gold divider line at y≈141
     "player_name":       (160, 50, 400, 80, "lm"),
 
-    # Scouting sessions — top-right area above the competency list (TextBox 23
-    # on the rating slide). One line per entry, white text on dark-navy bg.
-    "scouting_dates":    (1280, 160, 620, 160, "tl"),
+    # Scouting sessions — inside the light-blue content box to the right of
+    # the "SCOUTING / Sci Sports" header (TextBox 23 on the rating slide).
+    "scouting_dates":    (1430, 55, 460, 220, "tl"),
 }
 
 
@@ -362,7 +362,9 @@ def render_png_preview(
     long_text_keys = {"summary", "scouting_dates"}
     on_white_keys = {"rating", "availability"}
     on_dark_keys = {"total_distance", "hi_runs", "sprints", "top_speed",
-                    "summary", "player_name", "scouting_dates"}
+                    "summary", "player_name"}
+    # scouting_dates sits on the light-blue content box — black text.
+    on_light_keys = {"scouting_dates"}
 
     for key, val in data.items():
         if val is None or val == "":
@@ -380,7 +382,8 @@ def render_png_preview(
                 text = f"{text}%"
         if key in long_text_keys:
             start = 22 if key == "scouting_dates" else 24
-            _draw_multiline(draw, text, (x, y, w, h), WHITE, start_size=start)
+            color = BLACK if key in on_light_keys else WHITE
+            _draw_multiline(draw, text, (x, y, w, h), color, start_size=start)
             continue
         if key in on_white_keys:
             color = NAVY
