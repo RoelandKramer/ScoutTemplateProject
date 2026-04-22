@@ -2670,6 +2670,7 @@ elif page == "New Report":
             star_values=s_,
             player_photo_bytes=(st.session_state.get("new_player_photo_circ")
                                 or st.session_state.get("new_player_photo_full")),
+            scouting_dates=st.session_state.get("new_scouting_dates"),
         )
 
     _slide_preview_button(
@@ -3297,6 +3298,7 @@ elif page == "Upload & Edit":
                 star_values=s_,
                 player_photo_bytes=(st.session_state.get("upload_player_photo_circ")
                                     or st.session_state.get("upload_player_photo_full")),
+                scouting_dates=st.session_state.get("upload_scouting_dates"),
             )
 
         _slide_preview_button(

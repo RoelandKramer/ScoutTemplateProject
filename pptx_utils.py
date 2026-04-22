@@ -1054,7 +1054,61 @@ def fill_scouting_dates(prs, template_cfg: dict, scouting_dates: list) -> None:
         elif d:
             lines.append(d)
     if lines:
-        _write_text_shape(target, "\n".join(lines))
+        _replace_all_paragraphs(target, lines)
+
+
+def _replace_all_paragraphs(shape, lines: list[str]) -> None:
+    """Replace ALL text in a shape with one paragraph per line, preserving
+    formatting from the first existing run (font, size, color, bold, etc.)."""
+    if not shape.has_text_frame or not lines:
+        return
+    tf = shape.text_frame
+
+    # Capture formatting from the first run, if any.
+    src_run = None
+    for p in tf.paragraphs:
+        if p.runs:
+            src_run = p.runs[0]
+            break
+    src_align = tf.paragraphs[0].alignment if tf.paragraphs else None
+
+    def _copy_run_format(src, dst) -> None:
+        if src is None:
+            return
+        sf, df = src.font, dst.font
+        try:
+            if sf.name: df.name = sf.name
+        except Exception: pass
+        try:
+            if sf.size: df.size = sf.size
+        except Exception: pass
+        try:
+            if sf.bold is not None: df.bold = sf.bold
+        except Exception: pass
+        try:
+            if sf.italic is not None: df.italic = sf.italic
+        except Exception: pass
+        try:
+            if sf.color and sf.color.type is not None and sf.color.rgb is not None:
+                df.color.rgb = sf.color.rgb
+        except Exception: pass
+
+    # Clear the entire text frame by removing all <a:p> children, then add fresh ones.
+    from copy import deepcopy
+    from lxml import etree
+    txBody = tf._txBody
+    nsmap = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+    for p_el in txBody.findall("a:p", nsmap):
+        txBody.remove(p_el)
+
+    for i, line in enumerate(lines):
+        p = tf.add_paragraph()
+        if src_align is not None:
+            try: p.alignment = src_align
+            except Exception: pass
+        run = p.add_run()
+        run.text = line
+        _copy_run_format(src_run, run)
 
 
 # ─── Scouting summary (rating slide, bottom-center dark-navy block) ──────

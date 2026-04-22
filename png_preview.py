@@ -90,6 +90,10 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
 
     # Player name — to the right of photo, above the gold divider line at y≈141
     "player_name":       (160, 50, 400, 80, "lm"),
+
+    # Scouting sessions — top-right area above the competency list (TextBox 23
+    # on the rating slide). One line per entry, white text on dark-navy bg.
+    "scouting_dates":    (1280, 160, 620, 160, "tl"),
 }
 
 
@@ -355,10 +359,10 @@ def render_png_preview(
     NAVY = (12, 35, 92)
 
     # Field-specific render rules
-    long_text_keys = {"summary"}
+    long_text_keys = {"summary", "scouting_dates"}
     on_white_keys = {"rating", "availability"}
     on_dark_keys = {"total_distance", "hi_runs", "sprints", "top_speed",
-                    "summary", "player_name"}
+                    "summary", "player_name", "scouting_dates"}
 
     for key, val in data.items():
         if val is None or val == "":
@@ -375,7 +379,8 @@ def render_png_preview(
             except Exception:
                 text = f"{text}%"
         if key in long_text_keys:
-            _draw_multiline(draw, text, (x, y, w, h), WHITE, start_size=24)
+            start = 22 if key == "scouting_dates" else 24
+            _draw_multiline(draw, text, (x, y, w, h), WHITE, start_size=start)
             continue
         if key in on_white_keys:
             color = NAVY
@@ -415,6 +420,7 @@ def collect_preview_data(
     summary_text: str | None,
     star_values: list[float] | None = None,
     player_photo_bytes: bytes | None = None,
+    scouting_dates: list | None = None,
 ) -> dict:
     """Gather session_state pieces into one flat dict for render_png_preview."""
     out: dict = {}
@@ -474,6 +480,23 @@ def collect_preview_data(
 
     if player_photo_bytes:
         out["player_photo_bytes"] = player_photo_bytes
+
+    if scouting_dates:
+        lines: list[str] = []
+        for entry in scouting_dates:
+            e = entry or {}
+            label = (e.get("label") or "").strip()
+            if label:
+                lines.append(label)
+                continue
+            d = (e.get("date") or "").strip()
+            ttype = (e.get("type") or "").strip()
+            if d and ttype:
+                lines.append(f"{d}: {ttype}")
+            elif d:
+                lines.append(d)
+        if lines:
+            out["scouting_dates"] = "\n".join(lines)
 
     return out
 
