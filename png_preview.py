@@ -77,10 +77,10 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
     #   "Total Distance:" → 170 │ "HI Runs:" → 117
     #   "Sprints:"        → 114 │ "Top Speed:" → 139
     # We add a small gap so the value isn't glued to the colon.
-    "total_distance":    (180, 916, 200, 24, "lm"),
-    "hi_runs":           (127, 949, 200, 24, "lm"),
-    "sprints":           (124, 982, 200, 24, "lm"),
-    "top_speed":         (149, 1015, 200, 24, "lm"),
+    "total_distance":    (180, 911, 200, 24, "lm"),
+    "hi_runs":           (127, 944, 200, 24, "lm"),
+    "sprints":           (124, 977, 200, 24, "lm"),
+    "top_speed":         (149, 1010, 200, 24, "lm"),
 
     # Summary scouting (multiline wrapped text, white on blue)
     "summary":           (660, 760, 830, 285, "tl"),
