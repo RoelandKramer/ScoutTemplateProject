@@ -269,8 +269,85 @@ def get_player_availability(
         return out
 
 
+# ─── Season + career stats (used when Transfermarkt is unreachable) ──────
+
+def _current_season_year_label() -> str:
+    """Return Sofascore's 'year' string for the current European season, e.g. '25/26'."""
+    from datetime import datetime, timezone
+    dt = datetime.now(tz=timezone.utc)
+    start_year = dt.year if dt.month >= 7 else dt.year - 1
+    return f"{str(start_year)[2:]}/{str(start_year + 1)[2:]}"
+
+
+def get_player_stats(
+    player_name: str,
+    club_hint: str = "",
+) -> Dict[str, Any]:
+    """Return season + career totals from Sofascore.
+
+    Aggregates across every (tournament, season) pair listed for the player.
+    The "season" totals are the sum over all tournaments for the current
+    European season (`YY/YY+1`). The "career" totals sum every pair.
+
+    Returned keys:
+      season_matches, season_goals, season_assists, season_minutes,
+      career_matches, career_goals, career_assists, career_minutes.
+    All zero on failure.
+    """
+    out: Dict[str, Any] = {
+        "season_matches": 0, "season_goals": 0,
+        "season_assists": 0, "season_minutes": 0,
+        "career_matches": 0, "career_goals": 0,
+        "career_assists": 0, "career_minutes": 0,
+    }
+    try:
+        pid, _tid = _resolve(player_name, club_hint)
+        if not pid:
+            return out
+
+        data = _get_json(f"/api/v1/player/{pid}/statistics/seasons")
+        if not data:
+            return out
+
+        cur_year = _current_season_year_label()
+        for entry in data.get("uniqueTournamentSeasons") or []:
+            ut = (entry.get("uniqueTournament") or {}).get("id")
+            if not ut:
+                continue
+            for season in entry.get("seasons") or []:
+                sid = season.get("id")
+                if not sid:
+                    continue
+                stats = _get_json(
+                    f"/api/v1/player/{pid}/unique-tournament/{ut}"
+                    f"/season/{sid}/statistics/overall"
+                )
+                if not stats:
+                    continue
+                s = stats.get("statistics") or {}
+                apps = int(s.get("appearances") or 0)
+                goals = int(s.get("goals") or 0)
+                assists = int(s.get("assists") or 0)
+                mins = int(s.get("minutesPlayed") or 0)
+
+                out["career_matches"] += apps
+                out["career_goals"] += goals
+                out["career_assists"] += assists
+                out["career_minutes"] += mins
+
+                if str(season.get("year") or "") == cur_year:
+                    out["season_matches"] += apps
+                    out["season_goals"] += goals
+                    out["season_assists"] += assists
+                    out["season_minutes"] += mins
+        return out
+    except Exception:
+        return out
+
+
 if __name__ == "__main__":
     import sys
     name = sys.argv[1] if len(sys.argv) > 1 else "Lionel Messi"
     club = sys.argv[2] if len(sys.argv) > 2 else ""
     print(get_player_availability(name, club))
+    print(get_player_stats(name, club))

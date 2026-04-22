@@ -1284,10 +1284,10 @@ def _transfermarkt_section(
         except Exception as exc:
             st.error(f"Transfermarkt error: {exc}")
 
-    # Show the Transfermarkt portrait image if available (display-only)
+    # Show the player portrait if available (display-only)
     _tm_img = st.session_state.get(f"{key_prefix}_tm_image")
     if _tm_img:
-        st.image(_tm_img, width=120, caption=f"Transfermarkt: {player_name}")
+        st.image(_tm_img, width=120, caption=player_name)
 
     stats = st.session_state.get(state_key)
     if stats:
@@ -1425,7 +1425,7 @@ def _physical_data_section(
 
     data = st.session_state.get(state_key)
     if data:
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             td = data.get("total_distance")
             st.metric(
@@ -1455,6 +1455,16 @@ def _physical_data_section(
             if (ts_val or "") != (data.get("top_speed") or ""):
                 data["top_speed"] = ts_val
                 st.session_state[state_key] = data
+        with c5:
+            tm_blob = st.session_state.get(tm_state_key) or {} if tm_state_key else {}
+            avail_pct = tm_blob.get("availability_pct")
+            in_squad = tm_blob.get("availability_in_squad") or 0
+            total = tm_blob.get("availability_total") or 0
+            st.metric(
+                t("availability_label", L),
+                f"{avail_pct:.0f}%" if avail_pct is not None else "—",
+                help=f"{in_squad}/{total}" if total else None,
+            )
         if data.get("n_matches_60plus"):
             st.caption(t("physical_based_on_matches", L))
 
