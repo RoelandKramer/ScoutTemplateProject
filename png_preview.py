@@ -93,7 +93,7 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
 
     # Scouting sessions — inside the light-blue content box to the right of
     # the "SCOUTING / Sci Sports" header (TextBox 23 on the rating slide).
-    "scouting_dates":    (1430, 55, 460, 220, "tl"),
+    "scouting_dates":    (1490, 55, 400, 220, "tl"),
 }
 
 
@@ -492,7 +492,7 @@ def collect_preview_data(
             if label:
                 lines.append(label)
                 continue
-            d = (e.get("date") or "").strip()
+            d = (e.get("date") or "").strip().replace("/", "-")
             ttype = (e.get("type") or "").strip()
             if d and ttype:
                 lines.append(f"{d}: {ttype}")

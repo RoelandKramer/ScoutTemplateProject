@@ -1047,7 +1047,7 @@ def fill_scouting_dates(prs, template_cfg: dict, scouting_dates: list) -> None:
         if label:
             lines.append(label)
             continue
-        d = (e.get("date") or "").strip()
+        d = (e.get("date") or "").strip().replace("/", "-")
         ttype = (e.get("type") or "").strip()
         if d and ttype:
             lines.append(f"{d}: {ttype}")
@@ -1094,14 +1094,12 @@ def _replace_all_paragraphs(shape, lines: list[str]) -> None:
         except Exception: pass
 
     # Clear the entire text frame by removing all <a:p> children, then add fresh ones.
-    from copy import deepcopy
-    from lxml import etree
     txBody = tf._txBody
     nsmap = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     for p_el in txBody.findall("a:p", nsmap):
         txBody.remove(p_el)
 
-    for i, line in enumerate(lines):
+    for line in lines:
         p = tf.add_paragraph()
         if src_align is not None:
             try: p.alignment = src_align
