@@ -53,6 +53,7 @@ def save_draft(
     tm_stats: dict | None = None,
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
+    summary_text: str | None = None,
 ) -> str:
     """Save or update a draft. Returns the report_id."""
     if not report_id:
@@ -94,6 +95,7 @@ def save_draft(
         "player_data": player_data,
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
+        "summary_text": summary_text or "",
         "updated_at": time.time(),
         "created_at": _load_draft_meta(username, report_id).get("created_at", time.time()),
     }
@@ -191,6 +193,7 @@ def save_finished(
     tm_stats: dict | None = None,
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
+    summary_text: str | None = None,
 ) -> str:
     """Save a finished PPTX + metadata. Returns the report_id."""
     finished = _finished_dir(username)
@@ -220,6 +223,7 @@ def save_finished(
         "comments": comments or [],
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
+        "summary_text": summary_text or "",
     }
     (finished / f"{report_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -335,6 +339,7 @@ def share_report(
     tm_stats: dict | None = None,
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
+    summary_text: str | None = None,
 ) -> str:
     """Copy a finished report into the recipient's received folder,
     preserving the full editable state (videos, player data, stats) so the
@@ -370,6 +375,7 @@ def share_report(
         "player_data": player_data,
         "tm_stats": tm_stats,
         "photo_refs": photo_refs if photo_refs else None,
+        "summary_text": summary_text or "",
     }
     (received / f"{share_id}.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"

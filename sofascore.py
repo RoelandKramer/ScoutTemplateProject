@@ -189,18 +189,56 @@ def _filter_season(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 # ─── Public API ───────────────────────────────────────────────────────────
 
+def _event_match_dict(ev: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a Sofascore event into a slim match dict for the UI.
+
+    Returned keys:
+      id          — Sofascore event id (used for de-dupe)
+      ts          — startTimestamp (int)
+      date        — formatted as MM-DD-YYYY (American style, requested by user)
+      home        — home team name
+      away        — away team name
+      label       — 'MM-DD-YYYY Home - Away'
+    """
+    from datetime import datetime, timezone
+    ts = int(ev.get("startTimestamp") or 0)
+    date_str = ""
+    if ts:
+        try:
+            date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%m-%d-%Y")
+        except Exception:
+            date_str = ""
+    home = ((ev.get("homeTeam") or {}).get("name") or "").strip()
+    away = ((ev.get("awayTeam") or {}).get("name") or "").strip()
+    label = f"{date_str} {home} - {away}".strip()
+    return {
+        "id": ev.get("id"),
+        "ts": ts,
+        "date": date_str,
+        "home": home,
+        "away": away,
+        "label": label,
+    }
+
+
 def get_player_availability(
     player_name: str,
     club_hint: str = "",
-) -> Dict[str, Optional[float]]:
-    """Return {availability_pct, availability_in_squad, availability_total}.
+) -> Dict[str, Any]:
+    """Return availability + the player's in-squad matches this season.
 
-    Best-effort. On any failure values default to (None, 0, 0).
+    Returned keys:
+      availability_pct, availability_in_squad, availability_total
+      matches  — list[dict] of in-squad matches (see _event_match_dict),
+                 newest first
+
+    Best-effort. On any failure values default to (None, 0, 0, []).
     """
-    out: Dict[str, Optional[float]] = {
+    out: Dict[str, Any] = {
         "availability_pct": None,
         "availability_in_squad": 0,
         "availability_total": 0,
+        "matches": [],
     }
     try:
         pid, tid = _resolve(player_name, club_hint)
@@ -213,15 +251,19 @@ def get_player_availability(
         team_event_ids = {ev.get("id") for ev in team_events}
 
         player_events = _filter_season(_list_events("player", pid))
-        in_squad = sum(1 for ev in player_events if ev.get("id") in team_event_ids)
+        in_squad_events = [ev for ev in player_events if ev.get("id") in team_event_ids]
+        in_squad = len(in_squad_events)
         total = len(team_event_ids)
         if total == 0:
             return out
 
         pct = round(100.0 * in_squad / total, 1)
+        # Newest first.
+        in_squad_events.sort(key=lambda e: int(e.get("startTimestamp") or 0), reverse=True)
         out["availability_pct"] = pct
         out["availability_in_squad"] = in_squad
         out["availability_total"] = total
+        out["matches"] = [_event_match_dict(ev) for ev in in_squad_events]
         return out
     except Exception:
         return out

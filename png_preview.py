@@ -72,13 +72,15 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
     "prediction_year_2": (1554, 932, 283, 44, "mm"),
     "next_step":         (1554, 989, 283, 44, "mm"),
 
-    # Physical stats — values aligned in a column to the right of the longest
-    # label ("Total Distance:" ends at x≈169). All four start at the same x
-    # so the values stack directly under each other.
-    "total_distance":    (180, 916, 135, 24, "lm"),
-    "hi_runs":           (180, 949, 135, 24, "lm"),
-    "sprints":           (180, 982, 135, 24, "lm"),
-    "top_speed":         (180, 1015, 135, 24, "lm"),
+    # Physical stats — value sits directly to the right of each label, on the
+    # same line. Label x-ends detected from the templates:
+    #   "Total Distance:" → 170 │ "HI Runs:" → 117
+    #   "Sprints:"        → 114 │ "Top Speed:" → 139
+    # We add a small gap so the value isn't glued to the colon.
+    "total_distance":    (180, 916, 200, 24, "lm"),
+    "hi_runs":           (127, 949, 200, 24, "lm"),
+    "sprints":           (124, 982, 200, 24, "lm"),
+    "top_speed":         (149, 1015, 200, 24, "lm"),
 
     # Summary scouting (multiline wrapped text, white on blue)
     "summary":           (660, 760, 830, 285, "tl"),
@@ -210,11 +212,14 @@ def _draw_multiline(
 
 
 def _paste_circular_photo(canvas: Image.Image, photo_bytes: bytes,
-                          box: tuple[int, int, int, int]) -> None:
-    """Crop photo to a circle and paste into the given square box."""
+                          box: tuple) -> None:
+    """Crop photo to a circle and paste into the given square box.
+
+    Accepts either (x, y, w, h) or (x, y, w, h, anchor) — anchor is ignored.
+    """
     if not photo_bytes:
         return
-    x, y, w, h = box
+    x, y, w, h = box[0], box[1], box[2], box[3]
     size = min(w, h)
     try:
         src = Image.open(io.BytesIO(photo_bytes)).convert("RGBA")
@@ -264,36 +269,35 @@ def _detect_competency_rows(png_path: Path) -> list[int]:
 def _draw_competency_stars(
     draw: ImageDraw.ImageDraw, png_path: Path, star_values: list[float],
 ) -> None:
-    """Render a 5-star bar at the right of each competency row (0–10 → 5★)."""
+    """Render a 10-star bar at the right of each competency row (0–10 → 10★)."""
     if not star_values:
         return
     rows = _detect_competency_rows(png_path)
     if not rows:
         return
     n = min(len(rows), len(star_values))
-    star_size = 22
-    gap = 4
+    star_count = 10
+    star_size = 16
+    gap = 3
     star_full = (240, 200, 60)     # gold
     star_empty = (90, 100, 130)    # muted
 
     for i in range(n):
         ymid = rows[i]
         val = star_values[i] or 0
-        # Map 0–10 to 0–5 stars (rounded to nearest half)
-        n_half = round((val / 10.0) * 10)  # 0..10 half-stars
+        # Number of fully-lit stars (0..10) — round to nearest whole star.
+        try:
+            n_full = int(round(float(val)))
+        except Exception:
+            n_full = 0
+        n_full = max(0, min(star_count, n_full))
         # Right-align star bar near the right edge of the scouting box (~1900)
-        bar_w = 5 * star_size + 4 * gap
+        bar_w = star_count * star_size + (star_count - 1) * gap
         bx = 1900 - bar_w - 8
         by = ymid - star_size // 2
-        for s in range(5):
+        for s in range(star_count):
             cx = bx + s * (star_size + gap)
-            half_idx = s * 2
-            if n_half >= half_idx + 2:
-                fill = star_full
-            elif n_half == half_idx + 1:
-                fill = star_full  # treat half as full for simplicity
-            else:
-                fill = star_empty
+            fill = star_full if s < n_full else star_empty
             _draw_star(draw, cx + star_size // 2, by + star_size // 2,
                        star_size // 2, fill)
 

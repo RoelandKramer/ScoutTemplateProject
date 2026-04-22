@@ -308,11 +308,6 @@ def _login_page():
             <h1 style="color:#1e3a8a; margin:0; font-size:2rem;">{t('login_title', L)}</h1>
             <p style="color:#6b7280; margin-top:4px; font-size:.95rem;">{t('login_subtitle', L)}</p>
         </div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:0.5rem 0 1.25rem 0;">
-            <div style="width:18px;height:18px;border:3px solid #d1dff0;border-top-color:#1a3370;border-radius:50%;animation:tlspin 1s linear infinite;"></div>
-            <span style="color:#1a3370;font-size:.9rem;">{t('app_loading_note', L)}</span>
-        </div>
-        <style>@keyframes tlspin {{ to {{ transform: rotate(360deg); }} }}</style>
         """,
         unsafe_allow_html=True,
     )
@@ -321,7 +316,8 @@ def _login_page():
         password = st.text_input(t("password", L), type="password")
         submitted = st.form_submit_button(t("log_in", L), type="primary", use_container_width=True)
     if submitted:
-        matched_user = _authenticate(login_input, password)
+        with st.spinner(t("app_loading_note", L)):
+            matched_user = _authenticate(login_input, password)
         if matched_user:
             st.session_state["authenticated"] = True
             st.session_state["username"] = matched_user
@@ -1344,6 +1340,7 @@ def _physical_data_section(
     key_prefix: str = "phys",
     state_key: str = "physical_data",
     tm_state_key: str | None = None,
+    matches_state_key: str | None = None,
 ) -> dict | None:
     """Render the 'Obtain physical data' section for Eredivisie/KKD players.
 
@@ -1375,18 +1372,21 @@ def _physical_data_section(
         else:
             try:
                 with st.spinner(t("calculating_avail_and_phys", L)):
-                    # Availability (Sofascore — not surfaced in UI by name)
-                    if tm_state_key:
-                        try:
-                            from sofascore import get_player_availability
-                            avail = get_player_availability(player_name, player_club)
+                    # Availability + season match list
+                    # (Sofascore — not surfaced in UI by name)
+                    try:
+                        from sofascore import get_player_availability
+                        avail = get_player_availability(player_name, player_club)
+                        if tm_state_key:
                             tm = dict(st.session_state.get(tm_state_key) or {})
                             tm["availability_pct"] = avail.get("availability_pct")
                             tm["availability_in_squad"] = avail.get("availability_in_squad", 0)
                             tm["availability_total"] = avail.get("availability_total", 0)
                             st.session_state[tm_state_key] = tm
-                        except Exception:
-                            pass
+                        if matches_state_key:
+                            st.session_state[matches_state_key] = avail.get("matches") or []
+                    except Exception:
+                        pass
 
                     # Physical CSV lookup
                     import pandas as pd
@@ -1476,6 +1476,7 @@ def _scouting_session_section(
     key_prefix: str = "scout",
     transfer_state_key: str = "transfer_details",
     dates_state_key: str = "scouting_dates",
+    matches_state_key: str | None = None,
 ) -> tuple[dict, list]:
     """Render Transfer Details + Scouting session entries. Returns (transfer dict, dates list)."""
     import datetime as _dt
@@ -1548,37 +1549,87 @@ def _scouting_session_section(
     st.caption(t("scouting_sessions_note", L))
 
     dates = st.session_state.get(dates_state_key) or []
+    GAME_LABEL = t("game_option", L)
+    TRAINING_LABEL = t("training_option", L)
 
-    cd1, cd2, cd3 = st.columns([2, 2, 1])
-    with cd1:
-        new_date = st.date_input(
-            t("scouting_date_label", L),
-            value=_dt.date.today(),
-            key=f"{key_prefix}_date",
-            format="DD/MM/YYYY",
-        )
-    with cd2:
+    sct1, sct2 = st.columns([1, 3])
+    with sct1:
         new_type = st.radio(
             t("scouting_type_label", L),
-            options=[t("game_option", L), t("training_option", L)],
-            horizontal=True,
+            options=[GAME_LABEL, TRAINING_LABEL],
+            horizontal=False,
             key=f"{key_prefix}_type",
         )
-    with cd3:
-        st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-        if st.button(t("add_scouting_entry", L), key=f"{key_prefix}_add", use_container_width=True):
-            dates.append({
-                "date": new_date.strftime("%d/%m/%Y"),
-                "type": new_type,
-            })
-            st.session_state[dates_state_key] = dates
-            st.rerun()
+
+    with sct2:
+        if new_type == TRAINING_LABEL:
+            cd1, cd2 = st.columns([3, 1])
+            with cd1:
+                new_date = st.date_input(
+                    t("scouting_date_label", L),
+                    value=_dt.date.today(),
+                    key=f"{key_prefix}_date",
+                    format="DD/MM/YYYY",
+                )
+            with cd2:
+                st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                if st.button(
+                    t("add_scouting_entry", L),
+                    key=f"{key_prefix}_add_training",
+                    use_container_width=True,
+                ):
+                    dates.append({
+                        "date": new_date.strftime("%d/%m/%Y"),
+                        "type": TRAINING_LABEL,
+                    })
+                    st.session_state[dates_state_key] = dates
+                    st.rerun()
+        else:
+            matches = (
+                st.session_state.get(matches_state_key)
+                if matches_state_key else None
+            ) or []
+            if not matches:
+                st.info(t("scouting_match_unavailable", L))
+            else:
+                # Build labeled options; selectbox accepts text input for filtering.
+                options = [m.get("label") or "" for m in matches if m.get("label")]
+                cd1, cd2 = st.columns([3, 1])
+                with cd1:
+                    sel_label = st.selectbox(
+                        t("scouting_match_pick", L),
+                        options=options,
+                        index=None,
+                        placeholder=t("scouting_match_placeholder", L),
+                        key=f"{key_prefix}_match_pick",
+                    )
+                with cd2:
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                    if st.button(
+                        t("add_scouting_entry", L),
+                        key=f"{key_prefix}_add_match",
+                        use_container_width=True,
+                        disabled=not sel_label,
+                    ):
+                        chosen = next((m for m in matches if m.get("label") == sel_label), None)
+                        if chosen:
+                            dates.append({
+                                "date": chosen.get("date", ""),
+                                "type": GAME_LABEL,
+                                "label": chosen.get("label", ""),
+                                "match_id": chosen.get("id"),
+                            })
+                            st.session_state[dates_state_key] = dates
+                            st.rerun()
 
     if dates:
         for idx, entry in enumerate(list(dates)):
             rc1, rc2 = st.columns([8, 1])
             with rc1:
-                st.markdown(f"• {entry.get('date', '')}: {entry.get('type', '')}")
+                if entry.get("type") == GAME_LABEL and entry.get("label"):
+                    st.markdown(f"• {entry.get('label', '')}")
+                else:
+                    st.markdown(f"• {entry.get('date', '')}: {entry.get('type', '')}")
             with rc2:
                 if st.button("🗑", key=f"{key_prefix}_del_{idx}"):
                     dates.pop(idx)
@@ -2154,14 +2205,15 @@ if page == "Dashboard":
         pc = draft.get("photo_circular")
         ub = draft.get("upload_bytes")
         phys = draft.get("physical_data")
+        summ = draft.get("summary_text") or ""
         if ub:
             out = fill_from_bytes(ub, cfg, sv, cm, vd, player_data=pd_,
                                   tm_stats=tm, player_photo=pf, player_photo_circular=pc,
-                                  physical_data=phys)
+                                  physical_data=phys, summary_text=summ)
         else:
             out = fill_template(cfg, sv, cm, vd, player_data=pd_,
                                 tm_stats=tm, player_photo=pf, player_photo_circular=pc,
-                                physical_data=phys)
+                                physical_data=phys, summary_text=summ)
         return out.getvalue()
 
     def _report_actions(meta: dict, prefix: str, load_pptx_fn, delete_fn, edit_mode: str = "draft"):
@@ -2337,10 +2389,8 @@ elif page == "New Report":
     _physical_data_section(
         player_data, key_prefix="new_phys", state_key="new_physical_data",
         tm_state_key=NEW_TM_KEY,
+        matches_state_key="new_player_matches",
     )
-
-    # ── Player photo ──────────────────────────────────────────────────────
-    _new_photo_full, _new_photo_circ = _player_photo_section(state_key="new_player_photo")
 
     st.markdown("---")
 
@@ -2392,6 +2442,7 @@ elif page == "New Report":
         key_prefix="new_scout",
         transfer_state_key="new_transfer_details",
         dates_state_key="new_scouting_dates",
+        matches_state_key="new_player_matches",
     )
 
     st.markdown("---")
@@ -2402,6 +2453,25 @@ elif page == "New Report":
         template_cfg["variables"], key_prefix="empty",
         comp_descriptions=_comp_descs,
         template_name=template_name,
+    )
+
+    st.markdown("---")
+
+    # ── Player photo (placed below competency videos) ────────────────────
+    _new_photo_full, _new_photo_circ = _player_photo_section(state_key="new_player_photo")
+
+    st.markdown("---")
+
+    # ── Scouting Summary (large free-text, rendered at bottom-center) ────
+    st.markdown(f"### {t('scouting_summary_heading', L)}")
+    st.caption(t("scouting_summary_note", L))
+    summary_key = "new_scouting_summary"
+    st.text_area(
+        t("scouting_summary_label", L),
+        key=summary_key,
+        height=220,
+        placeholder=t("scouting_summary_placeholder", L),
+        label_visibility="collapsed",
     )
 
     st.markdown("---")
@@ -2419,6 +2489,7 @@ elif page == "New Report":
             physical_data=st.session_state.get("new_physical_data"),
             transfer_details=st.session_state.get("new_transfer_details"),
             scouting_dates=st.session_state.get("new_scouting_dates"),
+            summary_text=st.session_state.get(summary_key),
         )
         return out.getvalue()
 
@@ -2437,7 +2508,7 @@ elif page == "New Report":
             transfer_details=st.session_state.get("new_transfer_details"),
             physical_data=st.session_state.get("new_physical_data"),
             rating_value=rating_val,
-            summary_text=None,
+            summary_text=st.session_state.get(summary_key) or None,
             star_values=s_,
             player_photo_bytes=(st.session_state.get("new_player_photo_circ")
                                 or st.session_state.get("new_player_photo_full")),
@@ -2468,6 +2539,7 @@ elif page == "New Report":
                     physical_data=st.session_state.get("new_physical_data"),
                     transfer_details=st.session_state.get("new_transfer_details"),
                     scouting_dates=st.session_state.get("new_scouting_dates"),
+                    summary_text=st.session_state.get(summary_key),
                 )
                 snapshot_bytes = snapshot.getvalue()
                 rid = storage.save_draft(
@@ -2481,6 +2553,7 @@ elif page == "New Report":
                     tm_stats=_draft_tm,
                     photo_full=st.session_state.get("new_player_photo_full"),
                     photo_circular=st.session_state.get("new_player_photo_circ"),
+                    summary_text=st.session_state.get(summary_key),
                 )
                 st.session_state["active_report_id"] = rid
                 _onedrive_upload_draft(username, rid)
@@ -2501,6 +2574,7 @@ elif page == "New Report":
                     physical_data=st.session_state.get("new_physical_data"),
                     transfer_details=st.session_state.get("new_transfer_details"),
                     scouting_dates=st.session_state.get("new_scouting_dates"),
+                    summary_text=st.session_state.get(summary_key),
                 )
                 pptx_bytes = output.getvalue()
 
@@ -2513,7 +2587,8 @@ elif page == "New Report":
                                       star_values=s, comments=c, video_data=v,
                                       tm_stats=_gen_tm,
                                       photo_full=st.session_state.get("new_player_photo_full"),
-                                      photo_circular=st.session_state.get("new_player_photo_circ"))
+                                      photo_circular=st.session_state.get("new_player_photo_circ"),
+                                      summary_text=st.session_state.get(summary_key))
                 _onedrive_upload(username, rid, pptx_bytes,
                                  _current_player_name(NEW_PDATA_KEY), template_name)
                 st.session_state.pop("active_report_id", None)
@@ -2555,6 +2630,7 @@ elif page == "New Report":
                             physical_data=st.session_state.get("new_physical_data"),
                             transfer_details=st.session_state.get("new_transfer_details"),
                             scouting_dates=st.session_state.get("new_scouting_dates"),
+                            summary_text=st.session_state.get(summary_key),
                         )
                         pptx_bytes = output.getvalue()
                         rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
@@ -2575,6 +2651,7 @@ elif page == "New Report":
                             tm_stats=_share_tm,
                             photo_full=st.session_state.get("new_player_photo_full"),
                             photo_circular=st.session_state.get("new_player_photo_circ"),
+                            summary_text=st.session_state.get(summary_key),
                         )
                         storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                               player_name=_current_player_name(NEW_PDATA_KEY),
@@ -2582,7 +2659,8 @@ elif page == "New Report":
                                               star_values=s, comments=c, video_data=v,
                                               tm_stats=_share_tm,
                                               photo_full=st.session_state.get("new_player_photo_full"),
-                                              photo_circular=st.session_state.get("new_player_photo_circ"))
+                                              photo_circular=st.session_state.get("new_player_photo_circ"),
+                                              summary_text=st.session_state.get(summary_key))
                         _onedrive_upload(username, rid, pptx_bytes,
                                          _current_player_name(NEW_PDATA_KEY), template_name)
                         _onedrive_upload_share_ref(
@@ -2660,6 +2738,7 @@ elif page == "Upload & Edit":
                         player_photo=draft.get("photo_full"),
                         player_photo_circular=draft.get("photo_circular"),
                         physical_data=draft.get("physical_data"),
+                        summary_text=draft.get("summary_text") or "",
                     )
                     file_bytes = _snap.getvalue()
                 except Exception:
@@ -2706,6 +2785,8 @@ elif page == "Upload & Edit":
                     st.session_state["upload_player_photo_circ"] = draft["photo_circular"]
                 else:
                     st.session_state.pop("upload_player_photo_circ", None)
+                # Restore the scouting summary into the upload text_area
+                st.session_state["upload_scouting_summary"] = draft.get("summary_text") or ""
                 st.session_state["_loaded_draft"] = _edit_draft_id
 
     # ── Auto-load a received report PPTX when coming from "Continue Editing" ─
@@ -2764,6 +2845,8 @@ elif page == "Upload & Edit":
                 st.session_state["upload_player_photo_circ"] = recv["photo_circular"]
             else:
                 st.session_state.pop("upload_player_photo_circ", None)
+            # Restore the scouting summary into the upload text_area
+            st.session_state["upload_scouting_summary"] = recv.get("summary_text") or ""
 
             st.session_state["_loaded_draft"] = f"recv_{_edit_recv_id}"
 
@@ -2820,6 +2903,8 @@ elif page == "Upload & Edit":
                 st.session_state["upload_player_photo_circ"] = fin["photo_circular"]
             else:
                 st.session_state.pop("upload_player_photo_circ", None)
+            # Restore the scouting summary into the upload text_area
+            st.session_state["upload_scouting_summary"] = fin.get("summary_text") or ""
 
             st.session_state["_loaded_draft"] = f"fin_{_edit_fin_id}"
 
@@ -2953,10 +3038,8 @@ elif page == "Upload & Edit":
             key_prefix="upload_phys",
             state_key="upload_physical_data",
             tm_state_key=UPLOAD_TM_KEY,
+            matches_state_key="upload_player_matches",
         )
-
-        # ── Player photo ──────────────────────────────────────────────
-        _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
 
         st.session_state["_active_rating_slide_idx"] = template_cfg.get("rating_slide_idx", 3)
         st.session_state["_active_role_name"] = matched_name or ""
@@ -2973,6 +3056,7 @@ elif page == "Upload & Edit":
             key_prefix="upload_scout",
             transfer_state_key="upload_transfer_details",
             dates_state_key="upload_scouting_dates",
+            matches_state_key="upload_player_matches",
         )
 
         st.markdown("---")
@@ -2991,6 +3075,25 @@ elif page == "Upload & Edit":
 
         st.markdown("---")
 
+        # ── Player photo (placed below competency videos) ──────────────
+        _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
+
+        st.markdown("---")
+
+        # ── Scouting Summary (large free-text, rendered at bottom-center) ──
+        st.markdown(f"### {t('scouting_summary_heading', L)}")
+        st.caption(t("scouting_summary_note", L))
+        upload_summary_key = "upload_scouting_summary"
+        st.text_area(
+            t("scouting_summary_label", L),
+            key=upload_summary_key,
+            height=220,
+            placeholder=t("scouting_summary_placeholder", L),
+            label_visibility="collapsed",
+        )
+
+        st.markdown("---")
+
         def _build_preview_pptx_upload() -> bytes:
             s_, c_, v_ = _collect_editor_state("upload", len(template_cfg["variables"]))
             _pd = st.session_state.get(UPLOAD_PDATA_KEY)
@@ -3005,6 +3108,7 @@ elif page == "Upload & Edit":
                 transfer_details=st.session_state.get("upload_transfer_details"),
                 scouting_dates=st.session_state.get("upload_scouting_dates"),
                 report_date=st.session_state.get("upload_report_date"),
+                summary_text=st.session_state.get(upload_summary_key),
             )
             return out.getvalue()
 
@@ -3023,7 +3127,7 @@ elif page == "Upload & Edit":
                 transfer_details=st.session_state.get("upload_transfer_details"),
                 physical_data=st.session_state.get("upload_physical_data"),
                 rating_value=rating_val,
-                summary_text=None,
+                summary_text=st.session_state.get(upload_summary_key) or None,
                 star_values=s_,
                 player_photo_bytes=(st.session_state.get("upload_player_photo_circ")
                                     or st.session_state.get("upload_player_photo_full")),
@@ -3054,6 +3158,7 @@ elif page == "Upload & Edit":
                         transfer_details=st.session_state.get("upload_transfer_details"),
                         scouting_dates=st.session_state.get("upload_scouting_dates"),
                         report_date=st.session_state.get("upload_report_date"),
+                        summary_text=st.session_state.get(upload_summary_key),
                     )
                     _snap_bytes = _snap.getvalue()
                     rid = storage.save_draft(
@@ -3067,6 +3172,7 @@ elif page == "Upload & Edit":
                         tm_stats=_save_tm,
                         photo_full=st.session_state.get("upload_player_photo_full"),
                         photo_circular=st.session_state.get("upload_player_photo_circ"),
+                        summary_text=st.session_state.get(upload_summary_key),
                     )
                     st.session_state["upload_active_report_id"] = rid
                     _onedrive_upload_draft(username, rid)
@@ -3088,6 +3194,7 @@ elif page == "Upload & Edit":
                         transfer_details=st.session_state.get("upload_transfer_details"),
                         scouting_dates=st.session_state.get("upload_scouting_dates"),
                         report_date=st.session_state.get("upload_report_date"),
+                        summary_text=st.session_state.get(upload_summary_key),
                     )
                     pptx_bytes = output.getvalue()
                     pos = matched_name or "Unknown"
@@ -3101,6 +3208,7 @@ elif page == "Upload & Edit":
                             upload_filename=st.session_state.get("upload_filename"),
                             player_data=_upgen_pdata,
                             tm_stats=_upgen_tm,
+                            summary_text=st.session_state.get(upload_summary_key),
                         )
                         _onedrive_upload_draft(username, rid)
                     storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
@@ -3109,7 +3217,8 @@ elif page == "Upload & Edit":
                                           star_values=s, comments=c, video_data=v,
                                           tm_stats=_upgen_tm,
                                           photo_full=st.session_state.get("upload_player_photo_full"),
-                                          photo_circular=st.session_state.get("upload_player_photo_circ"))
+                                          photo_circular=st.session_state.get("upload_player_photo_circ"),
+                                          summary_text=st.session_state.get(upload_summary_key))
                     _onedrive_upload(username, rid, pptx_bytes,
                                      _current_player_name(UPLOAD_PDATA_KEY), pos)
                     st.session_state.pop("upload_active_report_id", None)
@@ -3152,6 +3261,7 @@ elif page == "Upload & Edit":
                                 transfer_details=st.session_state.get("upload_transfer_details"),
                                 scouting_dates=st.session_state.get("upload_scouting_dates"),
                                 report_date=st.session_state.get("upload_report_date"),
+                                summary_text=st.session_state.get(upload_summary_key),
                             )
                             pptx_bytes = output.getvalue()
                             pos = matched_name or "Unknown"
@@ -3173,6 +3283,7 @@ elif page == "Upload & Edit":
                                 tm_stats=_upshare_tm,
                                 photo_full=st.session_state.get("upload_player_photo_full"),
                                 photo_circular=st.session_state.get("upload_player_photo_circ"),
+                                summary_text=st.session_state.get(upload_summary_key),
                             )
                             storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                                   player_name=_current_player_name(UPLOAD_PDATA_KEY),
@@ -3182,7 +3293,8 @@ elif page == "Upload & Edit":
                                                   video_data=v,
                                                   tm_stats=_upshare_tm,
                                                   photo_full=st.session_state.get("upload_player_photo_full"),
-                                                  photo_circular=st.session_state.get("upload_player_photo_circ"))
+                                                  photo_circular=st.session_state.get("upload_player_photo_circ"),
+                                                  summary_text=st.session_state.get(upload_summary_key))
                             _onedrive_upload(username, rid, pptx_bytes,
                                              _current_player_name(UPLOAD_PDATA_KEY), pos)
                             _onedrive_upload_share_ref(

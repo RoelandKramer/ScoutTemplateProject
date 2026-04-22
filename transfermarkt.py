@@ -1,15 +1,30 @@
-"""Transfermarkt scraping for player season & career statistics."""
+"""Transfermarkt player season & career statistics.
+
+Stats are fetched from the open-source transfermarkt-api
+(https://github.com/felipeall/transfermarkt-api) hosted at
+transfermarkt-api.fly.dev — that proxy returns clean JSON and is the
+approach that worked reliably in earlier versions of this app.
+
+The player portrait image is still scraped directly from
+transfermarkt.com (only used for visual confirmation in the UI — not
+stored or shared).
+
+Availability (% of team matches in squad) is computed elsewhere via
+Sofascore; the keys are still populated here with safe defaults so
+downstream readers see a consistent dict shape.
+"""
 
 from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass
-from typing import Optional
-from urllib.parse import quote
 
 import requests
 from bs4 import BeautifulSoup
+
+_API_BASE = "https://transfermarkt-api.fly.dev"
+_TM_BASE = "https://www.transfermarkt.com"
+_TIMEOUT = 15
 
 _HEADERS = {
     "User-Agent": (
@@ -18,56 +33,54 @@ _HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     ),
 }
-_BASE = "https://www.transfermarkt.com"
-_DELAY = 1.2  # polite delay between requests
+_DELAY = 1.0  # polite delay before scraping the profile page for the image
 
 
-@dataclass
-class TmPlayer:
-    name: str
-    url: str  # profile URL path like /player-name/profil/spieler/12345
-    club: str
-    tm_id: int
+class TmBlockedError(Exception):
+    """Raised when the Transfermarkt API is unavailable."""
 
 
-# ─── Search ─────────────────────────────────────────────────────────────────
+# ─── API helpers ──────────────────────────────────────────────────────────
 
-def search_player(name: str) -> list[TmPlayer]:
-    """Search Transfermarkt for players matching *name*."""
-    url = f"{_BASE}/schnellsuche/ergebnis/schnellsuche"
-    params = {"query": name, "x": 0, "y": 0}
-    resp = requests.get(url, headers=_HEADERS, params=params, timeout=15)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "lxml")
-
-    results: list[TmPlayer] = []
-    # Player result rows in search results table
-    for table in soup.select("table.items"):
-        for row in table.select("tbody tr"):
-            link = row.select_one("td.hauptlink a")
-            if not link or "/profil/spieler/" not in (link.get("href") or ""):
-                continue
-            href = link["href"]
-            pname = link.get_text(strip=True)
-            # Extract TM id from URL
-            m = re.search(r"/spieler/(\d+)", href)
-            if not m:
-                continue
-            tm_id = int(m.group(1))
-            # Club name
-            club_td = row.select("td.zentriert")
-            club_el = row.select_one("td:nth-of-type(4) a, td:nth-of-type(5) a, img[alt]")
-            club_name = ""
-            # Try to get club from row
-            for img in row.select("img"):
-                alt = img.get("alt", "")
-                if alt and alt != pname and "flag" not in (img.get("class") or [""]):
-                    club_name = alt
-            results.append(TmPlayer(name=pname, url=href, club=club_name, tm_id=tm_id))
-    return results
+def _api_get(path: str) -> dict | list:
+    """Call the Transfermarkt REST API and return parsed JSON."""
+    url = f"{_API_BASE}{path}"
+    try:
+        resp = requests.get(url, timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.ConnectionError:
+        raise TmBlockedError("Cannot reach Transfermarkt API (connection error).")
+    except requests.Timeout:
+        raise TmBlockedError("Transfermarkt API timed out.")
+    except requests.HTTPError as exc:
+        raise TmBlockedError(f"Transfermarkt API error: {exc.response.status_code}")
+    except Exception as exc:
+        raise TmBlockedError(f"Transfermarkt API request failed: {exc}")
 
 
-def _best_match(candidates: list[TmPlayer], target_name: str, target_club: str = "") -> TmPlayer | None:
+def _safe_int(value) -> int:
+    """Convert a value (str, int, or None) to int, stripping dots/commas."""
+    if value is None:
+        return 0
+    s = str(value).strip().replace(".", "").replace(",", "").replace("'", "")
+    if not s or s == "-":
+        return 0
+    try:
+        return int(s)
+    except ValueError:
+        return 0
+
+
+# ─── Search / matching ────────────────────────────────────────────────────
+
+def _search_players(name: str) -> list[dict]:
+    """Search for players by name. Returns list of result dicts."""
+    data = _api_get(f"/players/search/{requests.utils.quote(name)}")
+    return data.get("results", []) if isinstance(data, dict) else []
+
+
+def _best_match(candidates: list[dict], target_name: str, target_club: str = "") -> dict | None:
     """Pick the best matching player from search results."""
     if not candidates:
         return None
@@ -75,20 +88,25 @@ def _best_match(candidates: list[TmPlayer], target_name: str, target_club: str =
     target_lower = target_name.lower().strip()
     target_club_lower = target_club.lower().strip()
 
-    def _score(p: TmPlayer) -> float:
+    def _score(p: dict) -> float:
         s = 0.0
-        name_l = p.name.lower()
+        name_l = (p.get("name") or "").lower()
         if name_l == target_lower:
             s += 10
-        elif target_lower in name_l or name_l in target_lower:
+        elif target_lower in name_l or (name_l and name_l in target_lower):
             s += 5
         else:
-            # Word overlap
             target_words = set(target_lower.split())
             name_words = set(name_l.split())
             overlap = len(target_words & name_words)
             s += overlap * 2
-        if target_club_lower and target_club_lower in p.club.lower():
+        club_name = ""
+        club = p.get("club")
+        if isinstance(club, dict):
+            club_name = club.get("name", "") or ""
+        elif isinstance(club, str):
+            club_name = club
+        if target_club_lower and target_club_lower in club_name.lower():
             s += 3
         return s
 
@@ -98,140 +116,114 @@ def _best_match(candidates: list[TmPlayer], target_name: str, target_club: str =
     return ranked[0] if len(ranked) == 1 else None
 
 
-# ─── Player image ──────────────────────────────────────────────────────────
+# ─── Stats aggregation ───────────────────────────────────────────────────
 
-def _fetch_player_image(profile_url: str) -> bytes | None:
-    """Fetch the player's portrait image from their Transfermarkt profile.
+def _fetch_player_stats_from_api(player_id: str, target_season: str) -> dict:
+    """Fetch stats from the API and aggregate season + career totals.
 
-    Returns raw image bytes or None on failure.  The image is only used for
-    visual confirmation in the UI — it is NOT stored or shared.
+    target_season is the Transfermarkt season ID, e.g. "2025" for 2025/2026.
     """
-    full_url = f"{_BASE}{profile_url}"
-    time.sleep(_DELAY)
+    season_matches = season_goals = season_assists = season_minutes = 0
+    career_matches = career_goals = career_assists = career_minutes = 0
+
+    data = _api_get(f"/players/{player_id}/stats")
+    stats_list = data if isinstance(data, list) else data.get(
+        "stats", data.get("results", []),
+    )
+    if isinstance(stats_list, dict):
+        stats_list = [stats_list]
+
+    for entry in stats_list or []:
+        if not isinstance(entry, dict):
+            continue
+
+        apps = _safe_int(entry.get("appearances"))
+        goals = _safe_int(entry.get("goals"))
+        assists = _safe_int(entry.get("assists"))
+        minutes = _safe_int(entry.get("minutesPlayed"))
+
+        career_matches += apps
+        career_goals += goals
+        career_assists += assists
+        career_minutes += minutes
+
+        season_id = str(entry.get("seasonID", ""))
+        if season_id == target_season:
+            season_matches += apps
+            season_goals += goals
+            season_assists += assists
+            season_minutes += minutes
+
+    return {
+        "season_matches": season_matches,
+        "season_minutes": season_minutes,
+        "season_goals": season_goals,
+        "season_assists": season_assists,
+        "career_matches": career_matches,
+        "career_minutes": career_minutes,
+        "career_goals": career_goals,
+        "career_assists": career_assists,
+    }
+
+
+# ─── Player portrait image (scraped directly) ────────────────────────────
+
+def _profile_url_path(player_id: str) -> str:
+    return f"/-/profil/spieler/{player_id}"
+
+
+def _fetch_player_image(player_id: str) -> bytes | None:
+    """Fetch the player's portrait from their TM profile page."""
+    if not player_id:
+        return None
+    full_url = f"{_TM_BASE}{_profile_url_path(player_id)}"
     try:
-        resp = requests.get(full_url, headers=_HEADERS, timeout=15)
+        time.sleep(_DELAY)
+        resp = requests.get(full_url, headers=_HEADERS, timeout=_TIMEOUT)
         resp.raise_for_status()
     except Exception:
         return None
 
     soup = BeautifulSoup(resp.text, "lxml")
-
-    # The player photo sits in the header area — look for the main portrait.
-    # Transfermarkt uses <img class="data-header__profile-image"> or similar.
-    for selector in [
+    for selector in (
         "img.data-header__profile-image",
         "header img[src*='portrait']",
         "header img[src*='/header/']",
         "div.data-header__profile-container img",
         "img[data-src*='portrait']",
-    ]:
+    ):
         img_tag = soup.select_one(selector)
-        if img_tag:
-            img_url = img_tag.get("src") or img_tag.get("data-src") or ""
-            if img_url and "default.jpg" not in img_url and img_url.startswith("http"):
-                try:
-                    img_resp = requests.get(img_url, headers=_HEADERS, timeout=15)
-                    img_resp.raise_for_status()
-                    if img_resp.headers.get("content-type", "").startswith("image"):
-                        return img_resp.content
-                except Exception:
-                    pass
-
+        if not img_tag:
+            continue
+        img_url = img_tag.get("src") or img_tag.get("data-src") or ""
+        if not img_url or "default.jpg" in img_url or not img_url.startswith("http"):
+            continue
+        try:
+            img_resp = requests.get(img_url, headers=_HEADERS, timeout=_TIMEOUT)
+            img_resp.raise_for_status()
+            if img_resp.headers.get("content-type", "").startswith("image"):
+                return img_resp.content
+        except Exception:
+            pass
     return None
 
 
-# ─── Stats extraction ───────────────────────────────────────────────────────
+# ─── Public entry point ──────────────────────────────────────────────────
 
-def _parse_int(text: str) -> int:
-    """Parse a number from text like '1.234' or '12' or '-'."""
-    text = text.strip().replace(".", "").replace(",", "")
-    if not text or text == "-":
-        return 0
-    try:
-        return int(text)
-    except ValueError:
-        return 0
-
-
-def _fetch_stats_page(profile_url: str) -> BeautifulSoup:
-    """Fetch the player's detailed stats page."""
-    # Convert profile URL to stats URL
-    # /player-name/profil/spieler/12345 -> /player-name/leistungsdatendetails/spieler/12345
-    stats_url = profile_url.replace("/profil/spieler/", "/leistungsdatendetails/spieler/")
-    full_url = f"{_BASE}{stats_url}"
-    time.sleep(_DELAY)
-    resp = requests.get(full_url, headers=_HEADERS, timeout=15)
-    resp.raise_for_status()
-    return BeautifulSoup(resp.text, "lxml")
-
-
-def _extract_season_stats(soup: BeautifulSoup, target_season: str = "24/25") -> dict[str, int]:
-    """Extract stats for a specific season from the detailed stats page.
-
-    target_season should be in format "24/25" for 2024/2025 season.
-    """
-    stats = {"matches": 0, "minutes": 0, "goals": 0, "assists": 0}
-
-    # Find all competition rows for the target season
-    # The stats page has tables grouped by season
-    for table in soup.select("table.items"):
-        rows = table.select("tbody tr")
-        for row in rows:
-            tds = row.select("td")
-            if len(tds) < 5:
-                continue
-
-            # Check if this row's season matches
-            season_el = row.select_one("td.zentriert a[href*='saison_id']")
-            if not season_el:
-                # Try the first cell
-                first_td = tds[0].get_text(strip=True)
-                if target_season not in first_td:
-                    continue
-            else:
-                if target_season not in season_el.get_text(strip=True):
-                    continue
-
-            # Find the stats columns — look for numeric values
-            # Typical order: competition, appearances, goals, assists, minutes
-            # But layout varies. Parse all numeric cells.
-            appearances = 0
-            goals = 0
-            assists = 0
-            minutes_played = 0
-
-            numeric_tds = [td for td in tds if td.get_text(strip=True).replace(".", "").replace("-", "").replace("'", "").isdigit() or td.get_text(strip=True) == "-"]
-
-            # Try to find specific columns by position
-            for td in tds:
-                text = td.get_text(strip=True)
-                # Minutes often have a ' suffix
-                if "'" in text:
-                    minutes_played += _parse_int(text.replace("'", ""))
-
-            # Use footer/total row approach — look for class or total markers
-            # For now, sum up all competition rows
-
-    # Alternative: use the compact stats boxes on the page
-    # Look for the stats summary section
-    for box in soup.select(".data-header__details, .data-header__info-box"):
-        text = box.get_text(" ", strip=True)
-        # This sometimes contains "X goals" etc.
-
-    return stats
-
-
-def fetch_player_stats(player_name: str, player_club: str = "", target_season_label: str = "2025/2026") -> dict:
+def fetch_player_stats(
+    player_name: str,
+    player_club: str = "",
+    target_season_label: str = "2025/2026",
+) -> dict:
     """Fetch season and career stats for a player from Transfermarkt.
 
     Returns a dict with keys:
         season_matches, season_minutes, season_goals, season_assists,
         career_matches, career_minutes, career_goals, career_assists,
-        availability_pct (% of club matches this season the player was in the squad,
-            or None if it couldn't be determined),
-        availability_in_squad, availability_total (integers backing the %),
-        tm_url (the Transfermarkt profile URL),
-        tm_image (raw image bytes of player portrait, or None)
+        availability_pct, availability_in_squad, availability_total
+            (None / 0 here — populated downstream from Sofascore),
+        tm_url (Transfermarkt profile URL),
+        tm_image (raw image bytes, or None).
     """
     result = {
         "season_matches": 0, "season_minutes": 0,
@@ -245,8 +237,10 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
         "tm_image": None,
     }
 
-    # Search for the player
-    candidates = search_player(player_name)
+    try:
+        candidates = _search_players(player_name)
+    except TmBlockedError:
+        return result
     if not candidates:
         return result
 
@@ -254,216 +248,26 @@ def fetch_player_stats(player_name: str, player_club: str = "", target_season_la
     if not player:
         return result
 
-    result["tm_url"] = f"{_BASE}{player.url}"
-
-    # Fetch player portrait image (for UI confirmation only — not stored)
-    result["tm_image"] = _fetch_player_image(player.url)
-
-    # Convert season label "2025/2026" -> "25/26" for matching
-    m = re.match(r"(\d{4})/(\d{4})", target_season_label)
-    if m:
-        season_short = f"{m.group(1)[2:]}/{m.group(2)[2:]}"
-    else:
-        season_short = "25/26"
-
-    # Fetch the stats page
-    try:
-        soup = _fetch_stats_page(player.url)
-    except Exception:
+    player_id = str(player.get("id", "") or "")
+    if not player_id:
         return result
 
-    # Parse the detailed stats table
-    # Transfermarkt detailed stats page has rows per competition per season
-    # We need to find all rows for the target season and sum them up
-    _parse_detailed_stats(soup, result, season_short)
+    result["tm_url"] = f"{_TM_BASE}{_profile_url_path(player_id)}"
 
-    # Availability is computed elsewhere when the user fetches physical data
-    # (so it lines up with the same trigger and isn't re-scraped on every TM
-    # call). The result keys are still populated so downstream readers see a
-    # consistent shape.
+    # Convert "2025/2026" → "2025" (TM season ID is the start year)
+    m = re.match(r"(\d{4})/\d{4}", target_season_label)
+    target_season = m.group(1) if m else "2025"
+
+    try:
+        stats = _fetch_player_stats_from_api(player_id, target_season)
+        result.update(stats)
+    except TmBlockedError:
+        pass  # leave numeric fields at 0, still return image + url
+
+    # Best-effort portrait fetch (scraped). Failure leaves it None.
+    try:
+        result["tm_image"] = _fetch_player_image(player_id)
+    except Exception:
+        pass
 
     return result
-
-
-# ─── Availability (% of club matches in squad) ─────────────────────────────
-
-def _fetch_availability(profile_url: str, season_year: int) -> tuple[float | None, int, int]:
-    """Scrape the season match log and return (availability_pct, in_squad, total).
-
-    Availability = matches the player was in the team's matchday squad
-    (starter OR on the bench, used or not) divided by total club matches
-    that season. Returns (None, 0, 0) if parsing fails.
-    """
-    m = re.search(r"/spieler/(\d+)", profile_url)
-    if not m:
-        return None, 0, 0
-    pid = m.group(1)
-    slug_m = re.match(r"^/?([^/]+)/", profile_url)
-    slug = slug_m.group(1) if slug_m else "player"
-
-    # TM match log: "leistungsdaten" with plus/1 lists every game including
-    # unused bench appearances and 'not in squad' rows.
-    url = (
-        f"{_BASE}/{slug}/leistungsdaten/spieler/{pid}/plus/1"
-        f"?saison={season_year}"
-    )
-    try:
-        time.sleep(_DELAY)
-        resp = requests.get(url, headers=_HEADERS, timeout=15)
-        resp.raise_for_status()
-    except Exception:
-        return None, 0, 0
-
-    soup = BeautifulSoup(resp.text, "lxml")
-
-    # Markers Transfermarkt uses for "not in squad" (various locales):
-    NOT_IN_SQUAD_TOKENS = (
-        "n.i.k.",           # German: nicht im Kader
-        "nicht im kader",
-        "not in squad",
-        "not in matchday squad",
-        "n.e.c.",           # English: not even on bench
-        "no convocato",     # Italian
-        "non convocato",
-        "niet in selectie",
-        "niet in de wedstrijdselectie",
-    )
-
-    in_squad = 0
-    total = 0
-    seen_rows: set[tuple[str, str]] = set()  # dedupe (matchday, opponent) across tables
-
-    for table in soup.select("table.items"):
-        rows = table.select("tbody tr")
-        for row in rows:
-            if "bg_blau_20" in (row.get("class") or []):
-                continue  # separator / header row
-            tds = row.select("td")
-            if len(tds) < 4:
-                continue
-            row_text = row.get_text(" ", strip=True)
-            low = row_text.lower()
-
-            # Skip headings / summary rows that lack a date-like column.
-            # A real match row typically has a date cell (dd/mm/yy or dd.mm.yy).
-            if not re.search(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b", row_text):
-                continue
-
-            # Dedupe across tables using (date, opponent-fragment)
-            date_m = re.search(r"\b(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b", row_text)
-            key = (date_m.group(1) if date_m else "", row_text[:60])
-            if key in seen_rows:
-                continue
-            seen_rows.add(key)
-
-            total += 1
-            if any(tok in low for tok in NOT_IN_SQUAD_TOKENS):
-                continue
-            in_squad += 1
-
-    if total == 0:
-        return None, 0, 0
-    pct = round(100.0 * in_squad / total, 1)
-    return pct, in_squad, total
-
-
-def _parse_detailed_stats(soup: BeautifulSoup, result: dict, season_short: str) -> None:
-    """Parse the detailed performance data table on Transfermarkt."""
-
-    # The page contains a responsive table with class "items"
-    # Each row has: season | competition | matchday | squad_number | appearances | goals | assists | ...
-    # There are also total/footer rows
-
-    # Strategy: find all data rows grouped by season, sum per-competition lines
-    season_matches = 0
-    season_goals = 0
-    season_assists = 0
-    season_minutes = 0
-
-    career_matches = 0
-    career_goals = 0
-    career_assists = 0
-    career_minutes = 0
-
-    found_season = False
-
-    # Look for the main stats table
-    tables = soup.select("div.responsive-table table.items, table.items")
-    if not tables:
-        return
-
-    for table in tables:
-        # Check for tfoot (totals row)
-        tfoot = table.select_one("tfoot")
-        if tfoot:
-            # Career totals from the footer
-            tds = tfoot.select("td")
-            for i, td in enumerate(tds):
-                text = td.get_text(strip=True)
-                # The footer typically has: label | appearances | goals | assists | ... | minutes
-                if i == 1 or (td.get("class") and "zentriert" in td.get("class", [])):
-                    pass  # Skip non-numeric
-
-            # Parse footer cells more carefully
-            numeric_cells = []
-            for td in tds:
-                text = td.get_text(strip=True).replace(".", "").replace("'", "").replace("-", "0")
-                if text.isdigit():
-                    numeric_cells.append(int(text))
-
-            # Typical order in footer: appearances, goals, assists, yellow, 2nd yellow, red, minutes
-            if len(numeric_cells) >= 3:
-                career_matches = numeric_cells[0]
-                career_goals = numeric_cells[1]
-                career_assists = numeric_cells[2]
-            if len(numeric_cells) >= 7:
-                career_minutes = numeric_cells[6]
-            elif len(numeric_cells) >= 4:
-                career_minutes = numeric_cells[-1]
-
-        # Parse individual rows for the target season
-        rows = table.select("tbody tr:not(.bg_blau_20)")
-        current_season = ""
-        for row in rows:
-            # Skip separator / header rows
-            if "bg_blau_20" in (row.get("class") or []):
-                continue
-
-            tds = row.select("td")
-            if len(tds) < 4:
-                continue
-
-            # First column often contains the season or is empty (continuation)
-            first_text = tds[0].get_text(strip=True)
-            if re.match(r"\d{2}/\d{2}", first_text):
-                current_season = first_text
-
-            if current_season == season_short:
-                found_season = True
-                # Extract numeric columns
-                nums = []
-                for td in tds[1:]:
-                    text = td.get_text(strip=True).replace(".", "").replace("'", "")
-                    if text == "-":
-                        nums.append(0)
-                    elif text.isdigit():
-                        nums.append(int(text))
-
-                # Typically: competition | appearances | goals | assists | ... | minutes
-                if len(nums) >= 3:
-                    season_matches += nums[0]
-                    season_goals += nums[1]
-                    season_assists += nums[2]
-                if len(nums) >= 7:
-                    season_minutes += nums[6]
-                elif len(nums) >= 4:
-                    season_minutes += nums[-1]
-
-    result["season_matches"] = season_matches
-    result["season_minutes"] = season_minutes
-    result["season_goals"] = season_goals
-    result["season_assists"] = season_assists
-    result["career_matches"] = career_matches
-    result["career_minutes"] = career_minutes
-    result["career_goals"] = career_goals
-    result["career_assists"] = career_assists

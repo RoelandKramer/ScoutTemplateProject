@@ -1040,14 +1040,68 @@ def fill_scouting_dates(prs, template_cfg: dict, scouting_dates: list) -> None:
 
     lines = []
     for entry in scouting_dates:
-        d = (entry or {}).get("date", "").strip()
-        ttype = (entry or {}).get("type", "").strip()
+        e = entry or {}
+        # Game entries scraped from match list carry a pre-formatted label
+        # like "07-30-2026 Almere City - ADO Den Haag".
+        label = (e.get("label") or "").strip()
+        if label:
+            lines.append(label)
+            continue
+        d = (e.get("date") or "").strip()
+        ttype = (e.get("type") or "").strip()
         if d and ttype:
             lines.append(f"{d}: {ttype}")
         elif d:
             lines.append(d)
     if lines:
         _write_text_shape(target, "\n".join(lines))
+
+
+# ─── Scouting summary (rating slide, bottom-center dark-navy block) ──────
+
+def fill_scouting_summary(prs, template_cfg: dict, summary_text: str) -> None:
+    """Render the scouting summary into the bottom-center area of the rating slide.
+
+    The template has no pre-existing shape there (it's just dark-navy
+    background), so we add a new TextBox sized to fit. White Helvetica Neue,
+    centered horizontally, top-aligned, auto-shrunk to fit if too long.
+
+    Coords mirror the PNG-preview layout:
+      left ≈ 9.17", top ≈ 10.56", width ≈ 11.53", height ≈ 3.96"
+    """
+    if not summary_text or not summary_text.strip():
+        return
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN
+
+    rating_slide = prs.slides[template_cfg["rating_slide_idx"]]
+
+    # Skip if a previous fill already added a summary shape on this slide.
+    for shape in rating_slide.shapes:
+        if shape.name == "ScoutingSummary":
+            if shape.has_text_frame:
+                _write_text_shape(shape, summary_text)
+            return
+
+    left = Inches(9.17)
+    top = Inches(10.56)
+    width = Inches(11.53)
+    height = Inches(3.96)
+    tb = rating_slide.shapes.add_textbox(left, top, width, height)
+    tb.name = "ScoutingSummary"
+    tf = tb.text_frame
+    tf.word_wrap = True
+
+    # python-pptx creates one default paragraph
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.LEFT
+    run = p.add_run()
+    run.text = summary_text
+    font = run.font
+    font.name = "Helvetica Neue"
+    font.size = Pt(20)
+    font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
 
 
 # ─── Physical data ─────────────────────────────────────────────────────────
@@ -1298,6 +1352,7 @@ def fill_template(
     transfer_details: dict | None = None,
     scouting_dates: list | None = None,
     report_date: str | None = None,
+    summary_text: str | None = None,
 ) -> io.BytesIO:
     """Fill a blank template file and return the result as BytesIO."""
     prs = Presentation(template_cfg["file"])
@@ -1312,6 +1367,8 @@ def fill_template(
         fill_transfer_details(prs, template_cfg, transfer_details)
     if scouting_dates:
         fill_scouting_dates(prs, template_cfg, scouting_dates)
+    if summary_text:
+        fill_scouting_summary(prs, template_cfg, summary_text)
     fill_report_date(prs, template_cfg, report_date or _today_ddmmyyyy())
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
@@ -1336,6 +1393,7 @@ def fill_from_bytes(
     transfer_details: dict | None = None,
     scouting_dates: list | None = None,
     report_date: str | None = None,
+    summary_text: str | None = None,
 ) -> io.BytesIO:
     """Fill an uploaded PPTX (raw bytes) and return the result as BytesIO."""
     prs = Presentation(io.BytesIO(file_bytes))
@@ -1350,6 +1408,8 @@ def fill_from_bytes(
         fill_transfer_details(prs, template_cfg, transfer_details)
     if scouting_dates:
         fill_scouting_dates(prs, template_cfg, scouting_dates)
+    if summary_text:
+        fill_scouting_summary(prs, template_cfg, summary_text)
     fill_report_date(prs, template_cfg, report_date or _today_ddmmyyyy())
     if player_photo or player_photo_circular:
         fill_player_photo(prs, template_cfg, full_photo=player_photo, circular_photo=player_photo_circular)
