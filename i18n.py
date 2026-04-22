@@ -146,7 +146,7 @@ TRANSLATIONS = {
         "scraping_availability": "Scraping availability from Transfermarkt...",
         "availability_scraped": "Availability scraped: {pct}% — player was in squad for {in_squad} of {total} club matches this season.",
         "availability_scrape_failed": "Could not determine availability from Transfermarkt. Field will be left empty on the slide.",
-        "preview_disclaimer": "Do not worry about the layout — it will improve once converted to .key. Just check that all the data is there where and how you expected it to be.",
+        "preview_disclaimer": "Do not worry about the layout, it will improve once converted to .key. Just check that all the data is there where and how you expected it to be.",
         "adjust_date_prompt": "This draft's report date is {old_date}. Would you like to update it to today's date ({new_date})?",
         "adjust_date_yes": "Yes, use today's date",
         "adjust_date_no": "No, keep {old_date}",

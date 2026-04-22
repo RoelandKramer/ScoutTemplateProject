@@ -7,7 +7,6 @@ import re
 from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.oxml.ns import qn
 from pptx.shapes.picture import Movie
 from pptx.util import Pt
@@ -504,15 +503,6 @@ def _is_numeric_rating_text(text: str) -> bool:
     if t.lower() == "xx":
         return True
     return bool(re.fullmatch(r"\d{1,2}([.,]\d{1,2})?", t))
-
-
-def _is_rating_shape(shape) -> bool:
-    """True if this shape holds (or is) the overall rating — used by compatibility check."""
-    if _is_rating_anchor(shape):
-        return True
-    if shape.has_text_frame:
-        return _is_numeric_rating_text(shape.text_frame.text)
-    return False
 
 
 def _restore_text_frame(shape) -> None:
@@ -1054,7 +1044,6 @@ def fill_scouting_dates(prs, template_cfg: dict, scouting_dates: list) -> None:
         elif d:
             lines.append(d)
     if lines:
-        from pptx.util import Pt
         _replace_all_paragraphs(target, lines, font_size=Pt(20), bold=True)
 
 
