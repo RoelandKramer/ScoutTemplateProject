@@ -187,6 +187,53 @@ def _filter_season(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+def _event_unique_tournament(ev: Dict[str, Any]) -> Tuple[Optional[int], str, str]:
+    """Return (uniqueTournament id, uniqueTournament name, category name)."""
+    t = ev.get("tournament") or {}
+    ut = t.get("uniqueTournament") or {}
+    cat = (t.get("category") or {}).get("name", "") or ""
+    return ut.get("id"), (ut.get("name") or ""), cat
+
+
+def _is_friendly(ev: Dict[str, Any]) -> bool:
+    _uid, uname, cat = _event_unique_tournament(ev)
+    blob = f"{uname} {cat}".lower()
+    return "friendly" in blob or "friendlies" in blob
+
+
+def _primary_tournament_id(events: Iterable[Dict[str, Any]]) -> Optional[int]:
+    """Pick the uniqueTournament id with the most matches (excl. friendlies).
+
+    Used to restrict a team's event list to its current main competition so
+    availability and match lists don't mix league, cup, and friendly games.
+    """
+    from collections import Counter
+    counts: Counter = Counter()
+    for ev in events:
+        if _is_friendly(ev):
+            continue
+        uid, _uname, _cat = _event_unique_tournament(ev)
+        if uid:
+            counts[uid] += 1
+    if not counts:
+        return None
+    return counts.most_common(1)[0][0]
+
+
+def _filter_by_tournament(
+    events: Iterable[Dict[str, Any]],
+    ut_id: Optional[int],
+) -> List[Dict[str, Any]]:
+    if not ut_id:
+        return [ev for ev in events if not _is_friendly(ev)]
+    out = []
+    for ev in events:
+        uid, _uname, _cat = _event_unique_tournament(ev)
+        if uid == ut_id:
+            out.append(ev)
+    return out
+
+
 # ─── Public API ───────────────────────────────────────────────────────────
 
 def _event_match_dict(ev: Dict[str, Any]) -> Dict[str, Any]:
@@ -245,12 +292,21 @@ def get_player_availability(
         if not pid or not tid:
             return out
 
-        team_events = _filter_season(_list_events("team", tid))
+        team_events_all = _filter_season(_list_events("team", tid))
+        if not team_events_all:
+            return out
+
+        # Restrict both team and player events to the team's primary
+        # competition this season (typically the league) so cup and
+        # friendly matches don't skew availability.
+        primary_ut = _primary_tournament_id(team_events_all)
+        team_events = _filter_by_tournament(team_events_all, primary_ut)
         if not team_events:
             return out
         team_event_ids = {ev.get("id") for ev in team_events}
 
-        player_events = _filter_season(_list_events("player", pid))
+        player_events_all = _filter_season(_list_events("player", pid))
+        player_events = _filter_by_tournament(player_events_all, primary_ut)
         in_squad_events = [ev for ev in player_events if ev.get("id") in team_event_ids]
         in_squad = len(in_squad_events)
         total = len(team_event_ids)
@@ -267,6 +323,58 @@ def get_player_availability(
         return out
     except Exception:
         return out
+
+
+# ─── Team match list (used when player isn't in our physical-data universe) ─
+
+def _search_team(club_hint: str) -> Optional[Dict[str, Any]]:
+    """Find the Sofascore team best matching ``club_hint``."""
+    if not club_hint:
+        return None
+    data = _get_json(f"/api/v1/search/all?q={requests.utils.quote(club_hint)}&page=0")
+    if not data:
+        return None
+    results = data.get("results") or []
+    teams = [r for r in results if r.get("type") == "team" and r.get("entity")]
+    if not teams:
+        return None
+    target = _normalize(club_hint)
+
+    def score(item: Dict[str, Any]) -> int:
+        nm = _normalize((item.get("entity") or {}).get("name", ""))
+        s = 0
+        if nm == target: s += 100
+        elif target and (target in nm or nm in target): s += 40
+        return s
+
+    teams.sort(key=score, reverse=True)
+    return teams[0].get("entity")
+
+
+def get_team_matches(club_hint: str) -> List[Dict[str, Any]]:
+    """Return this season's matches for the team matching ``club_hint``.
+
+    Restricted to the team's primary competition (skips friendlies and
+    cup/unrelated competitions). Newest first. Used as a fallback in the
+    scouting-session UI when a player isn't covered by our physical-data
+    CSV and the KKD/Eredivisie match list isn't available.
+    """
+    try:
+        team = _search_team(club_hint)
+        if not team:
+            return []
+        tid = team.get("id")
+        if not tid:
+            return []
+        events_all = _filter_season(_list_events("team", tid))
+        if not events_all:
+            return []
+        primary_ut = _primary_tournament_id(events_all)
+        events = _filter_by_tournament(events_all, primary_ut)
+        events.sort(key=lambda e: int(e.get("startTimestamp") or 0), reverse=True)
+        return [_event_match_dict(ev) for ev in events]
+    except Exception:
+        return []
 
 
 # ─── Season + career stats (used when Transfermarkt is unreachable) ──────

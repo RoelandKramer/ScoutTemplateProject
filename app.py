@@ -1287,7 +1287,10 @@ def _transfermarkt_section(
     # Show the player portrait if available (display-only)
     _tm_img = st.session_state.get(f"{key_prefix}_tm_image")
     if _tm_img:
-        st.image(_tm_img, width=120, caption=player_name)
+        st.image(
+            _tm_img, width=120,
+            caption=f"{t('player_match_stats_label', L)}: {player_name}",
+        )
 
     stats = st.session_state.get(state_key)
     if stats:
@@ -1425,7 +1428,7 @@ def _physical_data_section(
 
     data = st.session_state.get(state_key)
     if data:
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             td = data.get("total_distance")
             st.metric(
@@ -1455,18 +1458,21 @@ def _physical_data_section(
             if (ts_val or "") != (data.get("top_speed") or ""):
                 data["top_speed"] = ts_val
                 st.session_state[state_key] = data
-        with c5:
-            tm_blob = st.session_state.get(tm_state_key) or {} if tm_state_key else {}
-            avail_pct = tm_blob.get("availability_pct")
-            in_squad = tm_blob.get("availability_in_squad") or 0
-            total = tm_blob.get("availability_total") or 0
+        if data.get("n_matches_60plus"):
+            st.caption(t("physical_based_on_matches", L))
+
+        # Availability — shown below the physical metrics (Sofascore).
+        tm_blob = st.session_state.get(tm_state_key) or {} if tm_state_key else {}
+        avail_pct = tm_blob.get("availability_pct")
+        in_squad = tm_blob.get("availability_in_squad") or 0
+        total = tm_blob.get("availability_total") or 0
+        ac1, _ac2 = st.columns([1, 3])
+        with ac1:
             st.metric(
                 t("availability_label", L),
                 f"{avail_pct:.0f}%" if avail_pct is not None else "—",
                 help=f"{in_squad}/{total}" if total else None,
             )
-        if data.get("n_matches_60plus"):
-            st.caption(t("physical_based_on_matches", L))
 
     return st.session_state.get(state_key)
 
@@ -1487,6 +1493,7 @@ def _scouting_session_section(
     transfer_state_key: str = "transfer_details",
     dates_state_key: str = "scouting_dates",
     matches_state_key: str | None = None,
+    player_data: dict | None = None,
 ) -> tuple[dict, list]:
     """Render Transfer Details + Scouting session entries. Returns (transfer dict, dates list)."""
     import datetime as _dt
@@ -1599,9 +1606,37 @@ def _scouting_session_section(
                 st.session_state.get(matches_state_key)
                 if matches_state_key else None
             ) or []
-            if not matches:
-                st.info(t("scouting_match_unavailable", L))
-            else:
+
+            # For players outside the physical-data universe (non-KKD/Ere),
+            # the "Obtain Match stats" button isn't shown, so matches stay
+            # empty. Try fetching the team's league matches directly from
+            # Sofascore once; if that also returns nothing, fall back to a
+            # manual entry row below.
+            is_kkd = _is_kkd_or_eredivisie(player_data)
+            team_fetched_flag = (
+                f"{matches_state_key}_team_fetched"
+                if matches_state_key else f"{key_prefix}_team_fetched"
+            )
+            if (
+                not matches
+                and not is_kkd
+                and player_data
+                and not st.session_state.get(team_fetched_flag)
+            ):
+                club_for_fetch = (player_data or {}).get("club", "").strip()
+                if club_for_fetch:
+                    try:
+                        from sofascore import get_team_matches
+                        with st.spinner(t("calculating_avail_and_phys", L)):
+                            team_matches = get_team_matches(club_for_fetch)
+                        if team_matches and matches_state_key:
+                            st.session_state[matches_state_key] = team_matches
+                            matches = team_matches
+                    except Exception:
+                        pass
+                st.session_state[team_fetched_flag] = True
+
+            if matches:
                 # Build labeled options; selectbox accepts text input for filtering.
                 options = [m.get("label") or "" for m in matches if m.get("label")]
                 cd1, cd2 = st.columns([3, 1])
@@ -1631,6 +1666,42 @@ def _scouting_session_section(
                             })
                             st.session_state[dates_state_key] = dates
                             st.rerun()
+            elif is_kkd:
+                st.info(t("scouting_match_unavailable", L))
+            else:
+                # Manual entry: no online matches found for this team.
+                st.info(t("scouting_match_manual_note", L))
+                mc1, mc2, mc3 = st.columns([3, 2, 1])
+                with mc1:
+                    manual_label = st.text_input(
+                        t("scouting_match_pick", L),
+                        key=f"{key_prefix}_manual_match_label",
+                        placeholder=t("scouting_match_manual_placeholder", L),
+                    )
+                with mc2:
+                    manual_date = st.date_input(
+                        t("scouting_date_label", L),
+                        value=_dt.date.today(),
+                        key=f"{key_prefix}_manual_match_date",
+                        format="DD/MM/YYYY",
+                    )
+                with mc3:
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                    if st.button(
+                        t("add_scouting_entry", L),
+                        key=f"{key_prefix}_add_manual_match",
+                        use_container_width=True,
+                        disabled=not (manual_label and manual_label.strip()),
+                    ):
+                        date_us = manual_date.strftime("%m-%d-%Y")
+                        lbl = f"{date_us} {manual_label.strip()}"
+                        dates.append({
+                            "date": manual_date.strftime("%d/%m/%Y"),
+                            "type": GAME_LABEL,
+                            "label": lbl,
+                        })
+                        st.session_state[dates_state_key] = dates
+                        st.rerun()
 
     if dates:
         for idx, entry in enumerate(list(dates)):
@@ -2453,6 +2524,7 @@ elif page == "New Report":
         transfer_state_key="new_transfer_details",
         dates_state_key="new_scouting_dates",
         matches_state_key="new_player_matches",
+        player_data=player_data,
     )
 
     st.markdown("---")
@@ -2474,7 +2546,6 @@ elif page == "New Report":
 
     # ── Scouting Summary (large free-text, rendered at bottom-center) ────
     st.markdown(f"### {t('scouting_summary_heading', L)}")
-    st.caption(t("scouting_summary_note", L))
     summary_key = "new_scouting_summary"
     st.text_area(
         t("scouting_summary_label", L),
@@ -3067,6 +3138,7 @@ elif page == "Upload & Edit":
             transfer_state_key="upload_transfer_details",
             dates_state_key="upload_scouting_dates",
             matches_state_key="upload_player_matches",
+            player_data=upload_player_data,
         )
 
         st.markdown("---")
@@ -3092,7 +3164,6 @@ elif page == "Upload & Edit":
 
         # ── Scouting Summary (large free-text, rendered at bottom-center) ──
         st.markdown(f"### {t('scouting_summary_heading', L)}")
-        st.caption(t("scouting_summary_note", L))
         upload_summary_key = "upload_scouting_summary"
         st.text_area(
             t("scouting_summary_label", L),
