@@ -327,8 +327,32 @@ def get_player_availability(
 
 # ─── Team match list (used when player isn't in our physical-data universe) ─
 
+# Tokens that almost every football club shares — they should not count as
+# evidence two clubs are the same. ``AFC Amsterdam`` and ``AFC Ajax`` only
+# share the generic ``AFC`` prefix; the distinctive tokens (``Amsterdam`` vs
+# ``Ajax``) must overlap before we consider them a match.
+_GENERIC_CLUB_TOKENS = {
+    "fc", "afc", "sc", "sv", "vv", "cv", "ac", "as", "ss", "us",
+    "cf", "kf", "kv", "kvc", "ks", "sk", "rs", "rfc", "rcd", "real",
+    "club", "atletico", "athletic", "deportivo", "olimpico",
+    "sporting", "the", "1.", "1.fc", "fk", "vfb", "vfl", "ssv",
+    "ssc", "calcio", "united", "city", "town", "rovers", "wanderers",
+    "sportif", "olympique",
+}
+
+
+def _distinctive_tokens(s: str) -> set[str]:
+    return set(_normalize(s).split()) - _GENERIC_CLUB_TOKENS
+
+
 def _search_team(club_hint: str) -> Optional[Dict[str, Any]]:
-    """Find the Sofascore team best matching ``club_hint``."""
+    """Find the Sofascore team best matching ``club_hint``.
+
+    Uses a strict-ish Jaccard over distinctive (non-generic) tokens so
+    e.g. ``AFC Amsterdam`` doesn't accidentally match ``AFC Ajax`` just
+    because they share the ``AFC`` prefix. Returns None when no candidate
+    has a meaningful overlap.
+    """
     if not club_hint:
         return None
     data = _get_json(f"/api/v1/search/all?q={requests.utils.quote(club_hint)}&page=0")
@@ -338,17 +362,29 @@ def _search_team(club_hint: str) -> Optional[Dict[str, Any]]:
     teams = [r for r in results if r.get("type") == "team" and r.get("entity")]
     if not teams:
         return None
-    target = _normalize(club_hint)
+
+    target_norm = _normalize(club_hint)
+    target_tokens = _distinctive_tokens(club_hint)
 
     def score(item: Dict[str, Any]) -> int:
-        nm = _normalize((item.get("entity") or {}).get("name", ""))
-        s = 0
-        if nm == target: s += 100
-        elif target and (target in nm or nm in target): s += 40
-        return s
+        nm = (item.get("entity") or {}).get("name", "") or ""
+        nm_norm = _normalize(nm)
+        if nm_norm == target_norm:
+            return 1000
+        nm_tokens = _distinctive_tokens(nm)
+        if not target_tokens or not nm_tokens:
+            return 0
+        overlap = target_tokens & nm_tokens
+        if not overlap:
+            return 0
+        union = target_tokens | nm_tokens
+        return int(round(100.0 * len(overlap) / len(union)))
 
-    teams.sort(key=score, reverse=True)
-    return teams[0].get("entity")
+    scored = sorted(teams, key=score, reverse=True)
+    top = scored[0]
+    if score(top) <= 0:
+        return None
+    return top.get("entity")
 
 
 def get_team_matches(club_hint: str) -> List[Dict[str, Any]]:

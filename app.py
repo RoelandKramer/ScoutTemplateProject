@@ -1287,10 +1287,7 @@ def _transfermarkt_section(
     # Show the player portrait if available (display-only)
     _tm_img = st.session_state.get(f"{key_prefix}_tm_image")
     if _tm_img:
-        st.image(
-            _tm_img, width=120,
-            caption=f"{t('player_match_stats_label', L)}: {player_name}",
-        )
+        st.image(_tm_img, width=120)
 
     stats = st.session_state.get(state_key)
     if stats:
@@ -1488,34 +1485,47 @@ _TRANSFER_LABELS = {
 }
 
 
-def _scouting_session_section(
+def _transfer_details_section(
     key_prefix: str = "scout",
     transfer_state_key: str = "transfer_details",
-    dates_state_key: str = "scouting_dates",
-    matches_state_key: str | None = None,
-    player_data: dict | None = None,
-) -> tuple[dict, list]:
-    """Render Transfer Details + Scouting session entries. Returns (transfer dict, dates list)."""
+) -> dict:
+    """Render the Transfer Details block (own heading, no scouting sessions).
+
+    Three monetary fields (Transfer value, Prediction year 1, Prediction year
+    2) are stored with a leading € when numeric; a 'Transfervrij' (free
+    agent) checkbox replaces the value with the literal string 'Transfervrij'.
+    """
     import datetime as _dt
 
     L = _lang()
-    st.markdown(f"### {t('scouting_scisports_heading', L)}")
+    st.markdown(f"### {t('transfer_details_heading', L)}")
 
-    # ── Transfer Details ──────────────────────────────────────────────────
-    st.markdown(f"**{t('transfer_details_heading', L)}**")
     td = st.session_state.get(transfer_state_key) or {}
 
-    # Text fields: use key-only state (no value=) to avoid Streamlit's
-    # "Press Enter to submit / apply" helper. Pre-seed state from td once.
-    _text_fields = [
-        ("transfer_value",    f"{key_prefix}_tvalue",       "transfer_value_label"),
-        ("prediction_year_1", f"{key_prefix}_pred_1",       "prediction_year_1_label"),
-        ("prediction_year_2", f"{key_prefix}_pred_2",       "prediction_year_2_label"),
-        ("next_step",         f"{key_prefix}_next_step",    "next_step_label"),
+    money_fields = [
+        ("transfer_value",    f"{key_prefix}_tvalue", "transfer_value_label"),
+        ("prediction_year_1", f"{key_prefix}_pred_1", "prediction_year_1_label"),
+        ("prediction_year_2", f"{key_prefix}_pred_2", "prediction_year_2_label"),
     ]
-    for td_field, widget_key, _ in _text_fields:
-        if widget_key not in st.session_state:
-            st.session_state[widget_key] = td.get(td_field, "")
+    next_step_key = f"{key_prefix}_next_step"
+
+    # ── State initialisation ────────────────────────────────────────────
+    free_marker = (t("transfervrij_value", L) or "Transfervrij").strip().lower()
+    for td_field, base_key, _label in money_fields:
+        free_key = f"{base_key}_free"
+        val_key = f"{base_key}_amount"
+        if free_key not in st.session_state:
+            prev = (td.get(td_field) or "")
+            prev_clean = str(prev).strip()
+            is_free = prev_clean.lower() == free_marker
+            st.session_state[free_key] = is_free
+            if val_key not in st.session_state:
+                st.session_state[val_key] = (
+                    "" if is_free
+                    else prev_clean.replace("€", "").strip()
+                )
+    if next_step_key not in st.session_state:
+        st.session_state[next_step_key] = td.get("next_step", "")
 
     # End-of-contract: date picker, default 30 June 2026
     eoc_key = f"{key_prefix}_end_contract_date"
@@ -1535,14 +1545,41 @@ def _scouting_session_section(
         st.session_state[eoc_key] = parsed or _default_eoc
 
     def _sync_td():
-        for td_field, widget_key, _ in _text_fields:
-            td[td_field] = st.session_state.get(widget_key, "")
+        # Money fields: combine free-agent flag + numeric value
+        for td_field, base_key, _label in money_fields:
+            free_key = f"{base_key}_free"
+            val_key = f"{base_key}_amount"
+            if st.session_state.get(free_key):
+                td[td_field] = t("transfervrij_value", L) or "Transfervrij"
+            else:
+                v = (st.session_state.get(val_key) or "").strip()
+                # Strip stray € the user might re-type
+                v = v.lstrip("€").strip()
+                td[td_field] = f"€ {v}" if v else ""
+        td["next_step"] = st.session_state.get(next_step_key, "")
         eoc = st.session_state.get(eoc_key)
         if isinstance(eoc, _dt.date):
             td["end_of_contract"] = eoc.strftime("%d/%m/%Y")
         else:
             td["end_of_contract"] = str(eoc) if eoc else ""
         st.session_state[transfer_state_key] = td
+
+    def _money_field(label_key: str, base_key: str):
+        free_key = f"{base_key}_free"
+        val_key = f"{base_key}_amount"
+        is_free = bool(st.session_state.get(free_key))
+        st.text_input(
+            label_key,
+            key=val_key,
+            on_change=_sync_td,
+            disabled=is_free,
+            placeholder="€ 250.000",
+        )
+        st.checkbox(
+            t("transfervrij_label", L),
+            key=free_key,
+            on_change=_sync_td,
+        )
 
     c1, c2 = st.columns(2)
     with c1:
@@ -1552,17 +1589,35 @@ def _scouting_session_section(
             format="DD/MM/YYYY",
             on_change=_sync_td,
         )
-        st.text_input(t("prediction_year_1_label", L), key=f"{key_prefix}_pred_1",    on_change=_sync_td)
-        st.text_input(t("next_step_label", L),         key=f"{key_prefix}_next_step", on_change=_sync_td)
+        _money_field(t("prediction_year_1_label", L), f"{key_prefix}_pred_1")
+        st.text_input(t("next_step_label", L), key=next_step_key, on_change=_sync_td)
     with c2:
-        st.text_input(t("transfer_value_label", L),    key=f"{key_prefix}_tvalue",    on_change=_sync_td)
-        st.text_input(t("prediction_year_2_label", L), key=f"{key_prefix}_pred_2",    on_change=_sync_td)
+        _money_field(t("transfer_value_label", L), f"{key_prefix}_tvalue")
+        _money_field(t("prediction_year_2_label", L), f"{key_prefix}_pred_2")
 
-    # Always sync latest widget state into td (covers initial render too)
+    # Sync latest widget state into td (covers initial render too)
     _sync_td()
+    return st.session_state.get(transfer_state_key) or {}
 
-    # ── Scouting dates ───────────────────────────────────────────────────
-    st.markdown(f"**{t('scouting_sessions_heading', L)}**")
+
+def _scouting_session_section(
+    key_prefix: str = "scout",
+    transfer_state_key: str = "transfer_details",
+    dates_state_key: str = "scouting_dates",
+    matches_state_key: str | None = None,
+    player_data: dict | None = None,
+) -> tuple[dict, list]:
+    """Render the Scouting Sessions block. Returns (transfer dict, dates list).
+
+    Transfer details are rendered separately by ``_transfer_details_section``;
+    this function only displays the scouting-session entries (game/training).
+    The ``transfer_state_key`` is still accepted so callers can read the
+    transfer dict back from one place.
+    """
+    import datetime as _dt
+
+    L = _lang()
+    st.markdown(f"### {t('scouting_sessions_heading', L)}")
     st.caption(t("scouting_sessions_note", L))
 
     dates = st.session_state.get(dates_state_key) or []
@@ -1668,42 +1723,56 @@ def _scouting_session_section(
                             st.rerun()
             elif is_kkd:
                 st.info(t("scouting_match_unavailable", L))
-            else:
-                # Manual entry: no online matches found for this team.
+
+            # Manual entry — always available so the user can add a match
+            # that isn't in the auto-fetched list (or for KKD players who
+            # haven't pressed "Obtain physical data" yet).
+            if not matches and not is_kkd:
                 st.info(t("scouting_match_manual_note", L))
-                mc1, mc2, mc3 = st.columns([3, 2, 1])
-                with mc1:
-                    manual_label = st.text_input(
-                        t("scouting_match_pick", L),
-                        key=f"{key_prefix}_manual_match_label",
-                        placeholder=t("scouting_match_manual_placeholder", L),
-                    )
-                with mc2:
-                    manual_date = st.date_input(
-                        t("scouting_date_label", L),
-                        value=_dt.date.today(),
-                        key=f"{key_prefix}_manual_match_date",
-                        format="DD/MM/YYYY",
-                    )
-                with mc3:
-                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-                    if st.button(
-                        t("add_scouting_entry", L),
-                        key=f"{key_prefix}_add_manual_match",
-                        use_container_width=True,
-                        disabled=not (manual_label and manual_label.strip()),
-                    ):
-                        date_us = manual_date.strftime("%m-%d-%Y")
-                        lbl = f"{date_us} {manual_label.strip()}"
-                        dates.append({
-                            "date": manual_date.strftime("%d/%m/%Y"),
-                            "type": GAME_LABEL,
-                            "label": lbl,
-                        })
-                        st.session_state[dates_state_key] = dates
-                        st.rerun()
+            mc1, mc2, mc3 = st.columns([3, 2, 1])
+            with mc1:
+                manual_label = st.text_input(
+                    t("scouting_match_pick", L),
+                    key=f"{key_prefix}_manual_match_label",
+                    placeholder=t("scouting_match_manual_placeholder", L),
+                )
+            with mc2:
+                manual_date = st.date_input(
+                    t("scouting_date_label", L),
+                    value=_dt.date.today(),
+                    key=f"{key_prefix}_manual_match_date",
+                    format="DD/MM/YYYY",
+                )
+            with mc3:
+                st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                if st.button(
+                    t("add_scouting_entry", L),
+                    key=f"{key_prefix}_add_manual_match",
+                    use_container_width=True,
+                    disabled=not (manual_label and manual_label.strip()),
+                ):
+                    date_us = manual_date.strftime("%m-%d-%Y")
+                    lbl = f"{date_us} {manual_label.strip()}"
+                    dates.append({
+                        "date": manual_date.strftime("%d/%m/%Y"),
+                        "type": GAME_LABEL,
+                        "label": lbl,
+                    })
+                    st.session_state[dates_state_key] = dates
+                    st.rerun()
 
     if dates:
+        # Sort entries chronologically: oldest on top, most recent at the
+        # bottom. Use the DD/MM/YYYY string in `date`; entries without a
+        # parseable date fall to the top.
+        def _entry_sort_key(e):
+            try:
+                return _dt.datetime.strptime(e.get("date") or "", "%d/%m/%Y").date()
+            except Exception:
+                return _dt.date(1900, 1, 1)
+        dates.sort(key=_entry_sort_key)
+        st.session_state[dates_state_key] = dates
+
         for idx, entry in enumerate(list(dates)):
             rc1, rc2 = st.columns([8, 1])
             with rc1:
@@ -2544,6 +2613,14 @@ elif page == "New Report":
 
     st.markdown("---")
 
+    # ── Transfer Details (between Player Photo and Scouting Summary) ─────
+    _transfer_details_section(
+        key_prefix="new_scout",
+        transfer_state_key="new_transfer_details",
+    )
+
+    st.markdown("---")
+
     # ── Scouting Summary (large free-text, rendered at bottom-center) ────
     st.markdown(f"### {t('scouting_summary_heading', L)}")
     summary_key = "new_scouting_summary"
@@ -3159,6 +3236,14 @@ elif page == "Upload & Edit":
 
         # ── Player photo (placed below competency videos) ──────────────
         _up_photo_full, _up_photo_circ = _player_photo_section(state_key="upload_player_photo")
+
+        st.markdown("---")
+
+        # ── Transfer Details (between Player Photo and Scouting Summary) ─
+        _transfer_details_section(
+            key_prefix="upload_scout",
+            transfer_state_key="upload_transfer_details",
+        )
 
         st.markdown("---")
 
