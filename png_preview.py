@@ -62,8 +62,8 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
     "career_assists":    (1073, 259, 162, 43, "mm"),
 
     # Circles — rating & availability (white circle, NAVY text)
-    "rating":            (660, 404, 222, 222, "mm"),
-    "availability":      (1001, 404, 222, 223, "mm"),
+    "rating":            (660, 394, 222, 222, "mm"),
+    "availability":      (1001, 394, 222, 223, "mm"),
 
     # Transfer details — right column gray boxes (text BLACK, centered)
     "end_of_contract":   (1554, 754, 283, 44, "mm"),
