@@ -93,7 +93,7 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
 
     # Scouting sessions — inside the light-blue content box to the right of
     # the "SCOUTING / Sci Sports" header (TextBox 23 on the rating slide).
-    "scouting_dates":    (1490, 55, 400, 220, "tl"),
+    "scouting_dates":    (1460, 55, 400, 220, "tl"),
 }
 
 
@@ -191,20 +191,20 @@ def _wrap_text(text: str, font, draw, max_w: int) -> list[str]:
 
 def _draw_multiline(
     draw: ImageDraw.ImageDraw, text: str, box: tuple[int, int, int, int],
-    color, start_size: int = 24,
+    color, start_size: int = 24, bold: bool = False,
 ) -> None:
     if not text:
         return
     x, y, w, h = box
     size = start_size
     while size > 10:
-        font = _load_font(size)
+        font = _load_font(size, bold=bold)
         lines = _wrap_text(text, font, draw, w)
         line_h = _measure(draw, "Hg", font)[1] + 4
         if line_h * len(lines) <= h:
             break
         size -= 1
-    font = _load_font(size)
+    font = _load_font(size, bold=bold)
     lines = _wrap_text(text, font, draw, w)
     line_h = _measure(draw, "Hg", font)[1] + 4
     cy = y
@@ -383,7 +383,9 @@ def render_png_preview(
         if key in long_text_keys:
             start = 22 if key == "scouting_dates" else 24
             color = BLACK if key in on_light_keys else WHITE
-            _draw_multiline(draw, text, (x, y, w, h), color, start_size=start)
+            is_bold = key == "scouting_dates"
+            _draw_multiline(draw, text, (x, y, w, h), color,
+                            start_size=start, bold=is_bold)
             continue
         if key in on_white_keys:
             color = NAVY

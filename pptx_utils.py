@@ -1054,10 +1054,11 @@ def fill_scouting_dates(prs, template_cfg: dict, scouting_dates: list) -> None:
         elif d:
             lines.append(d)
     if lines:
-        _replace_all_paragraphs(target, lines)
+        from pptx.util import Pt
+        _replace_all_paragraphs(target, lines, font_size=Pt(20))
 
 
-def _replace_all_paragraphs(shape, lines: list[str]) -> None:
+def _replace_all_paragraphs(shape, lines: list[str], font_size=None) -> None:
     """Replace ALL text in a shape with one paragraph per line, preserving
     formatting from the first existing run (font, size, color, bold, etc.)."""
     if not shape.has_text_frame or not lines:
