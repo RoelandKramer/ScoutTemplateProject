@@ -1108,6 +1108,9 @@ def _replace_all_paragraphs(shape, lines: list[str], font_size=None) -> None:
         run = p.add_run()
         run.text = line
         _copy_run_format(src_run, run)
+        if font_size is not None:
+            try: run.font.size = font_size
+            except Exception: pass
 
 
 # ─── Scouting summary (rating slide, bottom-center dark-navy block) ──────
