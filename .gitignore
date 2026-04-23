@@ -8,3 +8,8 @@ build/
 Thumbs.db
 .streamlit/secrets.toml
 data/
+
+# Source design files — not needed at runtime, exceed HF Spaces 10 MB limit
+*.key
+*.ppt
+Template/
