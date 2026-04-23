@@ -1,0 +1,9 @@
+libreoffice
+libreoffice-impress
+poppler-utils
+fonts-dejavu
+fonts-liberation
+fonts-liberation2
+fonts-urw-base35
+fonts-noto-core
+fontconfig
