@@ -8,6 +8,15 @@ import base64
 from datetime import datetime, timezone, timedelta
 import zoneinfo
 from pathlib import Path
+
+# 1. THIS MUST BE AT THE VERY TOP
+toml_secrets = os.environ.get("TOML_SECRETS")
+if toml_secrets:
+    os.makedirs(".streamlit", exist_ok=True)
+    with open(".streamlit/secrets.toml", "w") as f:
+        f.write(toml_secrets)
+
+
 import streamlit as st
 from pptx_utils import (
     TEMPLATES, CLUBS, CLUB_LANGUAGES,
