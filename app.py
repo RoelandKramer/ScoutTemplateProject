@@ -59,7 +59,7 @@ st.markdown(
 # (Flag CSS is emitted from _render_flags() — AFTER _apply_theme() — so it
 #  can override the theme's global button styles with higher specificity.)
 
-_VIDEO_PREVIEW_LIMIT = 100 * 1024 * 1024
+_VIDEO_PREVIEW_LIMIT = 300 * 1024 * 1024
 
 LOGO_DIR = Path(__file__).parent / "Logo's"
 _LOGO_DB  = LOGO_DIR / "FC DEN BOSCH LOGO.png"
