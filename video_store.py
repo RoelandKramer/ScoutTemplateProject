@@ -1,57 +1,64 @@
-"""Video slot helpers — keep RAM usage bounded regardless of clip size.
+"""Video slot helpers — keep RAM bounded while giving instant preview.
 
-A *video slot* is the per-competency video upload on the rating page. To stop
-the app from holding N × 350 MB in session_state, each slot stores a
-**reference dict** rather than raw bytes:
+Upload path:
+  * ``save_uploaded_to_local`` streams the file from Streamlit's uploader
+    to a local disk path (``data/_videos/<report_id>/<slot>_<name>``) in
+    a few-MB chunks. Peak RAM ≈ one chunk regardless of clip size.
+  * Preview plays directly from that local path via ``st.video(path)`` —
+    no OneDrive round-trip, no wait.
+
+Persistence path:
+  * ``push_slot_to_onedrive`` is called at **save-draft** time so drafts
+    survive container restarts. Not called on upload, so the UX is
+    instant and abandoned reports never leave OneDrive litter.
+  * ``ensure_local`` re-materialises a slot's local_path from OneDrive
+    when a draft is reopened in a fresh container.
+
+Cleanup:
+  * ``cleanup_report`` deletes the per-report local folder and (optionally)
+    the OneDrive copy — called after generation/share, when a draft is
+    deleted, or on logout.
+
+Slot shape (JSON-safe except for runtime-only ``local_path``):
 
     {
       "filename":     "clip.mp4",
       "size":          123456789,
-      "onedrive_path": "ScoutTemplateProject/<scout>/videos/<report_id>/00_clip.mp4",
-      "report_id":     "<report_id>",
-      "local_preview_path": "/tmp/scoutvid_xyz.mp4",   # optional — set while previewing
+      "local_path":   "data/_videos/<rid>/00_clip.mp4",   # None after reload
+      "onedrive_path": "ScoutTemplateProject/<scout>/videos/<rid>/00_clip.mp4",  # None until saved
+      "report_id":    "<rid>",
     }
-
-The module provides:
-  * ``save_uploaded_to_onedrive`` — stream an ``UploadedFile`` to disk, push
-    to OneDrive via the chunked helper, and return a ref dict. Peak RAM is
-    one chunk (~3 MiB).
-  * ``ensure_preview_cached`` — lazily download the clip from OneDrive to a
-    tempfile so ``st.video`` can play a file path. Only one slot at a time.
-  * ``release_preview`` — delete the tempfile and clear ``local_preview_path``.
-  * ``release_all_previews_except`` — keep at most one clip on disk.
-  * ``download_for_embed`` — fetch into a caller-provided temp directory at
-    PPTX generation / save-draft time.
-  * ``delete_all_report_videos`` — cleanup after successful generation.
-
-Video refs are safe to serialize to JSON. Legacy ``(bytes, filename)`` tuples
-from old drafts are tolerated by ``coerce_slot`` (returned as-is with no
-onedrive_path set).
 """
 
 from __future__ import annotations
 
 import os
-import tempfile
+import shutil
 from pathlib import Path
 from typing import Any
 
 import onedrive_sync
 
 
-_TMP_PREFIX = "scoutvid_"
+_VIDEOS_ROOT = Path(__file__).parent / "data" / "_videos"
+_VIDEOS_ROOT.mkdir(parents=True, exist_ok=True)
 
 
-def _session():
-    import streamlit as st
-    return st.session_state
+def _report_dir(report_id: str) -> Path:
+    d = _VIDEOS_ROOT / report_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _safe(name: str) -> str:
+    for ch in '<>:"/\\|?*':
+        name = name.replace(ch, "_")
+    return name.strip() or "video"
 
 
 def coerce_slot(raw: Any) -> dict | None:
-    """Normalise whatever is currently sitting in session_state for a slot.
-
-    Returns a ref dict, or None for empty slots. Tolerates the legacy
-    ``(bytes, filename)`` tuple shape so old drafts still load.
+    """Normalise whatever is in session_state. Tolerates legacy tuples and
+    old-style onedrive-only refs from prior versions of this module.
     """
     if raw is None:
         return None
@@ -63,160 +70,191 @@ def coerce_slot(raw: Any) -> dict | None:
             return {
                 "filename": filename or "video.mp4",
                 "size": len(data),
+                "local_path": None,
                 "onedrive_path": None,
                 "_legacy_bytes": bytes(data),
             }
     return None
 
 
-def save_uploaded_to_onedrive(
+def save_uploaded_to_local(
     uploaded_file,
     *,
-    scout: str,
     report_id: str,
     slot_idx: int,
 ) -> dict | None:
-    """Stream an ``UploadedFile`` from Streamlit to a tempfile, then chunk-upload
-    it to OneDrive. Returns a reference dict (see module docstring) or None
-    on failure. Peak RAM ≈ one chunk.
+    """Stream a Streamlit ``UploadedFile`` to disk. Peak RAM = one chunk.
+
+    Returns the slot dict, or None for an empty input.
     """
     if uploaded_file is None:
         return None
 
     original_name = getattr(uploaded_file, "name", "video.mp4")
-    suffix = "." + original_name.rsplit(".", 1)[-1].lower() if "." in original_name else ".mp4"
+    safe_name = f"{slot_idx:02d}_{_safe(original_name)}"
+    target = _report_dir(report_id) / safe_name
 
-    fd, tmp_path = tempfile.mkstemp(prefix=_TMP_PREFIX, suffix=suffix)
-    os.close(fd)
-    try:
-        # Stream from the uploader to disk in 2 MB chunks — never whole bytes in RAM.
-        total = 0
-        uploaded_file.seek(0)
-        with open(tmp_path, "wb") as out:
-            while True:
-                chunk = uploaded_file.read(2 * 1024 * 1024)
-                if not chunk:
-                    break
-                out.write(chunk)
-                total += len(chunk)
+    uploaded_file.seek(0)
+    total = 0
+    with open(target, "wb") as out:
+        while True:
+            chunk = uploaded_file.read(2 * 1024 * 1024)  # 2 MB
+            if not chunk:
+                break
+            out.write(chunk)
+            total += len(chunk)
 
-        ok, err, onedrive_path = onedrive_sync.upload_video(
-            scout=scout,
-            report_id=report_id,
-            slot_idx=slot_idx,
-            local_path=tmp_path,
-            original_filename=original_name,
-        )
-        if not ok:
-            return {"error": f"OneDrive upload failed: {err}",
-                    "filename": original_name, "size": total,
-                    "onedrive_path": None}
-        return {
-            "filename": original_name,
-            "size": total,
-            "onedrive_path": onedrive_path,
-            "report_id": report_id,
-            "local_preview_path": None,
-        }
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+    return {
+        "filename": original_name,
+        "size": total,
+        "local_path": str(target),
+        "onedrive_path": None,
+        "report_id": report_id,
+    }
 
 
-def ensure_preview_cached(slot: dict, scout: str) -> str | None:
-    """Download the clip from OneDrive to a tempfile if not already cached.
-    Returns the local path (or None on failure).
-    """
-    if not slot:
-        return None
-    # Legacy bytes slots — write bytes to disk once, then forget them.
-    if "_legacy_bytes" in slot and slot.get("local_preview_path") is None:
-        data = slot.pop("_legacy_bytes")
-        suffix = _path_suffix(slot.get("filename"))
-        fd, tmp_path = tempfile.mkstemp(prefix=_TMP_PREFIX, suffix=suffix)
-        os.close(fd)
-        with open(tmp_path, "wb") as fp:
-            fp.write(data)
-        slot["local_preview_path"] = tmp_path
-        return tmp_path
-
-    existing = slot.get("local_preview_path")
-    if existing and Path(existing).exists():
-        return existing
-
-    onedrive_path = slot.get("onedrive_path")
-    if not onedrive_path:
-        return None
-
-    suffix = _path_suffix(slot.get("filename"))
-    fd, tmp_path = tempfile.mkstemp(prefix=_TMP_PREFIX, suffix=suffix)
-    os.close(fd)
-    ok, err = onedrive_sync.download_to_path(scout, onedrive_path, tmp_path)
-    if not ok:
-        try: os.unlink(tmp_path)
-        except OSError: pass
-        return None
-    slot["local_preview_path"] = tmp_path
-    return tmp_path
-
-
-def release_preview(slot: dict | None) -> None:
-    if not slot:
-        return
-    p = slot.get("local_preview_path")
-    if p:
-        try:
-            os.unlink(p)
-        except OSError:
-            pass
-    slot["local_preview_path"] = None
-
-
-def release_all_previews_except(slots_state: dict, keep_key: str | None) -> None:
-    """Drop cached preview tempfiles for all slot keys except ``keep_key``.
-    Ensures at most one clip sits on disk at a time.
-    """
-    for key, val in list(slots_state.items()):
-        if key == keep_key:
-            continue
-        slot = coerce_slot(val)
-        if slot and slot.get("local_preview_path"):
-            release_preview(slot)
-            slots_state[key] = slot
-
-
-def download_for_embed(slot: dict, scout: str, dest_dir: str) -> str | None:
-    """Stream the clip from OneDrive into ``dest_dir`` so it can be embedded
-    into a PPTX from disk. Returns the local path (or None on failure).
-    """
+def preview_path(slot: dict | None) -> str | None:
+    """Return a filesystem path playable by ``st.video``. No network calls;
+    only looks at ``local_path`` (or materialises legacy bytes once)."""
     if not slot:
         return None
     if "_legacy_bytes" in slot:
-        path = os.path.join(dest_dir, slot.get("filename") or "clip.mp4")
-        with open(path, "wb") as fp:
-            fp.write(slot["_legacy_bytes"])
-        return path
+        rid = slot.get("report_id") or "legacy"
+        dst = _report_dir(rid) / _safe(slot.get("filename") or "video.mp4")
+        with open(dst, "wb") as fp:
+            fp.write(slot.pop("_legacy_bytes"))
+        slot["local_path"] = str(dst)
+    lp = slot.get("local_path")
+    if lp and Path(lp).exists():
+        return lp
+    return None
+
+
+def ensure_local(slot: dict, scout: str) -> str | None:
+    """When a draft is reopened in a fresh container, the local file is gone
+    but the OneDrive copy remains. Pull it down into the local cache.
+    Returns the local path, or None on failure.
+    """
+    if not slot:
+        return None
+    lp = preview_path(slot)
+    if lp:
+        return lp
     onedrive_path = slot.get("onedrive_path")
     if not onedrive_path:
         return None
-    filename = slot.get("filename") or "clip.mp4"
-    path = os.path.join(dest_dir, filename)
-    ok, _err = onedrive_sync.download_to_path(scout, onedrive_path, path)
-    return path if ok else None
+    rid = slot.get("report_id") or "orphan"
+    name = _safe(slot.get("filename") or "video.mp4")
+    target = _report_dir(rid) / name
+    ok, _err = onedrive_sync.download_to_path(scout, onedrive_path, str(target))
+    if not ok:
+        return None
+    slot["local_path"] = str(target)
+    return str(target)
 
 
-def delete_all_report_videos(scout: str, report_id: str) -> None:
-    """Drop the entire /videos/<report_id>/ folder on OneDrive — called after
-    successful generation/share since the pptx already holds the videos."""
+def push_slot_to_onedrive(slot: dict, *, scout: str, report_id: str, slot_idx: int) -> bool:
+    """Upload a single slot's local file to OneDrive, setting ``onedrive_path``.
+    Idempotent: skips if already uploaded.
+    """
+    if not slot or slot.get("onedrive_path"):
+        return True
+    lp = slot.get("local_path")
+    if not lp or not Path(lp).exists():
+        return False
+    ok, _err, onedrive_path = onedrive_sync.upload_video(
+        scout=scout,
+        report_id=report_id,
+        slot_idx=slot_idx,
+        local_path=lp,
+        original_filename=slot.get("filename") or "video.mp4",
+    )
+    if not ok:
+        return False
+    slot["onedrive_path"] = onedrive_path
+    slot["report_id"] = report_id
+    return True
+
+
+def push_all_slots_to_onedrive(video_data: list, *, scout: str, report_id: str) -> None:
+    """Called from save_draft to persist every slot's clip to OneDrive so
+    the draft survives container restarts."""
+    for i, raw in enumerate(video_data or []):
+        slot = coerce_slot(raw)
+        if slot is None:
+            continue
+        push_slot_to_onedrive(slot, scout=scout, report_id=report_id, slot_idx=i)
+
+
+def materialize_tuples(video_data: list, scout: str | None = None) -> list:
+    """Read each slot's bytes into memory for python-pptx embedding.
+    Called only at generate/share time, and the caller should ``del`` the
+    result the moment the pptx is built.
+    """
+    out: list = []
+    for raw in video_data or []:
+        slot = coerce_slot(raw)
+        if slot is None:
+            out.append(None)
+            continue
+        lp = slot.get("local_path")
+        if (not lp or not Path(lp).exists()) and scout:
+            lp = ensure_local(slot, scout)
+        if not lp or not Path(lp).exists():
+            out.append(None)
+            continue
+        try:
+            with open(lp, "rb") as fp:
+                data = fp.read()
+        except OSError:
+            out.append(None)
+            continue
+        out.append((data, slot.get("filename") or "video.mp4"))
+    return out
+
+
+def extract_refs(video_data: list) -> list:
+    """Return JSON-safe slot refs (drops ``local_path`` since it isn't
+    meaningful across containers)."""
+    out: list = []
+    for raw in video_data or []:
+        slot = coerce_slot(raw)
+        if slot is None:
+            out.append(None)
+            continue
+        out.append({
+            "filename": slot.get("filename"),
+            "size": slot.get("size"),
+            "onedrive_path": slot.get("onedrive_path"),
+            "report_id": slot.get("report_id"),
+        })
+    return out
+
+
+def cleanup_report(report_id: str | None, *, scout: str | None = None) -> None:
+    """Delete local + OneDrive video copies for a given report id. Called
+    after successful generation/share, on draft deletion, and on logout.
+    Safe to call with unknown/missing ids."""
+    if not report_id:
+        return
     try:
-        onedrive_sync.delete_video_folder(scout, report_id)
+        p = _VIDEOS_ROOT / report_id
+        if p.exists():
+            shutil.rmtree(p, ignore_errors=True)
     except Exception:
         pass
+    if scout:
+        try:
+            onedrive_sync.delete_video_folder(scout, report_id)
+        except Exception:
+            pass
 
 
-def _path_suffix(filename: str | None) -> str:
-    if filename and "." in filename:
-        return "." + filename.rsplit(".", 1)[-1].lower()
-    return ".mp4"
+def cleanup_all_local() -> None:
+    """Drop the entire local video cache — useful on logout."""
+    try:
+        if _VIDEOS_ROOT.exists():
+            shutil.rmtree(_VIDEOS_ROOT, ignore_errors=True)
+            _VIDEOS_ROOT.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass

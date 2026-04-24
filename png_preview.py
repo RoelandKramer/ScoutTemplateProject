@@ -99,7 +99,15 @@ FIELDS: dict[str, tuple[int, int, int, int, str]] = {
 
 # ─── Font resolution ──────────────────────────────────────────────────────
 # PowerPoint uses Helvetica Neue; we fall back through Arial / Nimbus Sans.
+# Avenir is the requested family; fall back to Avenir Next, Helvetica Neue,
+# Arial, then free Linux fonts so the Docker build still finds a glyph source.
 _FONT_CANDIDATES_REGULAR = [
+    "C:/Windows/Fonts/Avenir.ttc",
+    "C:/Windows/Fonts/AvenirNext.ttc",
+    "C:/Windows/Fonts/AvenirLTStd-Book.otf",
+    "/System/Library/Fonts/Avenir.ttc",
+    "/System/Library/Fonts/AvenirNext.ttc",
+    "/usr/share/fonts/truetype/avenir/Avenir.ttf",
     "C:/Windows/Fonts/HelveticaNeue.ttf",
     "C:/Windows/Fonts/arial.ttf",
     "/usr/share/fonts/truetype/urw-base35/NimbusSans-Regular.otf",
@@ -107,6 +115,11 @@ _FONT_CANDIDATES_REGULAR = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ]
 _FONT_CANDIDATES_BOLD = [
+    "C:/Windows/Fonts/AvenirLTStd-Heavy.otf",
+    "C:/Windows/Fonts/AvenirNext-Bold.ttf",
+    "C:/Windows/Fonts/Avenir-Bold.ttc",
+    "/System/Library/Fonts/Avenir.ttc",
+    "/System/Library/Fonts/AvenirNext.ttc",
     "C:/Windows/Fonts/HelveticaNeue-Bold.ttf",
     "C:/Windows/Fonts/arialbd.ttf",
     "/usr/share/fonts/truetype/urw-base35/NimbusSans-Bold.otf",

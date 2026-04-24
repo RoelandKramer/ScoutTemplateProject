@@ -423,20 +423,36 @@ def _current_season_year_label() -> str:
     return f"{str(start_year)[2:]}/{str(start_year + 1)[2:]}"
 
 
+def _count_from_events(pid: int) -> Dict[str, int]:
+    """Fallback: aggregate match counts from the player's events list when
+    Sofascore's per-tournament statistics endpoint is empty (common for
+    smaller leagues like the Eerste Divisie). Returns just the match
+    counts — goals / assists / minutes stay 0 in this fallback.
+    """
+    counts = {"season_matches": 0, "career_matches": 0}
+    all_events = _list_events("player", pid)
+    if not all_events:
+        return counts
+    finished = [ev for ev in all_events if _is_finished(ev) and not _is_friendly(ev)]
+    counts["career_matches"] = len(finished)
+    counts["season_matches"] = len(_filter_season(finished))
+    return counts
+
+
 def get_player_stats(
     player_name: str,
     club_hint: str = "",
 ) -> Dict[str, Any]:
     """Return season + career totals from Sofascore.
 
-    Aggregates across every (tournament, season) pair listed for the player.
-    The "season" totals are the sum over all tournaments for the current
-    European season (`YY/YY+1`). The "career" totals sum every pair.
+    The "career" totals sum every (tournament, season) pair listed — this
+    **includes cup competitions and league**, per user request. The "season"
+    totals sum tournaments for the current European season (`YY/YY+1`).
 
-    Returned keys:
-      season_matches, season_goals, season_assists, season_minutes,
-      career_matches, career_goals, career_assists, career_minutes.
-    All zero on failure.
+    If the per-tournament statistics endpoint returns nothing useful (which
+    happens for smaller leagues), we fall back to counting the player's
+    finished events directly so at least season_matches / career_matches
+    are populated. All zero on total failure.
     """
     out: Dict[str, Any] = {
         "season_matches": 0, "season_goals": 0,
@@ -450,14 +466,15 @@ def get_player_stats(
             return out
 
         data = _get_json(f"/api/v1/player/{pid}/statistics/seasons")
-        if not data:
-            return out
 
         cur_year = _current_season_year_label()
-        for entry in data.get("uniqueTournamentSeasons") or []:
+        tournament_entries = (data or {}).get("uniqueTournamentSeasons") or []
+        for entry in tournament_entries:
             ut = (entry.get("uniqueTournament") or {}).get("id")
             if not ut:
                 continue
+            # Every season pair (including cup tournaments) counts toward career;
+            # the matching-year pair counts toward season.
             for season in entry.get("seasons") or []:
                 sid = season.get("id")
                 if not sid:
@@ -484,6 +501,14 @@ def get_player_stats(
                     out["season_goals"] += goals
                     out["season_assists"] += assists
                     out["season_minutes"] += mins
+
+        # Fallback when the detailed stats endpoint returns nothing usable —
+        # keeps the Eerste Divisie / KKD case from showing a blank card.
+        if out["career_matches"] == 0 and out["season_matches"] == 0:
+            fallback = _count_from_events(pid)
+            out["career_matches"] = fallback["career_matches"]
+            out["season_matches"] = fallback["season_matches"]
+
         return out
     except Exception:
         return out
