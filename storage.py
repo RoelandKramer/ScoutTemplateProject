@@ -54,6 +54,10 @@ def save_draft(
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
     summary_text: str | None = None,
+    transfer_details: dict | None = None,
+    physical_data: dict | None = None,
+    scouting_dates: list | None = None,
+    video_refs: list | None = None,  # list of {"onedrive_path", "filename", "size"} or None
 ) -> str:
     """Save or update a draft. Returns the report_id."""
     if not report_id:
@@ -94,6 +98,10 @@ def save_draft(
         "upload_ref": upload_ref,
         "player_data": player_data,
         "tm_stats": tm_stats,
+        "transfer_details": transfer_details,
+        "physical_data": physical_data,
+        "scouting_dates": scouting_dates or [],
+        "video_refs": video_refs or [],
         "photo_refs": photo_refs if photo_refs else None,
         "summary_text": summary_text or "",
         "updated_at": time.time(),
@@ -112,24 +120,34 @@ def _load_draft_meta(username: str, report_id: str) -> dict:
 
 
 def load_draft(username: str, report_id: str) -> dict | None:
-    """Load a draft including video bytes. Returns None if not found."""
+    """Load a draft. Returns the meta dict (JSON fields as-is) plus resolved
+    photo/pptx bytes. Video slots are returned as **ref dicts** pointing at
+    OneDrive — bytes are only fetched on preview or at generation time.
+    """
     meta = _load_draft_meta(username, report_id)
     if not meta:
         return None
 
     drafts = _drafts_dir(username)
 
-    # Resolve video refs to actual bytes
-    video_data = []
-    for vref in meta.get("video_refs", []):
-        if vref is not None:
-            vpath = drafts / vref["path"]
+    # Videos: surface the JSON refs under "video_data" so the editor restores
+    # the same per-slot dicts that competency_sections expects. If an older
+    # draft still has local ref paths, load those bytes as a fallback.
+    video_data: list = []
+    json_refs = meta.get("video_refs")
+    if json_refs is not None:
+        for ref in json_refs:
+            video_data.append(ref or None)
+    else:
+        for vref in meta.get("video_refs_legacy", []) or []:
+            if vref is None:
+                video_data.append(None)
+                continue
+            vpath = drafts / vref.get("path", "")
             if vpath.exists():
-                video_data.append((vpath.read_bytes(), vref["filename"]))
+                video_data.append((vpath.read_bytes(), vref.get("filename") or "video.mp4"))
             else:
                 video_data.append(None)
-        else:
-            video_data.append(None)
     meta["video_data"] = video_data
 
     # Resolve upload ref
@@ -194,6 +212,9 @@ def save_finished(
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
     summary_text: str | None = None,
+    transfer_details: dict | None = None,
+    physical_data: dict | None = None,
+    scouting_dates: list | None = None,
 ) -> str:
     """Save a finished PPTX + metadata. Returns the report_id."""
     finished = _finished_dir(username)
@@ -222,6 +243,9 @@ def save_finished(
         "star_values": star_values or [],
         "comments": comments or [],
         "tm_stats": tm_stats,
+        "transfer_details": transfer_details,
+        "physical_data": physical_data,
+        "scouting_dates": scouting_dates or [],
         "photo_refs": photo_refs if photo_refs else None,
         "summary_text": summary_text or "",
     }
@@ -340,6 +364,9 @@ def share_report(
     photo_full: bytes | None = None,
     photo_circular: bytes | None = None,
     summary_text: str | None = None,
+    transfer_details: dict | None = None,
+    physical_data: dict | None = None,
+    scouting_dates: list | None = None,
 ) -> str:
     """Copy a finished report into the recipient's received folder,
     preserving the full editable state (videos, player data, stats) so the
@@ -374,6 +401,9 @@ def share_report(
         "comments": comments or [],
         "player_data": player_data,
         "tm_stats": tm_stats,
+        "transfer_details": transfer_details,
+        "physical_data": physical_data,
+        "scouting_dates": scouting_dates or [],
         "photo_refs": photo_refs if photo_refs else None,
         "summary_text": summary_text or "",
     }
