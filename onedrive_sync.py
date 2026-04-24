@@ -267,6 +267,170 @@ def upload_file(
         return False, str(exc)
 
 
+# ─── Chunked upload (for videos / large files) ────────────────────────────
+
+# Graph requires each uploadSession PUT chunk to be a multiple of 320 KiB
+# (except the last), and recommends chunks of 5-10 MiB.
+_UPLOAD_CHUNK = 10 * 320 * 1024  # 3.2 MiB — safe for any network
+
+
+def _create_upload_session(cfg: dict, token: str, path: str) -> tuple[str | None, str | None]:
+    url = f"{_drive_prefix(cfg)}/root:/{path}:/createUploadSession"
+    body = {
+        "item": {"@microsoft.graph.conflictBehavior": "replace"},
+    }
+    try:
+        resp = requests.post(
+            url,
+            headers={**_auth_headers(token), "Content-Type": "application/json"},
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json().get("uploadUrl"), None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def upload_file_chunked(
+    scout: str,
+    filename: str,
+    source_path: str,
+    content_type: str = "application/octet-stream",
+    subfolder: str = "",
+) -> tuple[bool, str | None, str | None]:
+    """Upload a (potentially large) file from disk via a Graph upload session.
+
+    Reads ``source_path`` in ~3 MiB chunks so peak memory stays small even
+    for 350 MB videos. Returns ``(ok, error, onedrive_path)`` where
+    ``onedrive_path`` is the server-side path (usable with download_file).
+    """
+    import os
+    cfg = _get_config()
+    if not cfg:
+        return False, "OneDrive not configured", None
+    try:
+        token = _get_token(cfg)
+    except Exception as exc:
+        return False, f"Auth error: {exc}", None
+
+    folder = _folder_path(cfg, scout, subfolder)
+    path = f"{folder}/{_safe(filename)}"
+
+    upload_url, err = _create_upload_session(cfg, token, path)
+    if err or not upload_url:
+        return False, err or "failed to create upload session", None
+
+    total = os.path.getsize(source_path)
+    uploaded = 0
+    try:
+        with open(source_path, "rb") as fp:
+            while uploaded < total:
+                chunk = fp.read(_UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                end = uploaded + len(chunk) - 1
+                headers = {
+                    "Content-Length": str(len(chunk)),
+                    "Content-Range": f"bytes {uploaded}-{end}/{total}",
+                    "Content-Type": content_type,
+                }
+                r = requests.put(upload_url, headers=headers, data=chunk, timeout=120)
+                if r.status_code not in (200, 201, 202):
+                    return False, f"chunk {uploaded}-{end} failed: HTTP {r.status_code} {r.text[:200]}", None
+                uploaded = end + 1
+    except Exception as exc:
+        return False, f"chunked upload error: {exc}", None
+    return True, None, path
+
+
+def upload_video(
+    scout: str,
+    report_id: str,
+    slot_idx: int,
+    local_path: str,
+    original_filename: str,
+) -> tuple[bool, str | None, str | None]:
+    """Upload a per-slot video into ``<scout>/videos/<report_id>/<slot>_<name>``.
+
+    Returns (ok, error, onedrive_path).
+    """
+    ext = ""
+    if "." in original_filename:
+        ext = "." + original_filename.rsplit(".", 1)[-1].lower()
+    stored_name = f"{slot_idx:02d}_{_safe(original_filename)}"
+    subfolder = f"videos/{_safe(report_id)}"
+    content_type = "video/mp4" if ext in (".mp4", ".m4v") else "application/octet-stream"
+    return upload_file_chunked(scout, stored_name, local_path, content_type, subfolder)
+
+
+def download_to_path(scout: str, onedrive_path: str, local_path: str) -> tuple[bool, str | None]:
+    """Stream a file from OneDrive to a local path in chunks (no bulk RAM load).
+
+    ``onedrive_path`` is the server-side path returned by ``upload_file_chunked``.
+    """
+    cfg = _get_config()
+    if not cfg:
+        return False, "OneDrive not configured"
+    try:
+        token = _get_token(cfg)
+    except Exception as exc:
+        return False, f"Auth error: {exc}"
+
+    url = f"{_drive_prefix(cfg)}/root:/{onedrive_path}:/content"
+    try:
+        with requests.get(url, headers=_auth_headers(token), stream=True, timeout=120) as r:
+            if r.status_code == 404:
+                return False, "not found"
+            r.raise_for_status()
+            with open(local_path, "wb") as fp:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        fp.write(chunk)
+    except Exception as exc:
+        return False, str(exc)
+    return True, None
+
+
+def delete_by_path(onedrive_path: str) -> tuple[bool, str | None]:
+    """Delete a single file by its server-side path."""
+    cfg = _get_config()
+    if not cfg:
+        return False, "OneDrive not configured"
+    try:
+        token = _get_token(cfg)
+    except Exception as exc:
+        return False, f"Auth error: {exc}"
+    url = f"{_drive_prefix(cfg)}/root:/{onedrive_path}"
+    try:
+        r = requests.delete(url, headers=_auth_headers(token), timeout=30)
+        if r.status_code not in (204, 404):
+            r.raise_for_status()
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+def delete_video_folder(scout: str, report_id: str) -> tuple[bool, str | None]:
+    """Remove the per-report video folder after generation/share."""
+    cfg = _get_config()
+    if not cfg:
+        return False, "OneDrive not configured"
+    try:
+        token = _get_token(cfg)
+    except Exception as exc:
+        return False, f"Auth error: {exc}"
+    folder = _folder_path(cfg, scout, f"videos/{_safe(report_id)}")
+    url = f"{_drive_prefix(cfg)}/root:/{folder}"
+    try:
+        r = requests.delete(url, headers=_auth_headers(token), timeout=30)
+        if r.status_code not in (204, 404):
+            r.raise_for_status()
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
 # ─── Delete ────────────────────────────────────────────────────────────────
 
 def delete_report_files(

@@ -17,10 +17,35 @@ from __future__ import annotations
 
 import random
 import re
+import sys
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
+
+
+# ─── Debug log — captured per-lookup so the app can surface it ─────────────
+
+_DEBUG: List[str] = []
+_DEBUG_MAX = 80
+
+
+def _dbg(msg: str) -> None:
+    """Append a debug line and also print it to stderr so Railway's log
+    captures it. Tail-limited to avoid unbounded growth."""
+    _DEBUG.append(msg)
+    if len(_DEBUG) > _DEBUG_MAX:
+        del _DEBUG[: len(_DEBUG) - _DEBUG_MAX]
+    print(f"[sofascore] {msg}", file=sys.stderr, flush=True)
+
+
+def _dbg_reset() -> None:
+    _DEBUG.clear()
+
+
+def get_debug_log() -> List[str]:
+    """Return a shallow copy of recent debug lines for display in the UI."""
+    return list(_DEBUG)
 
 
 _BASES = ("https://api.sofascore.com", "https://www.sofascore.com")
@@ -30,40 +55,68 @@ _PAGE_LIMIT = 6  # ~6 pages × 30 events ≈ a full season
 
 
 def _make_session() -> requests.Session:
-    s = requests.Session()
-    s.headers.update(
-        {
+    """Create a persistent session capable of bypassing WAF/Cloudflare."""
+    try:
+        import cloudscraper
+        # cloudscraper automatically handles TLS fingerprints and realistic headers
+        s = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            }
+        )
+    except ImportError:
+        # Fallback to standard requests if cloudscraper isn't installed (will likely 403)
+        s = requests.Session()
+        s.headers.update({
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             ),
+        })
+
+    # Add Sofascore specific headers
+    s.headers.update(
+        {
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
             "Referer": "https://www.sofascore.com/",
             "Origin": "https://www.sofascore.com",
+            "Cache-Control": "max-age=0",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
         }
     )
     return s
+
+
+# Initialize globally to maintain cookies and TCP connection pooling across all requests
+_SESSION = _make_session()
 
 
 def _get_json(path: str) -> Optional[Dict[str, Any]]:
     last: Optional[Exception] = None
     for base in _BASES:
         url = base.rstrip("/") + path
-        s = _make_session()
         for attempt in range(_RETRIES):
             try:
-                r = s.get(url, timeout=_TIMEOUT)
+                r = _SESSION.get(url, timeout=_TIMEOUT)
                 if r.status_code == 429:
+                    _dbg(f"GET {path} -> 429 (retry {attempt+1})")
                     time.sleep(1.25 * (attempt + 1) + random.random())
                     continue
                 if r.status_code == 404:
+                    _dbg(f"GET {path} -> 404")
                     return None
                 r.raise_for_status()
                 return r.json()
             except Exception as e:
                 last = e
+                _dbg(f"GET {path} -> {type(e).__name__}: {str(e)[:80]}")
                 time.sleep(0.6 * (attempt + 1) + random.random() * 0.4)
+    _dbg(f"GET {path} FAILED after retries ({type(last).__name__ if last else 'unknown'})")
     return None
 
 
@@ -76,12 +129,16 @@ def _normalize(s: str) -> str:
 def _search_player(name: str, club_hint: str = "") -> Optional[Dict[str, Any]]:
     """Find the best matching player. Returns the search-result dict or None."""
     if not name:
+        _dbg("search_player: empty name")
         return None
+    _dbg(f"search_player: q='{name}' club_hint='{club_hint}'")
     data = _get_json(f"/api/v1/search/all?q={requests.utils.quote(name)}&page=0")
     if not data:
+        _dbg("search_player: search endpoint returned nothing")
         return None
     results = data.get("results") or []
     players = [r for r in results if r.get("type") == "player" and r.get("entity")]
+    _dbg(f"search_player: {len(results)} total results, {len(players)} players")
     if not players:
         return None
 
@@ -102,7 +159,10 @@ def _search_player(name: str, club_hint: str = "") -> Optional[Dict[str, Any]]:
         return s
 
     players.sort(key=score, reverse=True)
-    return players[0].get("entity")
+    top = players[0].get("entity") or {}
+    _dbg(f"search_player: picked id={top.get('id')} name='{top.get('name')}' "
+         f"team='{(top.get('team') or {}).get('name')}'")
+    return top
 
 
 def _get_player_full(player_id: int) -> Optional[Dict[str, Any]]:
@@ -423,21 +483,39 @@ def _current_season_year_label() -> str:
     return f"{str(start_year)[2:]}/{str(start_year + 1)[2:]}"
 
 
+def _count_from_events(pid: int) -> Dict[str, int]:
+    """Fallback: aggregate match counts from the player's events list when
+    Sofascore's per-tournament statistics endpoint is empty (common for
+    smaller leagues like the Eerste Divisie). Returns just the match
+    counts — goals / assists / minutes stay 0 in this fallback.
+    """
+    counts = {"season_matches": 0, "career_matches": 0}
+    all_events = _list_events("player", pid)
+    if not all_events:
+        return counts
+    finished = [ev for ev in all_events if _is_finished(ev) and not _is_friendly(ev)]
+    counts["career_matches"] = len(finished)
+    counts["season_matches"] = len(_filter_season(finished))
+    return counts
+
+
 def get_player_stats(
     player_name: str,
     club_hint: str = "",
 ) -> Dict[str, Any]:
     """Return season + career totals from Sofascore.
 
-    Aggregates across every (tournament, season) pair listed for the player.
-    The "season" totals are the sum over all tournaments for the current
-    European season (`YY/YY+1`). The "career" totals sum every pair.
+    The "career" totals sum every (tournament, season) pair listed — this
+    **includes cup competitions and league**, per user request. The "season"
+    totals sum tournaments for the current European season (`YY/YY+1`).
 
-    Returned keys:
-      season_matches, season_goals, season_assists, season_minutes,
-      career_matches, career_goals, career_assists, career_minutes.
-    All zero on failure.
+    If the per-tournament statistics endpoint returns nothing useful (which
+    happens for smaller leagues), we fall back to counting the player's
+    finished events directly so at least season_matches / career_matches
+    are populated. All zero on total failure.
     """
+    _dbg_reset()
+    _dbg(f"get_player_stats: name='{player_name}' club_hint='{club_hint}'")
     out: Dict[str, Any] = {
         "season_matches": 0, "season_goals": 0,
         "season_assists": 0, "season_minutes": 0,
@@ -446,18 +524,24 @@ def get_player_stats(
     }
     try:
         pid, _tid = _resolve(player_name, club_hint)
+        _dbg(f"resolved pid={pid} tid={_tid}")
         if not pid:
+            _dbg("abort: no player id")
             return out
 
         data = _get_json(f"/api/v1/player/{pid}/statistics/seasons")
-        if not data:
-            return out
+        _dbg(f"statistics/seasons: {'null' if data is None else 'keys='+str(list(data.keys())[:6])}")
 
         cur_year = _current_season_year_label()
-        for entry in data.get("uniqueTournamentSeasons") or []:
+        _dbg(f"current season year label: {cur_year}")
+        tournament_entries = (data or {}).get("uniqueTournamentSeasons") or []
+        _dbg(f"uniqueTournamentSeasons: {len(tournament_entries)} tournaments")
+        for entry in tournament_entries:
             ut = (entry.get("uniqueTournament") or {}).get("id")
             if not ut:
                 continue
+            # Every season pair (including cup tournaments) counts toward career;
+            # the matching-year pair counts toward season.
             for season in entry.get("seasons") or []:
                 sid = season.get("id")
                 if not sid:
@@ -484,8 +568,22 @@ def get_player_stats(
                     out["season_goals"] += goals
                     out["season_assists"] += assists
                     out["season_minutes"] += mins
+
+        # Fallback when the detailed stats endpoint returns nothing usable —
+        # keeps the Eerste Divisie / KKD case from showing a blank card.
+        if out["career_matches"] == 0 and out["season_matches"] == 0:
+            _dbg("career_matches and season_matches both 0 → falling back to event counts")
+            fallback = _count_from_events(pid)
+            _dbg(f"fallback event counts: season={fallback['season_matches']} "
+                 f"career={fallback['career_matches']}")
+            out["career_matches"] = fallback["career_matches"]
+            out["season_matches"] = fallback["season_matches"]
+
+        _dbg(f"final: season_m={out['season_matches']} season_g={out['season_goals']} "
+             f"career_m={out['career_matches']} career_g={out['career_goals']}")
         return out
-    except Exception:
+    except Exception as exc:
+        _dbg(f"get_player_stats exception: {type(exc).__name__}: {str(exc)[:120]}")
         return out
 
 

@@ -493,9 +493,12 @@ def _apply_theme(club: str) -> None:
         border: 1px solid {th['border']} !important;
         border-radius: 10px !important;
     }}
-    /* Override Streamlit's "Press Enter to submit form" text */
-    [data-testid="InputInstructions"] {{ font-size: 0 !important; }}
-    [data-testid="InputInstructions"]::after {{ content: "Press Enter to submit"; font-size: 0.875rem; }}
+    /* Hide Streamlit's default "Press Enter to submit" hint everywhere. The
+       name-search input shows its own caption instead (see _scisports_section). */
+    [data-testid="InputInstructions"],
+    [data-testid="stTextInputInstructions"],
+    [data-testid="stNumberInputInstructions"],
+    [data-testid="stTextAreaInstructions"] {{ display: none !important; }}
 
     /* Dividers */
     hr {{ border-color: {th['border_light']} !important; }}
@@ -793,16 +796,38 @@ def competency_sections(
                 type=["mp4", "mov", "avi"],
                 key=f"{key_prefix}_{i}_uploader",
             )
+            import video_store as _vs
             if uploaded_video is not None:
-                st.session_state[video_key] = (uploaded_video.getvalue(), uploaded_video.name)
+                # Stream the upload to local disk only — no OneDrive call here.
+                # Preview is instant; we push to OneDrive only at save-draft,
+                # and clean up local+remote at generate/share/delete time.
+                rid_key = "upload_active_report_id" if key_prefix.startswith("upload") else "active_report_id"
+                rid = st.session_state.get(rid_key)
+                if not rid:
+                    rid = uuid.uuid4().hex[:12]
+                    st.session_state[rid_key] = rid
+                slot_ref = _vs.save_uploaded_to_local(
+                    uploaded_video, report_id=rid, slot_idx=i,
+                )
+                if slot_ref:
+                    st.session_state[video_key] = slot_ref
 
-            current_video = st.session_state[video_key]
+            # Normalise whatever is in session (dict ref, or legacy tuple from old drafts).
+            current_video = _vs.coerce_slot(st.session_state[video_key])
             if current_video is not None:
-                vbytes, vname = current_video
-                size_mb = len(vbytes) / (1024 * 1024)
+                vname = current_video.get("filename", "")
+                size_bytes = current_video.get("size") or 0
+                size_mb = size_bytes / (1024 * 1024)
                 st.caption(f"Video: **{vname}** ({size_mb:.1f} MB)")
-                if len(vbytes) <= _VIDEO_PREVIEW_LIMIT:
-                    st.video(vbytes)
+                scout = st.session_state.get("username") or "default"
+                # Resolve a playable local path. Fetches from OneDrive only if
+                # the draft was reopened in a fresh container.
+                path = _vs.preview_path(current_video) or _vs.ensure_local(current_video, scout)
+                st.session_state[video_key] = current_video
+                if path and size_bytes <= _VIDEO_PREVIEW_LIMIT:
+                    st.video(path)
+                elif not path:
+                    st.info("Preview not available.")
                 else:
                     st.info(t("too_large_preview", L, mb=size_mb))
 
@@ -1083,6 +1108,110 @@ def _collect_editor_state(key_prefix: str, n_vars: int):
     return stars, comments, videos
 
 
+def _materialize_video_tuples(video_data: list) -> list:
+    """Load each slot's bytes from the local cache (or OneDrive as fallback)
+    for python-pptx embedding. Call ONLY at generate/share/save-finished
+    time; ``del`` the result immediately after the pptx is built."""
+    import video_store as _vs
+    scout = st.session_state.get("username") or "default"
+    return _vs.materialize_tuples(video_data, scout=scout)
+
+
+def _extract_video_refs(video_data: list) -> list:
+    """JSON-safe slot refs for draft persistence."""
+    import video_store as _vs
+    return _vs.extract_refs(video_data)
+
+
+def _push_videos_onedrive(video_data: list, report_id: str) -> None:
+    """Called at save-draft time: pushes each slot's local file to OneDrive
+    so the draft survives container restarts. Updates slot dicts in-place
+    with ``onedrive_path``. Fast (early-returns) if already uploaded."""
+    import video_store as _vs
+    scout = st.session_state.get("username") or "default"
+    _vs.push_all_slots_to_onedrive(video_data, scout=scout, report_id=report_id)
+
+
+def _cleanup_report_videos(report_id: str | None) -> None:
+    """Delete local + OneDrive videos for a given report id."""
+    if not report_id:
+        return
+    import video_store as _vs
+    scout = st.session_state.get("username") or "default"
+    _vs.cleanup_report(report_id, scout=scout)
+
+
+def _summary_improve_translate_ui(text_key: str, key_prefix: str) -> None:
+    """Render Improve + Translate buttons under the Scouting Summary text
+    area — mirrors the pattern used inside ``competency_sections`` so the
+    behaviour is identical: suggestion shows below, Accept commits it,
+    Discard drops it. Caller is responsible for reading the
+    ``{key_prefix}_accept_pending`` flag BEFORE the text area widget is
+    instantiated (so the value is picked up on this rerun).
+    """
+    L = _lang()
+    suggestion_key = f"{key_prefix}_suggestion"
+    lang_key = f"{key_prefix}_translate_lang"
+    mode_key = f"{key_prefix}_sug_mode"
+    _LANG_FULL = {"NL": "Nederlands", "EN": "English", "IT": "Italiano", "ZH": "中文"}
+
+    col_imp, _sp, col_lang, col_tr = st.columns([1, 2.8, 1.2, 1])
+    with col_imp:
+        if st.button(f"✨ {t('improve', L)}", key=f"{key_prefix}_improve"):
+            raw = st.session_state.get(text_key, "")
+            if raw.strip():
+                with st.spinner(f"{t('improving', L)}"):
+                    st.session_state[suggestion_key] = improve_text(raw)
+                    st.session_state[mode_key] = "improve"
+            else:
+                st.warning(t("nothing_to_improve", L))
+    with col_lang:
+        st.selectbox(
+            t("language_label", L),
+            ["NL", "EN", "IT", "ZH"],
+            index=None,
+            placeholder=t("translate_placeholder", L),
+            format_func=lambda c: _LANG_FULL[c],
+            key=lang_key,
+            label_visibility="collapsed",
+        )
+    with col_tr:
+        if st.button(f"🌐 {t('translate', L)}", key=f"{key_prefix}_translate"):
+            raw = st.session_state.get(text_key, "")
+            target = st.session_state.get(lang_key)
+            if not raw.strip():
+                st.warning(t("nothing_to_improve", L))
+            elif not target:
+                st.warning(t("select_target_language", L))
+            else:
+                with st.spinner(t("translating", L)):
+                    st.session_state[suggestion_key] = translate_text(raw, target)
+                    st.session_state[mode_key] = "translate"
+    if st.session_state.get(suggestion_key):
+        suggestion = st.session_state[suggestion_key]
+        _heading_key = (
+            "translation_label"
+            if st.session_state.get(mode_key) == "translate"
+            else "suggested_improvement"
+        )
+        st.markdown(f"**{t(_heading_key, L)}**")
+        st.text_area(
+            "Suggested", value=suggestion, height=120,
+            key=f"{key_prefix}_sug_display", label_visibility="collapsed",
+        )
+        _, c_acc, c_dis, _ = st.columns([1, 1.5, 1.5, 1])
+        with c_acc:
+            if st.button(t("accept", L), key=f"{key_prefix}_accept",
+                         type="primary", use_container_width=True):
+                st.session_state[f"{key_prefix}_accept_pending"] = True
+                st.rerun()
+        with c_dis:
+            if st.button(t("discard", L), key=f"{key_prefix}_discard",
+                         use_container_width=True):
+                st.session_state[suggestion_key] = ""
+                st.rerun()
+
+
 # ─── Editable player info card ──────────────────────────────────────────────
 
 _PLAYER_FIELDS = [
@@ -1281,6 +1410,22 @@ def _transfermarkt_section(
             from transfermarkt import fetch_player_stats
             with st.spinner(t("fetching_tm", L)):
                 stats = fetch_player_stats(player_name, player_club)
+            # Capture Sofascore's internal debug log for the UI expander below
+            try:
+                import sofascore as _sofa_mod
+                st.session_state[f"{key_prefix}_sofa_debug"] = _sofa_mod.get_debug_log()
+            except Exception:
+                pass
+            # Also pull availability % from Sofascore — it lives next to the
+            # match stats card rather than under physical data.
+            try:
+                from sofascore import get_player_availability
+                avail = get_player_availability(player_name, player_club)
+                stats["availability_pct"] = avail.get("availability_pct")
+                stats["availability_in_squad"] = avail.get("availability_in_squad", 0)
+                stats["availability_total"] = avail.get("availability_total", 0)
+            except Exception:
+                pass
             # Extract the portrait image for display-only (not stored)
             tm_img = stats.pop("tm_image", None)
             if tm_img:
@@ -1306,6 +1451,27 @@ def _transfermarkt_section(
             stats, player_name,
             editable=True, key_prefix=f"{key_prefix}_card", state_key=state_key,
         )
+
+    # Surface Sofascore debug trace from the last fetch — expander stays
+    # collapsed unless the scout opens it. Lets us diagnose "No match stats
+    # found" without SSHing into the container.
+    _sofa_log = st.session_state.get(f"{key_prefix}_sofa_debug")
+    if _sofa_log:
+        with st.expander("🔎 Sofascore debug (last fetch)", expanded=False):
+            st.code("\n".join(_sofa_log), language="text")
+        # Availability — displayed here next to the match stats rather than
+        # under the physical data section.
+        avail_pct = stats.get("availability_pct")
+        in_squad = stats.get("availability_in_squad") or 0
+        total = stats.get("availability_total") or 0
+        if avail_pct is not None or total:
+            ac1, _ac2 = st.columns([1, 3])
+            with ac1:
+                st.metric(
+                    t("availability_label", L),
+                    f"{avail_pct:.0f}%" if avail_pct is not None else "—",
+                    help=f"{in_squad}/{total}" if total else None,
+                )
 
     return st.session_state.get(state_key)
 
@@ -1467,19 +1633,6 @@ def _physical_data_section(
         if data.get("n_matches_60plus"):
             st.caption(t("physical_based_on_matches", L))
 
-        # Availability — shown below the physical metrics (Sofascore).
-        tm_blob = st.session_state.get(tm_state_key) or {} if tm_state_key else {}
-        avail_pct = tm_blob.get("availability_pct")
-        in_squad = tm_blob.get("availability_in_squad") or 0
-        total = tm_blob.get("availability_total") or 0
-        ac1, _ac2 = st.columns([1, 3])
-        with ac1:
-            st.metric(
-                t("availability_label", L),
-                f"{avail_pct:.0f}%" if avail_pct is not None else "—",
-                help=f"{in_squad}/{total}" if total else None,
-            )
-
     return st.session_state.get(state_key)
 
 
@@ -1536,9 +1689,9 @@ def _transfer_details_section(
     if next_step_key not in st.session_state:
         st.session_state[next_step_key] = td.get("next_step", "")
 
-    # End-of-contract: date picker, default 30 June 2026
+    # End-of-contract: empty by default. User picks any date from the picker;
+    # no automatic prefill so they always choose explicitly.
     eoc_key = f"{key_prefix}_end_contract_date"
-    _default_eoc = _dt.date(2026, 6, 30)
     if eoc_key not in st.session_state:
         _prev = td.get("end_of_contract", "")
         parsed: _dt.date | None = None
@@ -1551,39 +1704,64 @@ def _transfer_details_section(
                     break
                 except ValueError:
                     pass
-        st.session_state[eoc_key] = parsed or _default_eoc
+        st.session_state[eoc_key] = parsed  # None → picker shows empty
+
+    import re as _re
+
+    def _format_thousand_dots(raw: str) -> str:
+        """Strip everything but digits, then insert a '.' every 3 digits
+        from the right. '150000' -> '150.000', '1500000' -> '1.500.000'."""
+        digits = _re.sub(r"[^\d]", "", raw or "")
+        if not digits:
+            return ""
+        return f"{int(digits):,}".replace(",", ".")
 
     def _sync_td():
-        # Money fields: combine free-agent flag + numeric value
         for td_field, base_key, _label in money_fields:
             free_key = f"{base_key}_free"
             val_key = f"{base_key}_amount"
             if st.session_state.get(free_key):
                 td[td_field] = t("transfervrij_value", L) or "Transfervrij"
             else:
-                v = (st.session_state.get(val_key) or "").strip()
-                # Strip stray € the user might re-type
-                v = v.lstrip("€").strip()
-                td[td_field] = f"€ {v}" if v else ""
+                raw = (st.session_state.get(val_key) or "").strip().lstrip("€").strip()
+                formatted = _format_thousand_dots(raw)
+                # Reflect the dotted version back into the widget's state so
+                # the UI updates on next render.
+                if formatted != raw:
+                    st.session_state[val_key] = formatted
+                td[td_field] = f"€ {formatted}" if formatted else ""
         td["next_step"] = st.session_state.get(next_step_key, "")
         eoc = st.session_state.get(eoc_key)
         if isinstance(eoc, _dt.date):
             td["end_of_contract"] = eoc.strftime("%d/%m/%Y")
         else:
-            td["end_of_contract"] = str(eoc) if eoc else ""
+            td["end_of_contract"] = ""
         st.session_state[transfer_state_key] = td
 
     def _money_field(label_key: str, base_key: str):
+        """€ prefix + numeric input with auto-inserted thousand dots. The €
+        is a static column so the user sees the currency but only types the
+        amount; dots are inserted each time the value commits (enter/blur)."""
         free_key = f"{base_key}_free"
         val_key = f"{base_key}_amount"
         is_free = bool(st.session_state.get(free_key))
-        st.text_input(
-            label_key,
-            key=val_key,
-            on_change=_sync_td,
-            disabled=is_free,
-            placeholder="€ 250.000",
-        )
+        st.markdown(f"**{label_key}**")
+        c_eur, c_val = st.columns([0.08, 0.92])
+        with c_eur:
+            st.markdown(
+                "<div style='font-size:16px;font-weight:600;padding-top:7px;"
+                "text-align:center;color:#1a1a2e;'>€</div>",
+                unsafe_allow_html=True,
+            )
+        with c_val:
+            st.text_input(
+                label_key,
+                key=val_key,
+                on_change=_sync_td,
+                disabled=is_free,
+                placeholder="e.g. 150.000",
+                label_visibility="collapsed",
+            )
         st.checkbox(
             t("transfervrij_label", L),
             key=free_key,
@@ -1604,7 +1782,6 @@ def _transfer_details_section(
         _money_field(t("transfer_value_label", L), f"{key_prefix}_tvalue")
         _money_field(t("prediction_year_2_label", L), f"{key_prefix}_pred_2")
 
-    # Sync latest widget state into td (covers initial render too)
     _sync_td()
     return st.session_state.get(transfer_state_key) or {}
 
@@ -2154,6 +2331,9 @@ def _scisports_section(
 
     with st.form(f"{key_prefix}_search_form"):
         query = st.text_input(t("search", L), placeholder=t("search_placeholder", L), key=f"{key_prefix}_query")
+        _search_hints = {"EN": "Press enter to search", "NL": "Druk op enter om te zoeken",
+                         "IT": "Premi invio per cercare", "ZH": "按 Enter 键搜索"}
+        st.caption(_search_hints.get(L, _search_hints["EN"]))
         search_submitted = st.form_submit_button(t("search", L), use_container_width=True)
 
     if search_submitted and query.strip():
@@ -2275,8 +2455,13 @@ with st.sidebar:
     st.markdown("---")
 
     # ── Navigation (default = New Report) ────────────────────────────────────
-    nav_options = [t("new_report", L), t("dashboard", L), t("upload_edit", L)]
-    nav_keys    = ["New Report", "Dashboard", "Upload & Edit"]
+    _video_folder_nav = {
+        "EN": "Video Folder", "NL": "Videomap",
+        "IT": "Cartella video", "ZH": "视频文件夹",
+    }.get(L, "Video Folder")
+    nav_options = [t("new_report", L), t("dashboard", L),
+                   t("upload_edit", L), _video_folder_nav]
+    nav_keys    = ["New Report", "Dashboard", "Upload & Edit", "Video Folder"]
 
     # Handle programmatic navigation override
     nav_override = st.session_state.pop("_nav_override", None)
@@ -2516,6 +2701,68 @@ if page == "Dashboard":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Video Folder
+# ══════════════════════════════════════════════════════════════════════════════
+
+elif page == "Video Folder":
+    st.markdown("---")
+    _VIDEO_PAGE_TITLES = {
+        "EN": "Video Folder Setup", "NL": "Videomap aanmaken",
+        "IT": "Impostazione cartella video", "ZH": "视频文件夹设置",
+    }
+    _VIDEO_PAGE_DESCS = {
+        "EN": "Pick a role and (optionally) a player name to download a "
+              "ready-made empty folder structure for scouting videos.",
+        "NL": "Kies een rol en (optioneel) een spelernaam om een lege "
+              "mappenstructuur voor scouting-video's te downloaden.",
+        "IT": "Seleziona un ruolo e (facoltativamente) un nome giocatore per "
+              "scaricare una struttura di cartelle vuota per i video di scouting.",
+        "ZH": "选择一个角色和（可选）球员姓名，即可下载用于球探视频的空文件夹结构。",
+    }
+    st.markdown(f"## {_VIDEO_PAGE_TITLES.get(L, _VIDEO_PAGE_TITLES['EN'])}")
+    st.caption(_VIDEO_PAGE_DESCS.get(L, _VIDEO_PAGE_DESCS['EN']))
+
+    _vf_template_names = list(TEMPLATES.keys())
+    _vf_placeholder = t("make_a_choice", L)
+    _vf_role_opts = [_vf_placeholder] + _vf_template_names
+    _vf_role = st.selectbox(
+        t("role_label", L), _vf_role_opts, key="video_page_role_select",
+    )
+
+    _vf_player = st.text_input(
+        {"EN": "Player name (optional)", "NL": "Spelernaam (optioneel)",
+         "IT": "Nome giocatore (facoltativo)", "ZH": "球员姓名（可选）"}.get(L, "Player name (optional)"),
+        key="video_page_player_name",
+        placeholder={"EN": "e.g. Jerdy Schouten", "NL": "bv. Jerdy Schouten",
+                     "IT": "es. Jerdy Schouten", "ZH": "例如 Jerdy Schouten"}.get(L, "e.g. Jerdy Schouten"),
+    ).strip()
+
+    if _vf_role == _vf_placeholder:
+        st.info(t("select_profile_prompt", L))
+    else:
+        _vf_cfg = get_template_config(_vf_role, club, lang)
+        _vf_criteria = _vf_cfg.get("variables") or []
+        # When no player name is given, the folder takes the role name.
+        _vf_label = _vf_player if _vf_player else _vf_role
+        try:
+            _vf_zip_bytes = _build_video_folder_zip(_vf_label, _vf_criteria)
+        except Exception as exc:
+            st.error(f"{t('video_folder_error', L)}: {exc}")
+            _vf_zip_bytes = None
+        if _vf_zip_bytes:
+            _vf_zip_name = _sanitize_folder_component(f"{_vf_label} videos") + ".zip"
+            st.download_button(
+                label=t("video_folder_download_btn", L),
+                data=_vf_zip_bytes,
+                file_name=_vf_zip_name,
+                mime="application/zip",
+                key="video_page_download",
+                use_container_width=True,
+                type="primary",
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PAGE: New Report
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2590,13 +2837,6 @@ elif page == "New Report":
         st.session_state.pop("_loaded_draft", None)
 
     st.markdown("---")
-    _video_folder_setup_section(
-        template_cfg=template_cfg,
-        player_name=_current_player_name(NEW_PDATA_KEY),
-        key_prefix="new_scout",
-    )
-
-    st.markdown("---")
     _scouting_session_section(
         key_prefix="new_scout",
         transfer_state_key="new_transfer_details",
@@ -2633,6 +2873,11 @@ elif page == "New Report":
     # ── Scouting Summary (large free-text, rendered at bottom-center) ────
     st.markdown(f"### {t('scouting_summary_heading', L)}")
     summary_key = "new_scouting_summary"
+    # Accept-pending handler runs BEFORE the text_area is created so the
+    # updated text is picked up on this render.
+    if st.session_state.pop("new_summary_accept_pending", None):
+        st.session_state[summary_key] = st.session_state.get("new_summary_suggestion", "")
+        st.session_state["new_summary_suggestion"] = ""
     st.text_area(
         t("scouting_summary_label", L),
         key=summary_key,
@@ -2640,6 +2885,7 @@ elif page == "New Report":
         placeholder=t("scouting_summary_placeholder", L),
         label_visibility="collapsed",
     )
+    _summary_improve_translate_ui(summary_key, "new_summary")
 
     st.markdown("---")
 
@@ -2647,8 +2893,10 @@ elif page == "New Report":
         s_, c_, v_ = _collect_editor_state("empty", len(template_cfg["variables"]))
         _pd = st.session_state.get(NEW_PDATA_KEY)
         _tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_pd)
+        # Preview never embeds videos — they're irrelevant to the slide image
+        # and would cost RAM + download bandwidth each refresh.
         out = fill_template(
-            template_cfg, s_, c_, v_,
+            template_cfg, s_, c_, None,
             player_data=_pd,
             tm_stats=_tm,
             player_photo=st.session_state.get("new_player_photo_full"),
@@ -2698,8 +2946,11 @@ elif page == "New Report":
             _draft_pdata = st.session_state.get(NEW_PDATA_KEY)
             _draft_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_draft_pdata)
             with st.spinner(t("saving_draft_wait", L)):
+                # Drafts store a LIGHT pptx snapshot (no embedded videos) plus
+                # the OneDrive video refs in JSON. Re-opening a draft re-reads
+                # the refs; videos only come back into RAM if previewed.
                 snapshot = fill_template(
-                    template_cfg, s, c, v,
+                    template_cfg, s, c, None,
                     player_data=_draft_pdata,
                     tm_stats=_draft_tm,
                     player_photo=st.session_state.get("new_player_photo_full"),
@@ -2710,10 +2961,16 @@ elif page == "New Report":
                     summary_text=st.session_state.get(summary_key),
                 )
                 snapshot_bytes = snapshot.getvalue()
+                rid_seed = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
+                # Persist videos to OneDrive only here, at save-draft — so the
+                # draft survives a container restart. Upload is skipped for
+                # clips that are already there (idempotent).
+                _push_videos_onedrive(v, rid_seed)
+                v_refs = _extract_video_refs(v)
                 rid = storage.save_draft(
                     username,
-                    st.session_state.get("active_report_id"),
-                    template_name, club, lang, s, c, v,
+                    rid_seed,
+                    template_name, club, lang, s, c, None,
                     source="empty",
                     upload_bytes=snapshot_bytes,
                     upload_filename=f"Draft_{template_name.replace(' ', '_')}.pptx",
@@ -2722,6 +2979,10 @@ elif page == "New Report":
                     photo_full=st.session_state.get("new_player_photo_full"),
                     photo_circular=st.session_state.get("new_player_photo_circ"),
                     summary_text=st.session_state.get(summary_key),
+                    transfer_details=st.session_state.get("new_transfer_details"),
+                    physical_data=st.session_state.get("new_physical_data"),
+                    scouting_dates=st.session_state.get("new_scouting_dates"),
+                    video_refs=v_refs,
                 )
                 st.session_state["active_report_id"] = rid
                 _onedrive_upload_draft(username, rid)
@@ -2733,8 +2994,10 @@ elif page == "New Report":
             _gen_pdata = st.session_state.get(NEW_PDATA_KEY)
             _gen_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_gen_pdata)
             with st.spinner(t("generating_report_wait", L)):
+                # Download videos from OneDrive into bytes only for the embed step.
+                v_tuples = _materialize_video_tuples(v)
                 output = fill_template(
-                    template_cfg, s, c, v,
+                    template_cfg, s, c, v_tuples,
                     player_data=_gen_pdata,
                     tm_stats=_gen_tm,
                     player_photo=st.session_state.get("new_player_photo_full"),
@@ -2745,6 +3008,8 @@ elif page == "New Report":
                     summary_text=st.session_state.get(summary_key),
                 )
                 pptx_bytes = output.getvalue()
+                # Release the big video buffers the moment the pptx is built.
+                del v_tuples, output
 
                 rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
                 _gen_pdata = st.session_state.get(NEW_PDATA_KEY)
@@ -2752,13 +3017,18 @@ elif page == "New Report":
                 storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                       player_name=_current_player_name(NEW_PDATA_KEY),
                                       player_data=_gen_pdata,
-                                      star_values=s, comments=c, video_data=v,
+                                      star_values=s, comments=c, video_data=None,
                                       tm_stats=_gen_tm,
                                       photo_full=st.session_state.get("new_player_photo_full"),
                                       photo_circular=st.session_state.get("new_player_photo_circ"),
-                                      summary_text=st.session_state.get(summary_key))
+                                      summary_text=st.session_state.get(summary_key),
+                                      transfer_details=st.session_state.get("new_transfer_details"),
+                                      physical_data=st.session_state.get("new_physical_data"),
+                                      scouting_dates=st.session_state.get("new_scouting_dates"))
                 _onedrive_upload(username, rid, pptx_bytes,
                                  _current_player_name(NEW_PDATA_KEY), template_name)
+                # Videos are now inside the pptx — drop the OneDrive copies.
+                _cleanup_report_videos(rid)
                 st.session_state.pop("active_report_id", None)
 
             st.success(t("report_ready", L))
@@ -2789,8 +3059,9 @@ elif page == "New Report":
                         s, c, v = _collect_editor_state("empty", len(template_cfg["variables"]))
                         _share_pdata = st.session_state.get(NEW_PDATA_KEY)
                         _share_tm = st.session_state.get(NEW_TM_KEY) or _extract_tm_from_player_data(_share_pdata)
+                        v_tuples = _materialize_video_tuples(v)
                         output = fill_template(
-                            template_cfg, s, c, v,
+                            template_cfg, s, c, v_tuples,
                             player_data=_share_pdata,
                             tm_stats=_share_tm,
                             player_photo=st.session_state.get("new_player_photo_full"),
@@ -2801,6 +3072,7 @@ elif page == "New Report":
                             summary_text=st.session_state.get(summary_key),
                         )
                         pptx_bytes = output.getvalue()
+                        del v_tuples, output
                         rid = st.session_state.get("active_report_id") or uuid.uuid4().hex[:12]
                         player = _current_player_name(NEW_PDATA_KEY) or template_name
                         share_id = storage.share_report(
@@ -2814,21 +3086,28 @@ elif page == "New Report":
                             player_name=_current_player_name(NEW_PDATA_KEY),
                             star_values=s,
                             comments=c,
-                            video_data=v,
+                            video_data=None,
                             player_data=_share_pdata,
                             tm_stats=_share_tm,
                             photo_full=st.session_state.get("new_player_photo_full"),
                             photo_circular=st.session_state.get("new_player_photo_circ"),
                             summary_text=st.session_state.get(summary_key),
+                            transfer_details=st.session_state.get("new_transfer_details"),
+                            physical_data=st.session_state.get("new_physical_data"),
+                            scouting_dates=st.session_state.get("new_scouting_dates"),
                         )
                         storage.save_finished(username, rid, template_name, club, lang, pptx_bytes,
                                               player_name=_current_player_name(NEW_PDATA_KEY),
                                               player_data=_share_pdata,
-                                              star_values=s, comments=c, video_data=v,
+                                              star_values=s, comments=c, video_data=None,
                                               tm_stats=_share_tm,
                                               photo_full=st.session_state.get("new_player_photo_full"),
                                               photo_circular=st.session_state.get("new_player_photo_circ"),
-                                              summary_text=st.session_state.get(summary_key))
+                                              summary_text=st.session_state.get(summary_key),
+                                              transfer_details=st.session_state.get("new_transfer_details"),
+                                              physical_data=st.session_state.get("new_physical_data"),
+                                              scouting_dates=st.session_state.get("new_scouting_dates"))
+                        _cleanup_report_videos(rid)
                         _onedrive_upload(username, rid, pptx_bytes,
                                          _current_player_name(NEW_PDATA_KEY), template_name)
                         _onedrive_upload_share_ref(
@@ -3213,13 +3492,6 @@ elif page == "Upload & Edit":
         st.session_state["_active_role_name"] = matched_name or ""
 
         st.markdown("---")
-        _video_folder_setup_section(
-            template_cfg=template_cfg,
-            player_name=_current_player_name(UPLOAD_PDATA_KEY),
-            key_prefix="upload_scout",
-        )
-
-        st.markdown("---")
         _scouting_session_section(
             key_prefix="upload_scout",
             transfer_state_key="upload_transfer_details",
@@ -3260,6 +3532,9 @@ elif page == "Upload & Edit":
         # ── Scouting Summary (large free-text, rendered at bottom-center) ──
         st.markdown(f"### {t('scouting_summary_heading', L)}")
         upload_summary_key = "upload_scouting_summary"
+        if st.session_state.pop("upload_summary_accept_pending", None):
+            st.session_state[upload_summary_key] = st.session_state.get("upload_summary_suggestion", "")
+            st.session_state["upload_summary_suggestion"] = ""
         st.text_area(
             t("scouting_summary_label", L),
             key=upload_summary_key,
@@ -3267,15 +3542,17 @@ elif page == "Upload & Edit":
             placeholder=t("scouting_summary_placeholder", L),
             label_visibility="collapsed",
         )
+        _summary_improve_translate_ui(upload_summary_key, "upload_summary")
 
         st.markdown("---")
 
         def _build_preview_pptx_upload() -> bytes:
-            s_, c_, v_ = _collect_editor_state("upload", len(template_cfg["variables"]))
+            s_, c_, _v_ = _collect_editor_state("upload", len(template_cfg["variables"]))
             _pd = st.session_state.get(UPLOAD_PDATA_KEY)
             _tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_pd)
+            # Preview never embeds videos (irrelevant to slide image, costly).
             out = fill_from_bytes(
-                st.session_state["upload_bytes"], template_cfg, s_, c_, v_,
+                st.session_state["upload_bytes"], template_cfg, s_, c_, None,
                 player_data=_pd,
                 tm_stats=_tm,
                 player_photo=st.session_state.get("upload_player_photo_full"),
@@ -3325,8 +3602,9 @@ elif page == "Upload & Edit":
                 _save_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
                 _save_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_save_pdata)
                 with st.spinner(t("saving_draft_wait", L)):
+                    # Light draft snapshot (no videos); video refs go in JSON.
                     _snap = fill_from_bytes(
-                        st.session_state["upload_bytes"], template_cfg, s, c, v,
+                        st.session_state["upload_bytes"], template_cfg, s, c, None,
                         player_data=_save_pdata,
                         tm_stats=_save_tm,
                         player_photo=st.session_state.get("upload_player_photo_full"),
@@ -3338,10 +3616,13 @@ elif page == "Upload & Edit":
                         summary_text=st.session_state.get(upload_summary_key),
                     )
                     _snap_bytes = _snap.getvalue()
+                    rid_seed = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
+                    _push_videos_onedrive(v, rid_seed)
+                    v_refs = _extract_video_refs(v)
                     rid = storage.save_draft(
                         username,
-                        st.session_state.get("upload_active_report_id"),
-                        matched_name or "Unknown", detected_club, detected_lang, s, c, v,
+                        rid_seed,
+                        matched_name or "Unknown", detected_club, detected_lang, s, c, None,
                         source="upload",
                         upload_bytes=_snap_bytes,
                         upload_filename=st.session_state.get("upload_filename"),
@@ -3350,6 +3631,10 @@ elif page == "Upload & Edit":
                         photo_full=st.session_state.get("upload_player_photo_full"),
                         photo_circular=st.session_state.get("upload_player_photo_circ"),
                         summary_text=st.session_state.get(upload_summary_key),
+                        transfer_details=st.session_state.get("upload_transfer_details"),
+                        physical_data=st.session_state.get("upload_physical_data"),
+                        scouting_dates=st.session_state.get("upload_scouting_dates"),
+                        video_refs=v_refs,
                     )
                     st.session_state["upload_active_report_id"] = rid
                     _onedrive_upload_draft(username, rid)
@@ -3361,8 +3646,9 @@ elif page == "Upload & Edit":
                 _upgen_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
                 _upgen_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upgen_pdata)
                 with st.spinner(t("generating_report_wait", L)):
+                    v_tuples = _materialize_video_tuples(v)
                     output = fill_from_bytes(
-                        st.session_state["upload_bytes"], template_cfg, s, c, v,
+                        st.session_state["upload_bytes"], template_cfg, s, c, v_tuples,
                         player_data=_upgen_pdata,
                         tm_stats=_upgen_tm,
                         player_photo=st.session_state.get("upload_player_photo_full"),
@@ -3374,30 +3660,39 @@ elif page == "Upload & Edit":
                         summary_text=st.session_state.get(upload_summary_key),
                     )
                     pptx_bytes = output.getvalue()
+                    del v_tuples, output
                     pos = matched_name or "Unknown"
 
                     rid = st.session_state.get("upload_active_report_id")
                     if not rid:
                         rid = storage.save_draft(
-                            username, None, pos, detected_club, detected_lang, s, c, v,
+                            username, None, pos, detected_club, detected_lang, s, c, None,
                             source="upload",
                             upload_bytes=st.session_state.get("upload_bytes"),
                             upload_filename=st.session_state.get("upload_filename"),
                             player_data=_upgen_pdata,
                             tm_stats=_upgen_tm,
                             summary_text=st.session_state.get(upload_summary_key),
+                            transfer_details=st.session_state.get("upload_transfer_details"),
+                            physical_data=st.session_state.get("upload_physical_data"),
+                            scouting_dates=st.session_state.get("upload_scouting_dates"),
+                            video_refs=_extract_video_refs(v),
                         )
                         _onedrive_upload_draft(username, rid)
                     storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                           player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                           player_data=_upgen_pdata,
-                                          star_values=s, comments=c, video_data=v,
+                                          star_values=s, comments=c, video_data=None,
                                           tm_stats=_upgen_tm,
                                           photo_full=st.session_state.get("upload_player_photo_full"),
                                           photo_circular=st.session_state.get("upload_player_photo_circ"),
-                                          summary_text=st.session_state.get(upload_summary_key))
+                                          summary_text=st.session_state.get(upload_summary_key),
+                                          transfer_details=st.session_state.get("upload_transfer_details"),
+                                          physical_data=st.session_state.get("upload_physical_data"),
+                                          scouting_dates=st.session_state.get("upload_scouting_dates"))
                     _onedrive_upload(username, rid, pptx_bytes,
                                      _current_player_name(UPLOAD_PDATA_KEY), pos)
+                    _cleanup_report_videos(rid)
                     st.session_state.pop("upload_active_report_id", None)
 
                 st.success(t("done", L))
@@ -3428,8 +3723,9 @@ elif page == "Upload & Edit":
                             s, c, v = _collect_editor_state("upload", len(template_cfg["variables"]))
                             _upshare_pdata = st.session_state.get(UPLOAD_PDATA_KEY)
                             _upshare_tm = st.session_state.get(UPLOAD_TM_KEY) or _extract_tm_from_player_data(_upshare_pdata)
+                            v_tuples = _materialize_video_tuples(v)
                             output = fill_from_bytes(
-                                st.session_state["upload_bytes"], template_cfg, s, c, v,
+                                st.session_state["upload_bytes"], template_cfg, s, c, v_tuples,
                                 player_data=_upshare_pdata,
                                 tm_stats=_upshare_tm,
                                 player_photo=st.session_state.get("upload_player_photo_full"),
@@ -3441,6 +3737,7 @@ elif page == "Upload & Edit":
                                 summary_text=st.session_state.get(upload_summary_key),
                             )
                             pptx_bytes = output.getvalue()
+                            del v_tuples, output
                             pos = matched_name or "Unknown"
                             rid = st.session_state.get("upload_active_report_id") or uuid.uuid4().hex[:12]
                             player = _current_player_name(UPLOAD_PDATA_KEY) or pos
@@ -3455,23 +3752,30 @@ elif page == "Upload & Edit":
                                 player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                 star_values=s,
                                 comments=c,
-                                video_data=v,
+                                video_data=None,
                                 player_data=_upshare_pdata,
                                 tm_stats=_upshare_tm,
                                 photo_full=st.session_state.get("upload_player_photo_full"),
                                 photo_circular=st.session_state.get("upload_player_photo_circ"),
                                 summary_text=st.session_state.get(upload_summary_key),
+                                transfer_details=st.session_state.get("upload_transfer_details"),
+                                physical_data=st.session_state.get("upload_physical_data"),
+                                scouting_dates=st.session_state.get("upload_scouting_dates"),
                             )
                             storage.save_finished(username, rid, pos, detected_club, detected_lang, pptx_bytes,
                                                   player_name=_current_player_name(UPLOAD_PDATA_KEY),
                                                   player_data=_upshare_pdata,
                                                   star_values=s,
                                                   comments=c,
-                                                  video_data=v,
+                                                  video_data=None,
                                                   tm_stats=_upshare_tm,
                                                   photo_full=st.session_state.get("upload_player_photo_full"),
                                                   photo_circular=st.session_state.get("upload_player_photo_circ"),
-                                                  summary_text=st.session_state.get(upload_summary_key))
+                                                  summary_text=st.session_state.get(upload_summary_key),
+                                                  transfer_details=st.session_state.get("upload_transfer_details"),
+                                                  physical_data=st.session_state.get("upload_physical_data"),
+                                                  scouting_dates=st.session_state.get("upload_scouting_dates"))
+                            _cleanup_report_videos(rid)
                             _onedrive_upload(username, rid, pptx_bytes,
                                              _current_player_name(UPLOAD_PDATA_KEY), pos)
                             _onedrive_upload_share_ref(
