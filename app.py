@@ -1410,6 +1410,12 @@ def _transfermarkt_section(
             from transfermarkt import fetch_player_stats
             with st.spinner(t("fetching_tm", L)):
                 stats = fetch_player_stats(player_name, player_club)
+            # Capture Sofascore's internal debug log for the UI expander below
+            try:
+                import sofascore as _sofa_mod
+                st.session_state[f"{key_prefix}_sofa_debug"] = _sofa_mod.get_debug_log()
+            except Exception:
+                pass
             # Also pull availability % from Sofascore — it lives next to the
             # match stats card rather than under physical data.
             try:
@@ -1445,6 +1451,14 @@ def _transfermarkt_section(
             stats, player_name,
             editable=True, key_prefix=f"{key_prefix}_card", state_key=state_key,
         )
+
+    # Surface Sofascore debug trace from the last fetch — expander stays
+    # collapsed unless the scout opens it. Lets us diagnose "No match stats
+    # found" without SSHing into the container.
+    _sofa_log = st.session_state.get(f"{key_prefix}_sofa_debug")
+    if _sofa_log:
+        with st.expander("🔎 Sofascore debug (last fetch)", expanded=False):
+            st.code("\n".join(_sofa_log), language="text")
         # Availability — displayed here next to the match stats rather than
         # under the physical data section.
         avail_pct = stats.get("availability_pct")
@@ -1675,10 +1689,9 @@ def _transfer_details_section(
     if next_step_key not in st.session_state:
         st.session_state[next_step_key] = td.get("next_step", "")
 
-    # End-of-contract: empty by default. A "Set to 30 June 2026" button
-    # fills it in on click — we do NOT prefill so the user chooses explicitly.
+    # End-of-contract: empty by default. User picks any date from the picker;
+    # no automatic prefill so they always choose explicitly.
     eoc_key = f"{key_prefix}_end_contract_date"
-    _default_eoc = _dt.date(2026, 6, 30)
     if eoc_key not in st.session_state:
         _prev = td.get("end_of_contract", "")
         parsed: _dt.date | None = None
@@ -1691,7 +1704,17 @@ def _transfer_details_section(
                     break
                 except ValueError:
                     pass
-        st.session_state[eoc_key] = parsed  # may be None — shows empty picker
+        st.session_state[eoc_key] = parsed  # None → picker shows empty
+
+    import re as _re
+
+    def _format_thousand_dots(raw: str) -> str:
+        """Strip everything but digits, then insert a '.' every 3 digits
+        from the right. '150000' -> '150.000', '1500000' -> '1.500.000'."""
+        digits = _re.sub(r"[^\d]", "", raw or "")
+        if not digits:
+            return ""
+        return f"{int(digits):,}".replace(",", ".")
 
     def _sync_td():
         for td_field, base_key, _label in money_fields:
@@ -1700,9 +1723,13 @@ def _transfer_details_section(
             if st.session_state.get(free_key):
                 td[td_field] = t("transfervrij_value", L) or "Transfervrij"
             else:
-                v = (st.session_state.get(val_key) or "").strip()
-                v = v.lstrip("€").strip()
-                td[td_field] = f"€ {v}" if v else ""
+                raw = (st.session_state.get(val_key) or "").strip().lstrip("€").strip()
+                formatted = _format_thousand_dots(raw)
+                # Reflect the dotted version back into the widget's state so
+                # the UI updates on next render.
+                if formatted != raw:
+                    st.session_state[val_key] = formatted
+                td[td_field] = f"€ {formatted}" if formatted else ""
         td["next_step"] = st.session_state.get(next_step_key, "")
         eoc = st.session_state.get(eoc_key)
         if isinstance(eoc, _dt.date):
@@ -1712,8 +1739,9 @@ def _transfer_details_section(
         st.session_state[transfer_state_key] = td
 
     def _money_field(label_key: str, base_key: str):
-        """€ prefix + numeric input. The € is a static column so the user
-        sees the currency but only types the amount."""
+        """€ prefix + numeric input with auto-inserted thousand dots. The €
+        is a static column so the user sees the currency but only types the
+        amount; dots are inserted each time the value commits (enter/blur)."""
         free_key = f"{base_key}_free"
         val_key = f"{base_key}_amount"
         is_free = bool(st.session_state.get(free_key))
@@ -1746,15 +1774,8 @@ def _transfer_details_section(
             t("end_of_contract_label", L),
             key=eoc_key,
             format="DD/MM/YYYY",
-            value=st.session_state.get(eoc_key),
             on_change=_sync_td,
         )
-        # Quick-set button — fills the picker with 30 June 2026.
-        if st.button("📅 30 juni 2026", key=f"{key_prefix}_eoc_quick",
-                     use_container_width=True, type="secondary"):
-            st.session_state[eoc_key] = _default_eoc
-            _sync_td()
-            st.rerun()
         _money_field(t("prediction_year_1_label", L), f"{key_prefix}_pred_1")
         st.text_input(t("next_step_label", L), key=next_step_key, on_change=_sync_td)
     with c2:
@@ -2434,8 +2455,13 @@ with st.sidebar:
     st.markdown("---")
 
     # ── Navigation (default = New Report) ────────────────────────────────────
-    nav_options = [t("new_report", L), t("dashboard", L), t("upload_edit", L)]
-    nav_keys    = ["New Report", "Dashboard", "Upload & Edit"]
+    _video_folder_nav = {
+        "EN": "Video Folder", "NL": "Videomap",
+        "IT": "Cartella video", "ZH": "视频文件夹",
+    }.get(L, "Video Folder")
+    nav_options = [t("new_report", L), t("dashboard", L),
+                   t("upload_edit", L), _video_folder_nav]
+    nav_keys    = ["New Report", "Dashboard", "Upload & Edit", "Video Folder"]
 
     # Handle programmatic navigation override
     nav_override = st.session_state.pop("_nav_override", None)
@@ -2675,6 +2701,68 @@ if page == "Dashboard":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PAGE: Video Folder
+# ══════════════════════════════════════════════════════════════════════════════
+
+elif page == "Video Folder":
+    st.markdown("---")
+    _VIDEO_PAGE_TITLES = {
+        "EN": "Video Folder Setup", "NL": "Videomap aanmaken",
+        "IT": "Impostazione cartella video", "ZH": "视频文件夹设置",
+    }
+    _VIDEO_PAGE_DESCS = {
+        "EN": "Pick a role and (optionally) a player name to download a "
+              "ready-made empty folder structure for scouting videos.",
+        "NL": "Kies een rol en (optioneel) een spelernaam om een lege "
+              "mappenstructuur voor scouting-video's te downloaden.",
+        "IT": "Seleziona un ruolo e (facoltativamente) un nome giocatore per "
+              "scaricare una struttura di cartelle vuota per i video di scouting.",
+        "ZH": "选择一个角色和（可选）球员姓名，即可下载用于球探视频的空文件夹结构。",
+    }
+    st.markdown(f"## {_VIDEO_PAGE_TITLES.get(L, _VIDEO_PAGE_TITLES['EN'])}")
+    st.caption(_VIDEO_PAGE_DESCS.get(L, _VIDEO_PAGE_DESCS['EN']))
+
+    _vf_template_names = list(TEMPLATES.keys())
+    _vf_placeholder = t("make_a_choice", L)
+    _vf_role_opts = [_vf_placeholder] + _vf_template_names
+    _vf_role = st.selectbox(
+        t("role_label", L), _vf_role_opts, key="video_page_role_select",
+    )
+
+    _vf_player = st.text_input(
+        {"EN": "Player name (optional)", "NL": "Spelernaam (optioneel)",
+         "IT": "Nome giocatore (facoltativo)", "ZH": "球员姓名（可选）"}.get(L, "Player name (optional)"),
+        key="video_page_player_name",
+        placeholder={"EN": "e.g. Jerdy Schouten", "NL": "bv. Jerdy Schouten",
+                     "IT": "es. Jerdy Schouten", "ZH": "例如 Jerdy Schouten"}.get(L, "e.g. Jerdy Schouten"),
+    ).strip()
+
+    if _vf_role == _vf_placeholder:
+        st.info(t("select_profile_prompt", L))
+    else:
+        _vf_cfg = get_template_config(_vf_role, club, lang)
+        _vf_criteria = _vf_cfg.get("variables") or []
+        # When no player name is given, the folder takes the role name.
+        _vf_label = _vf_player if _vf_player else _vf_role
+        try:
+            _vf_zip_bytes = _build_video_folder_zip(_vf_label, _vf_criteria)
+        except Exception as exc:
+            st.error(f"{t('video_folder_error', L)}: {exc}")
+            _vf_zip_bytes = None
+        if _vf_zip_bytes:
+            _vf_zip_name = _sanitize_folder_component(f"{_vf_label} videos") + ".zip"
+            st.download_button(
+                label=t("video_folder_download_btn", L),
+                data=_vf_zip_bytes,
+                file_name=_vf_zip_name,
+                mime="application/zip",
+                key="video_page_download",
+                use_container_width=True,
+                type="primary",
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PAGE: New Report
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2747,13 +2835,6 @@ elif page == "New Report":
         st.session_state["empty_prev_key"] = reset_key
         st.session_state.pop("active_report_id", None)
         st.session_state.pop("_loaded_draft", None)
-
-    st.markdown("---")
-    _video_folder_setup_section(
-        template_cfg=template_cfg,
-        player_name=_current_player_name(NEW_PDATA_KEY),
-        key_prefix="new_scout",
-    )
 
     st.markdown("---")
     _scouting_session_section(
@@ -3409,13 +3490,6 @@ elif page == "Upload & Edit":
 
         st.session_state["_active_rating_slide_idx"] = template_cfg.get("rating_slide_idx", 3)
         st.session_state["_active_role_name"] = matched_name or ""
-
-        st.markdown("---")
-        _video_folder_setup_section(
-            template_cfg=template_cfg,
-            player_name=_current_player_name(UPLOAD_PDATA_KEY),
-            key_prefix="upload_scout",
-        )
 
         st.markdown("---")
         _scouting_session_section(
