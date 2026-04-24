@@ -55,30 +55,54 @@ _PAGE_LIMIT = 6  # ~6 pages × 30 events ≈ a full season
 
 
 def _make_session() -> requests.Session:
-    s = requests.Session()
-    s.headers.update(
-        {
+    """Create a persistent session capable of bypassing WAF/Cloudflare."""
+    try:
+        import cloudscraper
+        # cloudscraper automatically handles TLS fingerprints and realistic headers
+        s = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            }
+        )
+    except ImportError:
+        # Fallback to standard requests if cloudscraper isn't installed (will likely 403)
+        s = requests.Session()
+        s.headers.update({
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             ),
+        })
+
+    # Add Sofascore specific headers
+    s.headers.update(
+        {
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "nl-NL,nl;q=0.9,en;q=0.8",
             "Referer": "https://www.sofascore.com/",
             "Origin": "https://www.sofascore.com",
+            "Cache-Control": "max-age=0",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
         }
     )
     return s
+
+
+# Initialize globally to maintain cookies and TCP connection pooling across all requests
+_SESSION = _make_session()
 
 
 def _get_json(path: str) -> Optional[Dict[str, Any]]:
     last: Optional[Exception] = None
     for base in _BASES:
         url = base.rstrip("/") + path
-        s = _make_session()
         for attempt in range(_RETRIES):
             try:
-                r = s.get(url, timeout=_TIMEOUT)
+                r = _SESSION.get(url, timeout=_TIMEOUT)
                 if r.status_code == 429:
                     _dbg(f"GET {path} -> 429 (retry {attempt+1})")
                     time.sleep(1.25 * (attempt + 1) + random.random())
